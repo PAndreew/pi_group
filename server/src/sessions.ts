@@ -1,10 +1,11 @@
 import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
+import { attributeMessages, registerPrompt } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
 import type { HarnessAdapter, LiveSession, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
-import { type Access, type SessionMeta, save, store, type User } from "./store.js";
+import { type Access, type SessionMeta, save, saveNow, store, type User } from "./store.js";
 
 export type EffectiveAccess = "admin" | "owner" | Access;
 
@@ -23,6 +24,15 @@ const firstLine = (text: string) => text.trim().split("\n")[0].slice(0, 200);
 /** Fans one live session's events out to every SSE client watching it. */
 class Hub {
 	private clients = new Map<string, Set<Response>>();
+
+	state(key: string, state: SessionState): SessionState {
+		const ledger = store.session(key)?.authorship;
+		if (!ledger) return state;
+		const pendingCount = ledger.pending.length;
+		const messages = attributeMessages(ledger, state.messages);
+		if (ledger.pending.length !== pendingCount) saveNow();
+		return { ...state, messages };
+	}
 	private attached = new Map<string, { live: LiveSession; unsubscribe: () => void }>();
 
 	count(key: string) {
@@ -49,7 +59,11 @@ class Hub {
 		if (current?.live === live) return;
 		current?.unsubscribe();
 		const unsubscribe = live.subscribe((event) => {
-			this.broadcast(key, event);
+			if (event.type === "state") this.broadcast(key, { ...event, state: this.state(key, event.state) });
+			else if (event.type === "message") {
+				const state = this.state(key, live.state);
+				this.broadcast(key, { ...event, message: state.messages.at(-1) ?? event.message });
+			} else this.broadcast(key, event);
 			if (event.type === "state" && !event.state.live) this.detach(key, live);
 		});
 		this.attached.set(key, { live, unsubscribe });
@@ -216,7 +230,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.write("retry: 3000\n\n");
 		hub.add(key, res);
 		const live = adapter.live(meta.id);
-		if (live && hub.isAttached(key, live)) send(res, { type: "state", state: live.state });
+		if (live && hub.isAttached(key, live)) send(res, { type: "state", state: hub.state(key, live.state) });
 		else if (live) hub.attach(key, live);
 		else {
 			const stored = await adapter.readSession(meta.id, meta.cwd).catch(() => undefined);
@@ -231,7 +245,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				live: false,
 				name: meta.name ?? stored?.name,
 			};
-			send(res, { type: "state", state });
+			send(res, { type: "state", state: hub.state(key, state) });
 		}
 		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
 		req.on("close", () => {
@@ -256,8 +270,18 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			})
 			.parse(req.body);
 		const live = await ensureLive(meta, adapter);
-		await live.prompt(body);
-		store.upsertSession({ ...meta, firstMessage: meta.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
+		const current = store.session(meta.key)!;
+		const ledger = current.authorship ??= { authors: {}, pending: [] };
+		const promptId = registerPrompt(ledger, live.state.messages, body, { id: req.user!.id, username: req.user!.username });
+		saveNow();
+		try {
+			await live.prompt(body);
+		} catch (error) {
+			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
+			save();
+			throw error;
+		}
+		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${req.user!.username}: ${body.mode ?? "prompt"}`, author: req.user!.username, silent: true });
 		res.json({ ok: true });
 	});

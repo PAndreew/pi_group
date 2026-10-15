@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import type { Authorship } from "./authorship.js";
 
 export type Role = "admin" | "member";
 export type Access = "read" | "write";
@@ -41,6 +42,7 @@ export interface SessionMeta {
 	updatedAt?: string;
 	/** Keep the harness process alive even when idle, so background work is never reaped. */
 	pinned?: boolean;
+	authorship?: Authorship;
 }
 
 interface Data {

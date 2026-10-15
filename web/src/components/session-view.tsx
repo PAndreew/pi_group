@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
+import { AuthorAvatar } from "@/components/author-avatar"
 import { Markdown } from "@/components/markdown"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
@@ -46,8 +47,9 @@ function UserBubble({ message }: { message: AgentMessage }) {
   const text = messageText(message.content)
   const images = Array.isArray(message.content) ? message.content.filter((c: any) => c?.type === "image") : []
   return (
-    <div className="flex justify-end">
+    <div className="flex items-start justify-end gap-2">
       <div className="max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+        <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
         <div className="whitespace-pre-wrap break-words">{text}</div>
         {images.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -57,6 +59,7 @@ function UserBubble({ message }: { message: AgentMessage }) {
           </div>
         )}
       </div>
+      <AuthorAvatar id={message.author?.id ?? "unknown"} name={message.author?.username ?? "?"} />
     </div>
   )
 }
@@ -65,6 +68,7 @@ function RunView({ run, onOpen }: { run: Run; onOpen: (index: number) => void })
   return (
     <div className="space-y-1.5">
       {run.user && <UserBubble message={run.user} />}
+      {(run.steps.length > 0 || run.running) && <div className="flex items-center gap-2 text-xs text-muted-foreground"><AuthorAvatar id="agent" name="π" /> Agent</div>}
       <StepStrip steps={run.steps} running={run.running} onOpen={onOpen} />
       {run.answer && (
         <div className="rounded-lg">
@@ -124,6 +128,7 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
   const [summary, setSummary] = useState<SessionSummary>()
   const [models, setModels] = useState<ModelInfo[]>([])
   const [open, setOpen] = useState<{ run: number; step: number } | null>(null)
+  const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
@@ -142,6 +147,7 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
   useEffect(() => {
     setSummary(undefined)
     setOpen(null)
+    setAuthorFilter("all")
     stick.current = true
     refresh()
   }, [refresh])
@@ -155,6 +161,15 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
     () => (state ? buildRuns(state.messages, { partial: state.partial, toolOutputs: state.toolOutputs, runningTools: state.runningTools, running: state.running }) : []),
     [state]
   )
+
+  const participants = useMemo(() => {
+    const authors = new Map<string, string>()
+    for (const run of runs) {
+      if (run.user) authors.set(run.user.author?.id ?? "unknown", run.user.author?.username ?? "Unknown author")
+    }
+    return Array.from(authors, ([id, name]) => ({ id, name }))
+  }, [runs])
+  const visibleRuns = runs.map((run, index) => ({ run, index })).filter(({ run }) => authorFilter === "all" || (run.user && (run.user.author?.id ?? "unknown") === authorFilter))
 
   // Keep the newest output in view unless the user scrolled up to read.
   useEffect(() => {
@@ -272,6 +287,16 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
         </div>
       )}
 
+      {participants.length > 0 && (
+        <div aria-label="Filter by prompt author" className="flex items-center gap-2 overflow-x-auto border-b px-3 py-2">
+          {[{ id: "all", name: "Everyone" }, ...participants].map(({ id, name }) => (
+            <Button key={id} size="sm" variant={authorFilter === id ? "secondary" : "ghost"} aria-pressed={authorFilter === id} onClick={() => { setAuthorFilter(id); setOpen(null) }}>
+              {id !== "all" && <AuthorAvatar id={id} name={name} />}{name}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <div
         ref={scroller}
         onScroll={(e) => {
@@ -283,8 +308,10 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
         <div className="mx-auto max-w-3xl space-y-5 px-3 py-4 sm:px-4">
           {!state && <Loader2 className="mx-auto mt-10 animate-spin text-muted-foreground" />}
           {state && runs.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No messages yet. Ask the agent something.</p>}
-          {runs.map((run, i) => (
-            <RunView key={run.key} run={run} onOpen={(step) => setOpen({ run: i, step })} />
+          {authorFilter !== "all" && <p className="text-xs text-muted-foreground">Showing this author’s prompts with their agent responses. <button className="underline" onClick={() => setAuthorFilter("all")}>Show everyone</button></p>}
+          {state && runs.length > 0 && visibleRuns.length === 0 && <p className="text-sm text-muted-foreground">No prompts from this author.</p>}
+          {visibleRuns.map(({ run, index }) => (
+            <RunView key={run.key} run={run} onOpen={(step) => setOpen({ run: index, step })} />
           ))}
           {state?.notice?.level === "error" && !running && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive">

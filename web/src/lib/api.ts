@@ -57,7 +57,7 @@ export interface SessionSummary {
 }
 
 /** A pi AgentMessage; loose on purpose, harnesses may add roles. */
-export type AgentMessage = { role: string; timestamp?: number; [key: string]: any }
+export type AgentMessage = { role: string; timestamp?: number; author?: { id: string; username: string }; [key: string]: any }
 
 export interface ExtensionDialog {
   id: string

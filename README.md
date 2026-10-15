@@ -8,6 +8,7 @@ A small, mobile-first web UI that lets a **group of people share coding agents r
 - Provider picker (shown when more than one provider is configured), model picker, thinking level
 - Each run is shown as **a horizontal row of small squares**, one per step (reasoning, shell, read, edit, write, search, other tool, answer), each with an icon and a number. Tap one for the details in a modal, then step through with Prev/Next.
 - **Steer** a running agent (delivered after the current tool step), queue a **follow-up**, or **stop** it
+- **Session avatars + author filters**: locally generated initials identify each prompt's author. Filter by a person to see their prompts together with the agent's steps and responses; choose Everyone to restore the full conversation. Authorship is recorded from the authenticated account, persists in app metadata, and does not alter model prompts. Older/CLI messages (and indistinguishable identical prompts queued by different people) show **Unknown author**, never the session owner by assumption.
 - Runs keep going when you close the browser. A "running" indicator shows what is active, and sessions can be pinned to stay up in the background.
 - **Auth + group access**: multiple users, admin/member roles. Sessions are private by default; the owner can share one with chosen users as *view* or *prompt* access.
 - Extension dialogs from pi (select / confirm / input) show up as dialogs in the browser.
@@ -106,6 +107,9 @@ All settings are environment variables (or `.env`); see [`.env.example`](.env.ex
 npm run setup
 npm run dev:server     # API on :8787 (tsx watch)
 npm run dev:web        # Vite on :5173, proxies /api to :8787
+npm test --prefix server # authorship regression tests
+npm run lint --prefix web
+npm run build
 ```
 
 Code map:
