@@ -1,0 +1,18 @@
+{
+  "name": "pi-group",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mobile-first, multi-user web UI for agent harnesses (pi coding agent, pi-durable).",
+  "license": "MIT",
+  "scripts": {
+    "setup": "npm ci --prefix server && npm ci --prefix web",
+    "build": "npm run build --prefix web && npm run build --prefix server",
+    "start": "npm start --prefix server",
+    "dev:server": "npm run dev --prefix server",
+    "dev:web": "npm run dev --prefix web",
+    "user": "npm run user --prefix server --"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

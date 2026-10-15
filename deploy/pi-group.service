@@ -1,0 +1,27 @@
+# systemd unit for a Raspberry Pi (or any Linux box).
+# Install:
+#   sudo cp deploy/pi-group.service /etc/systemd/system/pi-group.service
+#   sudo systemctl edit pi-group   # adjust User / WorkingDirectory / PATH if needed
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pi-group
+#   journalctl -u pi-group -f      # first start prints the admin password
+[Unit]
+Description=pi_group web UI for pi agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pi_group
+# pi and node must be on PATH (adjust for nvm or a custom npm prefix).
+Environment=PATH=/home/pi/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node server/dist/index.js
+Restart=on-failure
+RestartSec=3
+# Let pi processes finish their shutdown when the service stops.
+KillMode=mixed
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
