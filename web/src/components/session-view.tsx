@@ -1,5 +1,6 @@
 import {
   ArrowUp,
+  Bot,
   CircleStop,
   Eye,
   Loader2,
@@ -133,6 +134,7 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [newName, setNewName] = useState("")
@@ -280,13 +282,6 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
         )}
       </div>
 
-      {canWrite && (
-        <div className="scrollbar-thin flex items-center gap-1.5 overflow-x-auto border-b px-2 py-1.5 sm:px-3">
-          <ModelPicker compact models={models} value={state?.model} onChange={(m) => act(() => api.setModel(sessionKey, m.provider, m.id))} />
-          <ThinkingPicker compact value={state?.thinkingLevel} onChange={(l) => act(() => api.setThinking(sessionKey, l))} />
-        </div>
-      )}
-
       {participants.length > 0 && (
         <div aria-label="Filter by prompt author" className="flex items-center gap-2 overflow-x-auto border-b px-3 py-2">
           {[{ id: "all", name: "Everyone" }, ...participants].map(({ id, name }) => (
@@ -377,9 +372,6 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
                     e.target.value = ""
                   }}
                 />
-                <Button variant="ghost" size="icon" onClick={() => fileInput.current?.click()} aria-label="Attach files">
-                  <Paperclip />
-                </Button>
                 <Textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -397,6 +389,11 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
               </div>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon-sm" onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files"><Paperclip /></Button>
+                <Button variant="ghost" size="icon-sm" onClick={() => setModelOpen(true)} aria-label="Switch model" title="Provider, model and thinking"><Bot /></Button>
+                <button type="button" className="min-w-0 truncate text-xs text-muted-foreground" onClick={() => setModelOpen(true)}>{state?.model?.id ?? "Choose model"}{state?.thinkingLevel ? ` · ${state.thinkingLevel}` : ""}</button>
+              </div>
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
             </>
           ) : (
@@ -407,6 +404,13 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
         </div>
       </div>
 
+      <Dialog open={modelOpen} onOpenChange={setModelOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Provider, model & thinking</DialogTitle><DialogDescription>Change this session’s configuration without starting a new session.</DialogDescription></DialogHeader>
+          <ModelPicker models={models} value={state?.model} disabled={!canWrite} onChange={(m) => act(() => api.setModel(sessionKey, m.provider, m.id))} />
+          <ThinkingPicker value={state?.thinkingLevel} disabled={!canWrite} onChange={(level) => act(() => api.setThinking(sessionKey, level))} />
+        </DialogContent>
+      </Dialog>
       <StepDialog steps={openRun?.steps ?? []} index={open?.step ?? null} onIndex={(step) => setOpen(step === null ? null : { run: open!.run, step })} />
       <ExtensionDialogView dialog={canWrite ? state?.dialogs[0] : undefined} onAnswer={(answer) => state?.dialogs[0] && act(() => api.answerDialog(sessionKey, { id: state.dialogs[0].id, ...answer }))} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}

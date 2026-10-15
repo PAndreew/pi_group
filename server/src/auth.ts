@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from
 import type { NextFunction, Request, Response, Router } from "express";
 import express from "express";
 import { z } from "zod";
+import { sessionDefaultsSchema } from "./preferences.js";
 import { config } from "./config.js";
 import { type Role, save, store, type User } from "./store.js";
 
@@ -31,7 +32,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
-export const publicUser = (user: User) => ({ id: user.id, username: user.username, role: user.role, createdAt: user.createdAt });
+export const publicUser = (user: User) => ({ id: user.id, username: user.username, role: user.role, createdAt: user.createdAt, sessionDefaults: user.sessionDefaults });
 
 export function createUser(username: string, password: string, role: Role): User {
 	if (store.userByName(username)) throw new Error(`User ${username} already exists`);
@@ -134,6 +135,12 @@ export function authRoutes(): Router {
 	router.get("/auth/me", (req, res) => {
 		if (!req.user) return void res.status(401).json({ error: "Not logged in" });
 		res.json({ user: publicUser(req.user) });
+	});
+
+	router.put("/auth/defaults", requireAuth, (req, res) => {
+		req.user!.sessionDefaults = sessionDefaultsSchema.parse(req.body);
+		save();
+		res.json({ user: publicUser(req.user!) });
 	});
 
 	router.post("/auth/password", requireAuth, (req, res) => {

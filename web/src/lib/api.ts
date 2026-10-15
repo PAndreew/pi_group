@@ -2,11 +2,18 @@ export type Role = "admin" | "member"
 export type Access = "read" | "write"
 export type EffectiveAccess = "admin" | "owner" | Access
 
+export interface SessionDefaults {
+  harness: string
+  model: { provider: string; id: string }
+  thinkingLevel: string
+}
+
 export interface User {
   id: string
   username: string
   role: Role
   createdAt: string
+  sessionDefaults?: SessionDefaults
 }
 
 export interface Harness {
@@ -112,6 +119,7 @@ const q = (params: Record<string, string>) => new URLSearchParams(params).toStri
 const enc = encodeURIComponent
 
 export const api = {
+  saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User }>("GET", "/api/auth/me"),
   login: (username: string, password: string) => request<{ user: User }>("POST", "/api/auth/login", { username, password }),
   logout: () => request("POST", "/api/auth/logout"),

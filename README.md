@@ -5,7 +5,8 @@ A small, mobile-first web UI that lets a **group of people share coding agents r
 - Browse the machine's folders and files, upload and download files
 - In-app viewers for Markdown, HTML (sandboxed), PDF (pdf.js, works on phones), source code (Python, JS/TS, shell, …), images, audio/video, CSV, JSON
 - List the agent sessions of each folder, start new ones, resume old ones (including sessions started with the `pi` CLI)
-- Provider picker (shown when more than one provider is configured), model picker, thinking level
+- **Account-level session defaults**: save a provider/model/thinking combination from user menu → Session defaults (or the new-session dialog). Defaults persist across devices. New session in either Files or Sessions creates immediately in the current folder using those defaults; without defaults it opens configuration first.
+- **Mid-session model switching**: the robot-head button below the chat input opens provider, model and thinking controls; the attachment icon is beside it. Changing a session does not overwrite your saved defaults.
 - Each run is shown as **a horizontal row of small squares**, one per step (reasoning, shell, read, edit, write, search, other tool, answer), each with an icon and a number. Tap one for the details in a modal, then step through with Prev/Next.
 - **Steer** a running agent (delivered after the current tool step), queue a **follow-up**, or **stop** it
 - **Session avatars + author filters**: locally generated initials identify each prompt's author. Filter by a person to see their prompts together with the agent's steps and responses; choose Everyone to restore the full conversation. Authorship is recorded from the authenticated account, persists in app metadata, and does not alter model prompts. Older/CLI messages (and indistinguishable identical prompts queued by different people) show **Unknown author**, never the session owner by assumption.
@@ -107,7 +108,7 @@ All settings are environment variables (or `.env`); see [`.env.example`](.env.ex
 npm run setup
 npm run dev:server     # API on :8787 (tsx watch)
 npm run dev:web        # Vite on :5173, proxies /api to :8787
-npm test --prefix server # authorship regression tests
+npm test --prefix server # authorship, defaults and authenticated preferences API tests
 npm run lint --prefix web
 npm run build
 ```

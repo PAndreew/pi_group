@@ -36,7 +36,11 @@ app.use("/api", api);
 
 if (existsSync(config.webDist)) {
 	app.use(express.static(config.webDist, { index: false, maxAge: "1h" }));
-	app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(config.webDist, "index.html")));
+	app.get(/^(?!\/api\/).*/, (_req, res) => {
+		// HTML must always discover the latest hashed assets after a local deployment.
+		res.setHeader("Cache-Control", "no-store");
+		res.sendFile(path.join(config.webDist, "index.html"), { cacheControl: false });
+	});
 } else {
 	app.get("/", (_req, res) => void res.type("text").send("pi_group API is running. Build the web app (npm run build) or use the Vite dev server."));
 }

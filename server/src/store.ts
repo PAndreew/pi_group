@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import type { SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 
 export type Role = "admin" | "member";
@@ -10,6 +11,7 @@ export interface User {
 	id: string;
 	username: string;
 	passwordHash: string;
+	sessionDefaults?: SessionDefaults;
 	role: Role;
 	createdAt: string;
 }

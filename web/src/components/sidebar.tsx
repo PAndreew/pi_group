@@ -64,12 +64,14 @@ function SessionList({
   selected,
   onOpen,
   onNew,
+  creating,
   version,
 }: {
   folder: string
   selected?: string
   onOpen: (key: string) => void
   onNew: () => void
+  creating?: boolean
   version: number
 }) {
   const [sessions, setSessions] = useState<SessionSummary[]>()
@@ -94,7 +96,7 @@ function SessionList({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex gap-2 px-3 pb-2">
-        <Button className="flex-1" size="sm" onClick={onNew}>
+        <Button className="flex-1" size="sm" onClick={onNew} disabled={creating}>
           <Plus /> New session
         </Button>
         <Button variant="outline" size="icon-sm" onClick={load} aria-label="Refresh sessions">
@@ -139,7 +141,7 @@ function SessionList({
   )
 }
 
-function FileList({ folder, selected, onFolder, onFile }: { folder: string; selected?: string; onFolder: (p: string) => void; onFile: (p: string) => void }) {
+function FileList({ folder, selected, onFolder, onFile, onNew, creating }: { folder: string; selected?: string; onFolder: (p: string) => void; onFile: (p: string) => void; onNew: () => void; creating?: boolean }) {
   const [entries, setEntries] = useState<FsEntry[]>()
   const [hidden, setHidden] = useState(() => localStorage.getItem("pi-group:hidden") === "1")
   const [busy, setBusy] = useState(false)
@@ -203,6 +205,7 @@ function FileList({ folder, selected, onFolder, onFile }: { folder: string; sele
         void upload(Array.from(e.dataTransfer.files))
       }}
     >
+      <div className="px-3 pb-2"><Button size="sm" className="w-full" disabled={creating} onClick={onNew}>{creating ? <Loader2 className="animate-spin" /> : <Plus />} New session</Button></div>
       <div className="flex gap-1.5 px-3 pb-2">
         <input
           ref={input}
@@ -277,6 +280,7 @@ export function Sidebar(props: {
   onSession: (key: string) => void
   onFile: (path: string) => void
   onNewSession: () => void
+  creating?: boolean
   version: number
 }) {
   return (
@@ -290,10 +294,10 @@ export function Sidebar(props: {
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
         <TabsContent value="sessions" className="flex min-h-0 flex-col">
-          <SessionList folder={props.folder} selected={props.selectedSession} onOpen={props.onSession} onNew={props.onNewSession} version={props.version} />
+          <SessionList folder={props.folder} selected={props.selectedSession} onOpen={props.onSession} onNew={props.onNewSession} creating={props.creating} version={props.version} />
         </TabsContent>
         <TabsContent value="files" className="flex min-h-0 flex-col">
-          <FileList folder={props.folder} selected={props.selectedFile} onFolder={props.onFolder} onFile={props.onFile} />
+          <FileList folder={props.folder} selected={props.selectedFile} onFolder={props.onFolder} onFile={props.onFile} onNew={props.onNewSession} creating={props.creating} />
         </TabsContent>
       </Tabs>
     </div>

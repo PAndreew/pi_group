@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
+import { creationOptions } from "./preferences.js";
 import { attributeMessages, registerPrompt } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
@@ -198,7 +199,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			.parse(req.body);
 		const adapter = adapterOf(body.harness);
 		const cwd = resolveSafe(body.path);
-		const live = await adapter.create(cwd, { model: body.model, thinkingLevel: body.thinkingLevel, name: body.name });
+		const live = await adapter.create(cwd, { ...creationOptions(body, req.user!.sessionDefaults), name: body.name });
 		const meta = store.upsertSession({
 			key: `${adapter.id}:${live.id}`,
 			harness: adapter.id,

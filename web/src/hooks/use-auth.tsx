@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { api, type User } from "@/lib/api"
+import { api, type User, type SessionDefaults } from "@/lib/api"
 
 interface AuthValue {
   user: User | null
   loading: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  saveDefaults: (defaults: SessionDefaults) => Promise<void>
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
@@ -35,7 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
   }, [])
 
-  return <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
+  const saveDefaults = useCallback(async (defaults: SessionDefaults) => {
+    const { user } = await api.saveDefaults(defaults)
+    setUser(user)
+  }, [])
+
+  return <AuthContext.Provider value={{ user, loading, login, logout, saveDefaults }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

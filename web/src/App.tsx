@@ -1,6 +1,6 @@
-import { Activity, KeyRound, Loader2, LogOut, Menu, Monitor, Moon, Sun, Users } from "lucide-react"
+import { Activity, Bot, KeyRound, Loader2, LogOut, Menu, Monitor, Moon, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { Toaster } from "sonner"
+import { Toaster, toast } from "sonner"
 import { FileViewer } from "@/components/file-viewer"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
@@ -116,6 +116,8 @@ function Workspace() {
   const [rootName, setRootName] = useState("root")
   const [sheet, setSheet] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  const [defaultsOpen, setDefaultsOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [version, setVersion] = useState(0)
@@ -138,6 +140,18 @@ function Workspace() {
     setSheet(false)
   }
 
+  const quickCreate = async () => {
+    if (creating) return
+    if (!user?.sessionDefaults) { setNewOpen(true); return }
+    setCreating(true)
+    try {
+      const { session } = await api.createSession({ harness: user.sessionDefaults.harness, path: route.folder })
+      setVersion((v) => v + 1)
+      openSession(session.key)
+    } catch (error) { toast.error((error as Error).message) }
+    finally { setCreating(false) }
+  }
+
   const sidebar = (
     <Sidebar
       rootName={rootName}
@@ -149,7 +163,8 @@ function Workspace() {
       onFolder={(folder) => setRoute({ folder })}
       onSession={openSession}
       onFile={openFile}
-      onNewSession={() => setNewOpen(true)}
+      onNewSession={() => void quickCreate()}
+      creating={creating}
       version={version}
     />
   )
@@ -186,6 +201,9 @@ function Workspace() {
             <DropdownMenuItem onSelect={() => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")}>
               {theme === "light" ? <Sun /> : theme === "dark" ? <Moon /> : <Monitor />} Theme: {theme}
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
+              <Bot /> Session defaults
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
               <KeyRound /> Change password
             </DropdownMenuItem>
@@ -221,7 +239,7 @@ function Workspace() {
             <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
               <p>Pick a session or a file, or start a new session in /{route.folder}.</p>
               <div className="flex gap-2">
-                <Button onClick={() => setNewOpen(true)}>New session</Button>
+                <Button disabled={creating} onClick={() => void quickCreate()}>New session</Button>
                 <Button variant="outline" className="md:hidden" onClick={() => setSheet(true)}>
                   Browse
                 </Button>
@@ -248,6 +266,7 @@ function Workspace() {
           openSession(s.key)
         }}
       />
+      <NewSessionDialog folder={route.folder} open={defaultsOpen} onOpenChange={setDefaultsOpen} onCreated={() => {}} defaultsOnly />
       <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
       <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
     </div>

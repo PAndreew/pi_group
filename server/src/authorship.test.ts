@@ -19,6 +19,20 @@ test("legacy messages stay unknown; new authors survive JSON persistence", () =>
 	assert.equal(messages[1].content[0].text, "hello");
 });
 
+test("Yo retains its avatar identity across live delivery and transcript reload", () => {
+	const data = ledger();
+	registerPrompt(data, [], { text: "Yo" }, alice);
+	const user = message("Yo", 1792089252713);
+	const live = attributeMessages(data, [user]);
+	assert.deepEqual(live[0].author, alice);
+	const reloaded = attributeMessages(JSON.parse(JSON.stringify(data)), [
+		JSON.parse(JSON.stringify(user)),
+		{ role: "assistant", content: [{ type: "text", text: "Yo! What are we working on?" }], timestamp: 1792089252732 },
+	]);
+	assert.deepEqual(reloaded[0].author, alice);
+	assert.equal(reloaded[1].author, undefined);
+});
+
 test("steering overtakes follow-up without swapping authors", () => {
 	const data = ledger();
 	registerPrompt(data, [], { text: "later", mode: "followUp" }, alice);
