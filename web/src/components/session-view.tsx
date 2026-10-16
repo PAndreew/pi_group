@@ -22,7 +22,7 @@ import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dial
 import { Markdown } from "@/components/markdown"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
-import { StepDialog } from "@/components/step-dialog"
+import { StepsDialog } from "@/components/step-dialog"
 import { StepStrip } from "@/components/step-strip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -68,23 +68,35 @@ function UserBubble({ message }: { message: AgentMessage }) {
   )
 }
 
-function RunView({ run, onOpen }: { run: Run; onOpen: (index: number) => void }) {
+/** The agent's side of a run, mirrored from the user bubble: steps first, then the answer. */
+function AgentBubble({ run, onOpen }: { run: Run; onOpen: (index: number | null) => void }) {
   return (
-    <div className="space-y-1.5">
+    <div className="flex items-start gap-2">
+      <AuthorAvatar id="agent" name="π" />
+      <div className="agent-bubble max-w-[88%] min-w-0 rounded-2xl rounded-bl-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+        <div className="mb-1 text-xs font-semibold">Agent</div>
+        <StepStrip steps={run.steps} onOpen={onOpen} onAll={() => onOpen(null)} />
+        {run.answer && (
+          <div>
+            <Markdown text={run.answer} />
+            {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary-foreground/60 align-middle" />}
+          </div>
+        )}
+        {run.running && !run.answerStreaming && (
+          <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
+            <Loader2 className="size-3 animate-spin" /> working…
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RunView({ run, onOpen }: { run: Run; onOpen: (index: number | null) => void }) {
+  return (
+    <div className="space-y-2">
       {run.user && <UserBubble message={run.user} />}
-      {(run.steps.length > 0 || run.running) && <div className="flex items-center gap-2 text-xs text-muted-foreground"><AuthorAvatar id="agent" name="π" /> Agent</div>}
-      <StepStrip steps={run.steps} running={run.running} onOpen={onOpen} />
-      {run.answer && (
-        <div className="rounded-lg">
-          <Markdown text={run.answer} />
-          {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-foreground/60 align-middle" />}
-        </div>
-      )}
-      {run.running && !run.answerStreaming && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3 animate-spin" /> working…
-        </div>
-      )}
+      {(run.steps.length > 0 || run.running || run.answer) && <AgentBubble run={run} onOpen={onOpen} />}
     </div>
   )
 }
@@ -133,7 +145,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [summary, setSummary] = useState<SessionSummary>()
   const [models, setModels] = useState<ModelInfo[]>([])
-  const [open, setOpen] = useState<{ run: number; step: number } | null>(null)
+  /** Steps modal of one run; `step` is the expanded step, null shows just the grid. */
+  const [open, setOpen] = useState<{ run: number; step: number | null } | null>(null)
   const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
   const [files, setFiles] = useState<File[]>([])
@@ -428,7 +441,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           <ThinkingPicker value={state?.thinkingLevel} disabled={!canWrite} onChange={(level) => act(() => api.setThinking(sessionKey, level))} />
         </DialogContent>
       </Dialog>
-      <StepDialog steps={openRun?.steps ?? []} index={open?.step ?? null} onIndex={(step) => setOpen(step === null ? null : { run: open!.run, step })} />
+      <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       <ExtensionDialogView dialog={canWrite ? state?.dialogs[0] : undefined} onAnswer={(answer) => state?.dialogs[0] && act(() => api.answerDialog(sessionKey, { id: state.dialogs[0].id, ...answer }))} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />

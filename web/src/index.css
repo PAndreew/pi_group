@@ -135,4 +135,22 @@
 .dark .hljs-title, .dark .hljs-section, .dark .hljs-function { color: #d2a8ff; }
 .dark .hljs-attr, .dark .hljs-attribute, .dark .hljs-variable, .dark .hljs-template-variable { color: #ffa657; }
 
+/* Agent answers sit in a primary-colored bubble like the user's: tint blocks from its text color
+   and use the opposite theme's syntax colors. */
+.agent-bubble .prose-pi :where(:not(pre) > code, pre) { background-color: color-mix(in oklch, currentColor 14%, transparent); }
+.agent-bubble .prose-pi :where(blockquote) { color: inherit; opacity: 0.8; }
+.agent-bubble .prose-pi :where(blockquote, th, td) { border-color: color-mix(in oklch, currentColor 30%, transparent); }
+.agent-bubble .hljs-comment, .agent-bubble .hljs-quote { color: #8b949e; }
+.agent-bubble .hljs-keyword, .agent-bubble .hljs-selector-tag, .agent-bubble .hljs-literal, .agent-bubble .hljs-type { color: #ff7b72; }
+.agent-bubble .hljs-string, .agent-bubble .hljs-regexp, .agent-bubble .hljs-addition { color: #a5d6ff; }
+.agent-bubble .hljs-number, .agent-bubble .hljs-built_in, .agent-bubble .hljs-symbol { color: #79c0ff; }
+.agent-bubble .hljs-title, .agent-bubble .hljs-section, .agent-bubble .hljs-function { color: #d2a8ff; }
+.agent-bubble .hljs-attr, .agent-bubble .hljs-attribute, .agent-bubble .hljs-variable, .agent-bubble .hljs-template-variable { color: #ffa657; }
+.dark .agent-bubble .hljs-comment, .dark .agent-bubble .hljs-quote { color: #6a737d; }
+.dark .agent-bubble .hljs-keyword, .dark .agent-bubble .hljs-selector-tag, .dark .agent-bubble .hljs-literal, .dark .agent-bubble .hljs-type { color: #d73a49; }
+.dark .agent-bubble .hljs-string, .dark .agent-bubble .hljs-regexp, .dark .agent-bubble .hljs-addition { color: #22863a; }
+.dark .agent-bubble .hljs-number, .dark .agent-bubble .hljs-built_in, .dark .agent-bubble .hljs-symbol { color: #005cc5; }
+.dark .agent-bubble .hljs-title, .dark .agent-bubble .hljs-section, .dark .agent-bubble .hljs-function { color: #6f42c1; }
+.dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
+
 .scrollbar-thin { scrollbar-width: thin; }

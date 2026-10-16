@@ -1,5 +1,4 @@
-import { AlertTriangle, Brain, FilePen, FilePlus, FileText, Layers, MessageSquareText, Search, Terminal, Wrench } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { AlertTriangle, Brain, Ellipsis, FilePen, FilePlus, FileText, Layers, MessageSquareText, Search, Terminal, Wrench } from "lucide-react"
 import type { Step, StepKind } from "@/lib/steps"
 import { cn } from "@/lib/utils"
 
@@ -42,39 +41,45 @@ const STEP_COLOR: Record<StepKind, string> = {
   error: "text-step-error",
 }
 
-/** One run's steps as small squares in a single horizontally scrolling row. */
-export function StepStrip({ steps, running, onOpen }: { steps: Step[]; running: boolean; onOpen: (index: number) => void }) {
-  const row = useRef<HTMLDivElement>(null)
+const SQUARE = "relative flex size-11 shrink-0 items-center justify-center rounded-lg border bg-card text-card-foreground transition-colors hover:bg-accent active:scale-95 sm:size-10"
 
-  // Follow new steps while the run is live, unless the user scrolled back.
-  useEffect(() => {
-    const el = row.current
-    if (!el || !running) return
-    if (el.scrollWidth - el.scrollLeft - el.clientWidth < 120) el.scrollTo({ left: el.scrollWidth, behavior: "smooth" })
-  }, [steps.length, running])
-
-  if (steps.length === 0) return null
+/** A step as a small square: kind icon, number in the corner. */
+export function StepSquare({ step, selected, onClick }: { step: Step; selected?: boolean; onClick: () => void }) {
+  const Icon = STEP_ICON[step.kind]
   return (
-    <div ref={row} className="scrollbar-thin -mx-1 flex snap-x gap-1.5 overflow-x-auto px-1 py-1.5">
-      {steps.map((step, i) => {
-        const Icon = STEP_ICON[step.kind]
-        return (
-          <button
-            key={step.key}
-            type="button"
-            onClick={() => onOpen(i)}
-            title={`${step.index}. ${STEP_LABEL[step.kind]}: ${step.title}`}
-            className={cn(
-              "relative flex size-11 shrink-0 snap-start items-center justify-center rounded-lg border bg-card transition-colors hover:bg-accent active:scale-95 sm:size-10",
-              step.status === "running" && "animate-pulse border-primary/60 ring-2 ring-primary/20",
-              step.status === "error" && "border-step-error/60 bg-step-error/5"
-            )}
-          >
-            <Icon className={cn("size-5", step.status === "error" ? "text-step-error" : STEP_COLOR[step.kind])} />
-            <span className="absolute right-0.5 bottom-0 font-mono text-[9px] leading-tight text-muted-foreground tabular-nums">{step.index}</span>
-          </button>
-        )
-      })}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      title={`${step.index}. ${STEP_LABEL[step.kind]}: ${step.title}`}
+      className={cn(
+        SQUARE,
+        step.status === "running" && "animate-pulse border-primary/60 ring-2 ring-primary/20",
+        step.status === "error" && "border-step-error/60 bg-step-error/5",
+        selected && "border-primary ring-2 ring-primary/40"
+      )}
+    >
+      <Icon className={cn("size-5", step.status === "error" ? "text-step-error" : STEP_COLOR[step.kind])} />
+      <span className="absolute right-0.5 bottom-0 font-mono text-[9px] leading-tight text-muted-foreground tabular-nums">{step.index}</span>
+    </button>
+  )
+}
+
+/** The last few steps of a run; earlier ones collapse into an ellipsis that opens the full grid. */
+export function StepStrip({ steps, onOpen, onAll, visible = 3 }: { steps: Step[]; onOpen: (index: number) => void; onAll: () => void; visible?: number }) {
+  if (steps.length === 0) return null
+  const hidden = Math.max(0, steps.length - visible)
+  return (
+    <div className="flex flex-wrap gap-1.5 py-1.5">
+      {hidden > 0 && (
+        <button type="button" onClick={onAll} title={`Show all ${steps.length} steps`} aria-label={`Show all ${steps.length} steps`} className={SQUARE}>
+          <Ellipsis className="size-5 text-muted-foreground" />
+          <span className="absolute right-0.5 bottom-0 font-mono text-[9px] leading-tight text-muted-foreground tabular-nums">+{hidden}</span>
+        </button>
+      )}
+      {steps.slice(hidden).map((step, i) => (
+        <StepSquare key={step.key} step={step} onClick={() => onOpen(hidden + i)} />
+      ))}
     </div>
   )
 }

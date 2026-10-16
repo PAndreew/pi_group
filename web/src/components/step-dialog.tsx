@@ -1,8 +1,8 @@
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
-import { useEffect } from "react"
+import { ChevronLeft, ChevronRight, ChevronUp, Loader2 } from "lucide-react"
+import { useEffect, useRef } from "react"
 import { CodeBlock, languageFor } from "@/components/code-block"
 import { Markdown } from "@/components/markdown"
-import { STEP_ICON, STEP_LABEL } from "@/components/step-strip"
+import { STEP_ICON, STEP_LABEL, StepSquare } from "@/components/step-strip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -158,57 +158,83 @@ function StepBody({ step }: { step: Step }) {
   }
 }
 
-export function StepDialog({ steps, index, onIndex }: { steps: Step[]; index: number | null; onIndex: (index: number | null) => void }) {
+/** One step expanded below the grid, with prev/next. */
+function StepDetail({ step, index, count, onIndex }: { step: Step; index: number; count: number; onIndex: (index: number | null) => void }) {
+  const Icon = STEP_ICON[step.kind]
+  const usage = step.message?.usage
+  const subtitle = step.kind === "thinking" || step.kind === "text" ? (step.message?.model ? `${step.message.provider}/${step.message.model}` : "") : step.title
+  return (
+    <div className="rounded-lg border">
+      <div className="flex items-center gap-1.5 border-b px-3 py-2">
+        <Icon className="size-4 shrink-0" />
+        <span className="shrink-0 text-sm font-medium">
+          {step.index}. {step.kind === "tool" ? (step.toolCall?.name ?? "Tool") : STEP_LABEL[step.kind]}
+        </span>
+        {step.status === "running" && <Badge variant="secondary">running</Badge>}
+        {step.status === "error" && <Badge variant="destructive">error</Badge>}
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{subtitle}</span>
+        <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous step">
+          <ChevronLeft />
+        </Button>
+        <Button variant="ghost" size="icon-sm" disabled={index === count - 1} onClick={() => onIndex(index + 1)} aria-label="Next step">
+          <ChevronRight />
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => onIndex(null)} aria-label="Collapse step">
+          <ChevronUp />
+        </Button>
+      </div>
+      <div className="p-3">
+        <StepBody step={step} />
+      </div>
+      {(usage?.totalTokens || step.timestamp) && (
+        <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
+          {[usage?.totalTokens ? `${usage.totalTokens.toLocaleString()} tok` : "", step.timestamp ? new Date(step.timestamp).toLocaleTimeString() : ""].filter(Boolean).join(" · ")}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** All steps of a run as a grid; tapping one expands its details inside the modal. */
+export function StepsDialog({ steps, open, index, onIndex, onClose }: { steps: Step[]; open: boolean; index: number | null; onIndex: (index: number | null) => void; onClose: () => void }) {
+  const detail = useRef<HTMLDivElement>(null)
   const step = index === null ? undefined : steps[index]
 
   useEffect(() => {
-    if (index === null) return
+    if (!open || index === null) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" && index > 0) onIndex(index - 1)
       if (e.key === "ArrowRight" && index < steps.length - 1) onIndex(index + 1)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [index, steps.length, onIndex])
+  }, [open, index, steps.length, onIndex])
 
-  const Icon = step ? STEP_ICON[step.kind] : null
-  const usage = step?.message?.usage
+  useEffect(() => {
+    if (open && index !== null) detail.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  }, [open, index])
+
   return (
-    <Dialog open={Boolean(step)} onOpenChange={(open) => !open && onIndex(null)}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="flex max-h-[92dvh] flex-col gap-3 p-4 sm:max-w-3xl sm:p-5">
-        {step && Icon && (
-          <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <Icon className="size-4 shrink-0" />
-                <span className="shrink-0">
-                  {step.index}. {step.kind === "tool" ? (step.toolCall?.name ?? "Tool") : STEP_LABEL[step.kind]}
-                </span>
-                {step.status === "running" && <Badge variant="secondary">running</Badge>}
-                {step.status === "error" && <Badge variant="destructive">error</Badge>}
-              </DialogTitle>
-              <DialogDescription className="truncate font-mono text-xs">
-                {step.kind === "thinking" || step.kind === "text" ? (step.message?.model ? `${step.message.provider}/${step.message.model}` : "") : step.title}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
-              <StepBody step={step} />
+        <DialogHeader>
+          <DialogTitle className="text-base">Steps</DialogTitle>
+          <DialogDescription>
+            {steps.length} step{steps.length === 1 ? "" : "s"} in this run. Tap one to expand it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="scrollbar-thin -mx-1 min-h-0 flex-1 space-y-3 overflow-y-auto px-1 pb-1">
+          <div className="flex flex-wrap gap-1.5 p-0.5">
+            {steps.map((s, i) => (
+              <StepSquare key={s.key} step={s} selected={i === index} onClick={() => onIndex(i === index ? null : i)} />
+            ))}
+          </div>
+          {step && index !== null && (
+            <div ref={detail}>
+              <StepDetail step={step} index={index} count={steps.length} onIndex={onIndex} />
             </div>
-            <div className="flex items-center gap-2 border-t pt-3">
-              <Button variant="outline" size="sm" disabled={index === 0} onClick={() => onIndex(index! - 1)}>
-                <ChevronLeft /> Prev
-              </Button>
-              <span className="flex-1 truncate text-center text-xs text-muted-foreground">
-                {step.index} / {steps.length}
-                {usage?.totalTokens ? ` · ${usage.totalTokens.toLocaleString()} tok` : ""}
-                {step.timestamp ? ` · ${new Date(step.timestamp).toLocaleTimeString()}` : ""}
-              </span>
-              <Button variant="outline" size="sm" disabled={index === steps.length - 1} onClick={() => onIndex(index! + 1)}>
-                Next <ChevronRight />
-              </Button>
-            </div>
-          </>
-        )}
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )
