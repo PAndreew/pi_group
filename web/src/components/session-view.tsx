@@ -11,12 +11,14 @@ import {
   PinOff,
   Power,
   Share2,
+  Trash2,
   TriangleAlert,
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
@@ -28,6 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
@@ -124,8 +127,10 @@ function ExtensionDialogView({ dialog, onAnswer }: { dialog?: ExtensionDialog; o
   )
 }
 
-export function SessionView({ sessionKey, header }: { sessionKey: string; header?: React.ReactNode }) {
-  const { state, connected } = useSessionStream(sessionKey)
+export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: string; header?: React.ReactNode; onDeleted: (key: string) => void }) {
+  const { user } = useAuth()
+  const { state, connected, deletedBy } = useSessionStream(sessionKey)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [summary, setSummary] = useState<SessionSummary>()
   const [models, setModels] = useState<ModelInfo[]>([])
   const [open, setOpen] = useState<{ run: number; step: number } | null>(null)
@@ -153,6 +158,13 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
     stick.current = true
     refresh()
   }, [refresh])
+
+  // Someone else deleted the session while we were looking at it.
+  useEffect(() => {
+    if (!deletedBy || deletedBy === user?.username) return
+    toast.info(`This session was deleted by ${deletedBy}`)
+    onDeleted(sessionKey)
+  }, [deletedBy])
 
   useEffect(() => {
     if (!summary?.harness) return
@@ -277,6 +289,11 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
               <DropdownMenuItem variant="destructive" disabled={!canWrite || !state?.live} onSelect={() => act(() => api.stop(sessionKey), "Session process stopped")}>
                 <Power /> Stop process
               </DropdownMenuItem>
+              {canDelete(summary) && (
+                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                  <Trash2 /> Delete session
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -414,6 +431,7 @@ export function SessionView({ sessionKey, header }: { sessionKey: string; header
       <StepDialog steps={openRun?.steps ?? []} index={open?.step ?? null} onIndex={(step) => setOpen(step === null ? null : { run: open!.run, step })} />
       <ExtensionDialogView dialog={canWrite ? state?.dialogs[0] : undefined} onAnswer={(answer) => state?.dialogs[0] && act(() => api.answerDialog(sessionKey, { id: state.dialogs[0].id, ...answer }))} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
+      <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>

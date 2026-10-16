@@ -108,7 +108,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const load = (req: Request) => {
 		const key = String(req.params.key);
 		const meta = store.session(key);
-		const access = meta && accessOf(req.user!, meta);
+		const access = meta && !meta.deleted && accessOf(req.user!, meta);
 		if (!meta || !access) throw new HttpError(404, "Session not found");
 		return { key, meta, access, adapter: adapterOf(meta.harness) };
 	};
@@ -168,7 +168,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		);
 		const sessions = results
 			.flat()
-			.filter(({ meta }) => accessOf(req.user!, meta))
+			.filter(({ meta }) => !meta.deleted && accessOf(req.user!, meta))
 			.map(({ meta, listing }) => summary(meta, req.user!, listing))
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
 		res.json({ path: toRel(cwd), sessions });
@@ -178,8 +178,20 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	router.get("/sessions/active", (req, res) => {
 		const sessions = adapters
 			.flatMap((a) => a.liveSessions().map((live) => store.session(`${a.id}:${live.id}`)))
-			.filter((meta): meta is SessionMeta => Boolean(meta && accessOf(req.user!, meta)))
+			.filter((meta): meta is SessionMeta => Boolean(meta && !meta.deleted && accessOf(req.user!, meta)))
 			.map((meta) => summary(meta, req.user!));
+		res.json({ sessions });
+	});
+
+	/** The caller's most recently active sessions across all folders, for the home page. */
+	router.get("/sessions/recent", (req, res) => {
+		const limit = z.coerce.number().int().min(1).max(20).catch(3).parse(req.query.limit);
+		const sessions = Object.values(store.data.sessions)
+			// Unclaimed sessions are registered on first listing; without activity in the app they are not "recent".
+			.filter((meta) => !meta.deleted && (meta.ownerId || meta.updatedAt) && accessOf(req.user!, meta))
+			.map((meta) => summary(meta, req.user!))
+			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt))
+			.slice(0, limit);
 		res.json({ sessions });
 	});
 
@@ -335,6 +347,21 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	router.post("/sessions/:key/stop", async (req, res) => {
 		const { meta, adapter } = writable(req);
 		await adapter.live(meta.id)?.close();
+		res.json({ ok: true });
+	});
+
+	/** Owners and admins delete sessions; viewers are told so they can leave the page. */
+	router.delete("/sessions/:key", async (req, res) => {
+		const { key, meta, access, adapter } = load(req);
+		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can delete this session");
+		const purged = await adapter.deleteSession(meta.id, meta.cwd);
+		if (purged) store.removeSession(key);
+		else {
+			meta.deleted = true;
+			delete meta.authorship;
+		}
+		saveNow();
+		hub.broadcast(key, { type: "deleted", by: req.user!.username });
 		res.json({ ok: true });
 	});
 

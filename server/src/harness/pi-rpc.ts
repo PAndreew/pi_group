@@ -545,6 +545,16 @@ export class PiRpcAdapter implements HarnessAdapter {
 		return session;
 	}
 
+	async deleteSession(id: string, cwd: string) {
+		await this.sessions.get(id)?.close();
+		const file = await this.fileOf(id, cwd);
+		if (file) {
+			await fs.rm(file, { force: true });
+			this.files.delete(file);
+		}
+		return true;
+	}
+
 	async shutdown() {
 		await Promise.all([...this.sessions.values()].map((s) => s.close()));
 	}

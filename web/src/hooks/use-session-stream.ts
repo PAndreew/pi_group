@@ -9,6 +9,7 @@ type Event =
   | { type: "tool_output"; toolCallId: string; output: string }
   | { type: "status"; status: Omit<SessionState, "messages" | "partial" | "toolOutputs"> }
   | { type: "notify"; level: "info" | "warn" | "error"; text: string; silent?: boolean }
+  | { type: "deleted"; by: string }
   | { type: "reset" }
 
 function reduce(state: SessionState | null, event: Event): SessionState | null {
@@ -38,9 +39,11 @@ function reduce(state: SessionState | null, event: Event): SessionState | null {
 export function useSessionStream(key: string | undefined) {
   const [state, dispatch] = useReducer(reduce, null)
   const [connected, setConnected] = useState(false)
+  const [deletedBy, setDeletedBy] = useState<string>()
 
   useEffect(() => {
     dispatch({ type: "reset" })
+    setDeletedBy(undefined)
     if (!key) return
     const source = new EventSource(api.eventsUrl(key))
     source.onopen = () => setConnected(true)
@@ -53,6 +56,11 @@ export function useSessionStream(key: string | undefined) {
         else if (event.level === "warn") toast.warning(event.text)
         return
       }
+      if (event.type === "deleted") {
+        setDeletedBy(event.by)
+        source.close()
+        return
+      }
       dispatch(event)
     }
     return () => {
@@ -61,5 +69,5 @@ export function useSessionStream(key: string | undefined) {
     }
   }, [key])
 
-  return { state, connected }
+  return { state, connected, deletedBy }
 }

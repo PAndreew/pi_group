@@ -1,7 +1,8 @@
 import { Activity, Bot, KeyRound, Loader2, LogOut, Menu, Monitor, Moon, Sun, Users } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { FileViewer } from "@/components/file-viewer"
+import { Home } from "@/components/home"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
 import { SessionView } from "@/components/session-view"
@@ -121,14 +122,11 @@ function Workspace() {
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [version, setVersion] = useState(0)
+  /** First prompt typed on the home page while the new-session dialog is open. */
+  const pendingPrompt = useRef<string>(undefined)
 
   useEffect(() => {
     api.fsInfo().then(({ rootName }) => setRootName(rootName), () => {})
-  }, [])
-
-  // On phones the sidebar is a sheet; start with it open when nothing is selected.
-  useEffect(() => {
-    if (!route.session && !route.file && window.matchMedia("(max-width: 767px)").matches) setSheet(true)
   }, [])
 
   const openSession = (key: string) => {
@@ -140,16 +138,41 @@ function Workspace() {
     setSheet(false)
   }
 
-  const quickCreate = async () => {
-    if (creating) return
-    if (!user?.sessionDefaults) { setNewOpen(true); return }
+  const goHome = () => {
+    setRoute({ session: undefined, file: undefined })
+    setSheet(false)
+  }
+
+  const onSessionDeleted = (key: string) => {
+    setVersion((v) => v + 1)
+    if (route.session === key) goHome()
+  }
+
+  const sendFirstPrompt = async (key: string, prompt?: string) => {
+    if (prompt) await api.prompt(key, { text: prompt }).catch((error) => toast.error(error.message))
+  }
+
+  /** Create a session in the current folder with the saved defaults, optionally sending a first prompt. */
+  const quickCreate = async (prompt?: string) => {
+    if (creating) return false
+    if (!user?.sessionDefaults) {
+      pendingPrompt.current = prompt
+      setNewOpen(true)
+      return false
+    }
     setCreating(true)
     try {
       const { session } = await api.createSession({ harness: user.sessionDefaults.harness, path: route.folder })
+      await sendFirstPrompt(session.key, prompt)
       setVersion((v) => v + 1)
       openSession(session.key)
-    } catch (error) { toast.error((error as Error).message) }
-    finally { setCreating(false) }
+      return true
+    } catch (error) {
+      toast.error((error as Error).message)
+      return false
+    } finally {
+      setCreating(false)
+    }
   }
 
   const sidebar = (
@@ -164,6 +187,7 @@ function Workspace() {
       onSession={openSession}
       onFile={openFile}
       onNewSession={() => void quickCreate()}
+      onSessionDeleted={onSessionDeleted}
       creating={creating}
       version={version}
     />
@@ -179,9 +203,9 @@ function Workspace() {
     <div className="flex h-dvh flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
         {!route.session && !route.file && menuButton}
-        <span className="font-semibold">
+        <button type="button" onClick={goHome} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
           <span className="font-mono">π</span> group
-        </span>
+        </button>
         <div className="flex-1" />
         <ActiveSessions
           onOpen={(s) => {
@@ -224,7 +248,7 @@ function Workspace() {
         <aside className="hidden w-80 shrink-0 border-r md:block">{sidebar}</aside>
         <main className="min-w-0 flex-1">
           {route.session ? (
-            <SessionView key={route.session} sessionKey={route.session} header={menuButton} />
+            <SessionView key={route.session} sessionKey={route.session} header={menuButton} onDeleted={onSessionDeleted} />
           ) : route.file ? (
             <div className="flex h-full flex-col">
               <div className="flex items-center gap-1 border-b px-2 py-1 md:hidden">
@@ -236,15 +260,13 @@ function Workspace() {
               </div>
             </div>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
-              <p>Pick a session or a file, or start a new session in /{route.folder}.</p>
-              <div className="flex gap-2">
-                <Button disabled={creating} onClick={() => void quickCreate()}>New session</Button>
-                <Button variant="outline" className="md:hidden" onClick={() => setSheet(true)}>
-                  Browse
-                </Button>
-              </div>
-            </div>
+            <Home
+              folder={route.folder}
+              version={version}
+              onOpen={(s) => setRoute({ folder: s.path, session: s.key, file: undefined, tab: "sessions" })}
+              onStart={quickCreate}
+              onDefaults={() => setDefaultsOpen(true)}
+            />
           )}
         </main>
       </div>
@@ -260,9 +282,14 @@ function Workspace() {
       <NewSessionDialog
         folder={route.folder}
         open={newOpen}
-        onOpenChange={setNewOpen}
+        onOpenChange={(open) => {
+          setNewOpen(open)
+          if (!open) pendingPrompt.current = undefined
+        }}
         onCreated={(s) => {
-          setVersion((v) => v + 1)
+          const prompt = pendingPrompt.current
+          pendingPrompt.current = undefined
+          void sendFirstPrompt(s.key, prompt).then(() => setVersion((v) => v + 1))
           openSession(s.key)
         }}
       />

@@ -112,6 +112,8 @@ export interface HarnessAdapter {
 	/** Attach to a session, starting its runtime if needed. */
 	open(id: string, cwd: string): Promise<LiveSession>;
 	create(cwd: string, options: CreateOptions): Promise<LiveSession>;
+	/** Stop and remove a session. Resolves false when the harness cannot erase it; the app then hides it. */
+	deleteSession(id: string, cwd: string): Promise<boolean>;
 	shutdown(): Promise<void>;
 }
 

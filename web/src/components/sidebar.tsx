@@ -17,11 +17,13 @@ import {
   Pin,
   Plus,
   RefreshCw,
+  Trash2,
   Upload,
   Users,
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -64,6 +66,7 @@ function SessionList({
   selected,
   onOpen,
   onNew,
+  onDeleted,
   creating,
   version,
 }: {
@@ -71,11 +74,13 @@ function SessionList({
   selected?: string
   onOpen: (key: string) => void
   onNew: () => void
+  onDeleted: (key: string) => void
   creating?: boolean
   version: number
 }) {
   const [sessions, setSessions] = useState<SessionSummary[]>()
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState<SessionSummary>()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -107,36 +112,56 @@ function SessionList({
         {!sessions && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {sessions?.length === 0 && <p className="px-2 py-6 text-center text-sm text-muted-foreground">No sessions in this folder yet.</p>}
         {sessions?.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            onClick={() => onOpen(s.key)}
-            className={cn("flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left hover:bg-accent", selected === s.key && "bg-accent")}
-          >
-            <div className="flex items-center gap-1.5">
-              <span className={cn("size-2 shrink-0 rounded-full", s.running ? "animate-pulse bg-green-500" : s.live ? "bg-sky-500" : "bg-muted-foreground/30")} />
-              <span className="min-w-0 flex-1 truncate text-sm">{s.name || s.firstMessage || "Untitled session"}</span>
-              {s.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-              {s.visibility === "shared" ? <Users className="size-3 shrink-0 text-muted-foreground" /> : <Lock className="size-3 shrink-0 text-muted-foreground/60" />}
-            </div>
-            <div className="flex items-center gap-1.5 pl-3.5 text-[11px] text-muted-foreground">
-              <Badge variant="outline" className="px-1 py-0 text-[10px]">
-                {s.harness}
-              </Badge>
-              <span>{timeAgo(s.updatedAt)}</span>
-              {s.messageCount > 0 && (
-                <span className="flex items-center gap-0.5">
-                  <MessageSquare className="size-3" />
-                  {s.messageCount}
-                </span>
-              )}
-              {s.owner && s.access !== "owner" && <span className="truncate">· {s.owner}</span>}
-              {!s.owner && <span className="text-amber-600">· unclaimed</span>}
-              {s.access === "read" && <span>· view only</span>}
-            </div>
-          </button>
+          <div key={s.key} className={cn("flex items-center rounded-md hover:bg-accent", selected === s.key && "bg-accent")}>
+            <button
+              type="button"
+              onClick={() => onOpen(s.key)}
+              className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-2 text-left"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className={cn("size-2 shrink-0 rounded-full", s.running ? "animate-pulse bg-green-500" : s.live ? "bg-sky-500" : "bg-muted-foreground/30")} />
+                <span className="min-w-0 flex-1 truncate text-sm">{s.name || s.firstMessage || "Untitled session"}</span>
+                {s.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
+                {s.visibility === "shared" ? <Users className="size-3 shrink-0 text-muted-foreground" /> : <Lock className="size-3 shrink-0 text-muted-foreground/60" />}
+              </div>
+              <div className="flex items-center gap-1.5 pl-3.5 text-[11px] text-muted-foreground">
+                <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                  {s.harness}
+                </Badge>
+                <span>{timeAgo(s.updatedAt)}</span>
+                {s.messageCount > 0 && (
+                  <span className="flex items-center gap-0.5">
+                    <MessageSquare className="size-3" />
+                    {s.messageCount}
+                  </span>
+                )}
+                {s.owner && s.access !== "owner" && <span className="truncate">· {s.owner}</span>}
+                {!s.owner && <span className="text-amber-600">· unclaimed</span>}
+                {s.access === "read" && <span>· view only</span>}
+              </div>
+            </button>
+            {canDelete(s) && (
+              <button
+                type="button"
+                onClick={() => setDeleting(s)}
+                className="shrink-0 self-stretch rounded-md px-2.5 text-red-500/80 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+                aria-label={`Delete ${s.name || s.firstMessage || "session"}`}
+                title="Delete session"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            )}
+          </div>
         ))}
       </div>
+      <DeleteSessionDialog
+        session={deleting}
+        onOpenChange={(open) => !open && setDeleting(undefined)}
+        onDeleted={(key) => {
+          setSessions((current) => current?.filter((s) => s.key !== key))
+          onDeleted(key)
+        }}
+      />
     </div>
   )
 }
@@ -280,6 +305,7 @@ export function Sidebar(props: {
   onSession: (key: string) => void
   onFile: (path: string) => void
   onNewSession: () => void
+  onSessionDeleted: (key: string) => void
   creating?: boolean
   version: number
 }) {
@@ -294,7 +320,7 @@ export function Sidebar(props: {
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
         <TabsContent value="sessions" className="flex min-h-0 flex-col">
-          <SessionList folder={props.folder} selected={props.selectedSession} onOpen={props.onSession} onNew={props.onNewSession} creating={props.creating} version={props.version} />
+          <SessionList folder={props.folder} selected={props.selectedSession} onOpen={props.onSession} onNew={props.onNewSession} onDeleted={props.onSessionDeleted} creating={props.creating} version={props.version} />
         </TabsContent>
         <TabsContent value="files" className="flex min-h-0 flex-col">
           <FileList folder={props.folder} selected={props.selectedFile} onFolder={props.onFolder} onFile={props.onFile} onNew={props.onNewSession} creating={props.creating} />

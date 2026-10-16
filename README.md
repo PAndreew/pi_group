@@ -4,7 +4,8 @@ A small, mobile-first web UI that lets a **group of people share coding agents r
 
 - Browse the machine's folders and files, upload and download files
 - In-app viewers for Markdown, HTML (sandboxed), PDF (pdf.js, works on phones), source code (Python, JS/TS, shell, …), images, audio/video, CSV, JSON
-- List the agent sessions of each folder, start new ones, resume old ones (including sessions started with the `pi` CLI)
+- List the agent sessions of each folder, start new ones, resume old ones (including sessions started with the `pi` CLI), delete them (owner or admin)
+- A home page (click the logo) with your three most recent sessions above a composer that starts a new session in the current folder
 - **Account-level session defaults**: save a provider/model/thinking combination from user menu → Session defaults (or the new-session dialog). Defaults persist across devices. New session in either Files or Sessions creates immediately in the current folder using those defaults; without defaults it opens configuration first.
 - **Mid-session model switching**: the robot-head button below the chat input opens provider, model and thinking controls; the attachment icon is beside it. Changing a session does not overwrite your saved defaults.
 - Each run is shown as **a horizontal row of small squares**, one per step (reasoning, shell, read, edit, write, search, other tool, answer), each with an icon and a number. Tap one for the details in a modal, then step through with Prev/Next.

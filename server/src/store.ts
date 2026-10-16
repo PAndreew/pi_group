@@ -45,6 +45,8 @@ export interface SessionMeta {
 	/** Keep the harness process alive even when idle, so background work is never reaped. */
 	pinned?: boolean;
 	authorship?: Authorship;
+	/** Tombstone for sessions the harness cannot erase (pi-durable); hidden everywhere. */
+	deleted?: boolean;
 }
 
 interface Data {
@@ -104,5 +106,9 @@ export const store = {
 		data.sessions[meta.key] = next;
 		save();
 		return next;
+	},
+	removeSession(key: string) {
+		delete data.sessions[key];
+		save();
 	},
 };

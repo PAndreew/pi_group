@@ -504,6 +504,14 @@ export class PiDurableAdapter implements HarnessAdapter {
 		return session;
 	}
 
+	/** pi-durable has no way to erase a conversation: stop its run and let the app hide it. */
+	async deleteSession(id: string, cwd: string) {
+		const session = await this.open(id, cwd).catch(() => undefined);
+		if (session?.state.running) await session.abort();
+		await session?.close();
+		return false;
+	}
+
 	async shutdown() {
 		for (const session of this.sessions.values()) await session.close().catch(() => {});
 		for (const harness of this.harnesses.values()) await (await harness.catch(() => undefined))?.close(this.ctx).catch(() => {});
