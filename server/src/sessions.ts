@@ -5,6 +5,7 @@ import { creationOptions } from "./preferences.js";
 import { attributeMessages, registerPrompt } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
+import { contentText } from "./harness/live-base.js";
 import type { HarnessAdapter, LiveSession, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
 import { type Access, type SessionMeta, save, saveNow, store, type User } from "./store.js";
 
@@ -19,6 +20,37 @@ export function accessOf(user: User, meta: SessionMeta): EffectiveAccess | undef
 
 const canWrite = (a?: EffectiveAccess) => a === "admin" || a === "owner" || a === "write";
 const canManage = (a?: EffectiveAccess) => a === "admin" || a === "owner";
+
+/** Users who hear about a session's runs: the owner, people it is shared with, and anyone who prompted it. */
+export function involved(user: User, meta: SessionMeta) {
+	if (meta.deleted || !accessOf(user, meta)) return false;
+	if (meta.ownerId === user.id || (meta.visibility === "shared" && meta.shares.some((s) => s.userId === user.id))) return true;
+	const ledger = meta.authorship;
+	return Boolean(ledger && (Object.values(ledger.authors).some((a) => a.id === user.id) || ledger.pending.some((p) => p.author.id === user.id)));
+}
+
+export interface RunNotice {
+	type: "run";
+	kind: "finished" | "error";
+	key: string;
+	path: string;
+	name: string;
+	text: string;
+}
+
+/** Notification bodies are plain text: drop code blocks and markdown punctuation. */
+export function plainText(markdown: string) {
+	return markdown
+		.replace(/```[\s\S]*?(```|$)/g, " [code] ")
+		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+		.replace(/[*_`#>|~]+/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function lastAssistant(state: SessionState) {
+	return state.messages.findLast((m) => m.role === "assistant");
+}
 
 const firstLine = (text: string) => text.trim().split("\n")[0].slice(0, 200);
 
@@ -35,6 +67,42 @@ class Hub {
 		return { ...state, messages };
 	}
 	private attached = new Map<string, { live: LiveSession; unsubscribe: () => void }>();
+	private running = new Map<string, boolean>();
+	private watchers = new Set<{ user: User; res: Response }>();
+
+	/** Per-user stream of run outcomes (finished / failed) for browser notifications. */
+	watch(user: User, res: Response) {
+		const watcher = { user, res };
+		this.watchers.add(watcher);
+		return () => this.watchers.delete(watcher);
+	}
+
+	private announce(key: string, kind: RunNotice["kind"], text: string) {
+		const meta = store.session(key);
+		if (!meta) return;
+		const notice: RunNotice = { type: "run", kind, key, path: toRel(meta.cwd), name: meta.name || meta.firstMessage || "Untitled session", text: plainText(text).slice(0, 300) };
+		for (const { user, res } of this.watchers) {
+			// Re-read the user: roles and sharing may have changed since the stream opened.
+			const current = store.userById(user.id);
+			if (current && involved(current, meta)) send(res, notice);
+		}
+	}
+
+	/** Turn running → idle transitions into "finished" or "error"; stopped processes and aborts stay quiet. */
+	private observe(key: string, live: LiveSession, event: SessionEvent) {
+		const running = event.type === "state" ? event.state.running : event.type === "status" ? event.status.running : undefined;
+		if (event.type === "notify" && event.level === "error" && !live.state.running) {
+			this.announce(key, "error", event.text);
+			return;
+		}
+		if (running === undefined) return;
+		const was = this.running.get(key);
+		this.running.set(key, running);
+		if (!was || running) return;
+		const state = live.state;
+		if (state.notice?.level === "error") this.announce(key, "error", state.notice.text);
+		else if (state.live && lastAssistant(state)?.stopReason !== "aborted") this.announce(key, "finished", contentText(lastAssistant(state)?.content));
+	}
 
 	count(key: string) {
 		return this.clients.get(key)?.size ?? 0;
@@ -60,6 +128,7 @@ class Hub {
 		if (current?.live === live) return;
 		current?.unsubscribe();
 		const unsubscribe = live.subscribe((event) => {
+			this.observe(key, live, event);
 			if (event.type === "state") this.broadcast(key, { ...event, state: this.state(key, event.state) });
 			else if (event.type === "message") {
 				const state = this.state(key, live.state);
@@ -90,7 +159,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const router = express.Router();
 	const hub = new Hub();
 	const byId = new Map(adapters.map((a) => [a.id, a]));
-	router.use(["/sessions", "/harnesses"], requireAuth);
+	router.use(["/sessions", "/harnesses", "/notifications"], requireAuth);
 
 	const adapterOf = (id: string) => {
 		const adapter = byId.get(id);
@@ -140,6 +209,23 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			access: accessOf(user, meta),
 		};
 	};
+
+	/** Server-sent run outcomes for every session the caller is involved in. */
+	router.get("/notifications", (req, res) => {
+		res.writeHead(200, {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache, no-transform",
+			Connection: "keep-alive",
+			"X-Accel-Buffering": "no",
+		});
+		res.write("retry: 5000\n\n");
+		const unwatch = hub.watch(req.user!, res);
+		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
+		req.on("close", () => {
+			clearInterval(ping);
+			unwatch();
+		});
+	});
 
 	router.get("/harnesses", async (_req, res) => {
 		res.json({
@@ -383,6 +469,11 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const next = store.upsertSession({ ...meta, ownerId: body.userId, shares: meta.shares.filter((s) => s.userId !== body.userId) });
 		res.json({ session: summary(next, req.user!) });
 	});
+
+	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
+	setInterval(() => {
+		for (const adapter of adapters) for (const live of adapter.liveSessions()) hub.attach(`${adapter.id}:${live.id}`, live);
+	}, 5_000).unref();
 
 	// Stop idle runtimes: not running, nobody watching, not pinned, quiet for IDLE_TIMEOUT_MIN.
 	setInterval(() => {

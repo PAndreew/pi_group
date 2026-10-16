@@ -1,4 +1,4 @@
-import { Activity, Bot, KeyRound, Loader2, LogOut, Menu, Monitor, Moon, Sun, Users } from "lucide-react"
+import { Activity, Bell, BellOff, Bot, KeyRound, Loader2, LogOut, Menu, Monitor, Moon, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { FileViewer } from "@/components/file-viewer"
@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
+import { useRunNotifications } from "@/hooks/use-run-notifications"
 import { api, type SessionSummary } from "@/lib/api"
 
 type Theme = "light" | "dark" | "system"
@@ -114,6 +115,7 @@ function Workspace() {
   const { user, logout } = useAuth()
   const [theme, setTheme] = useTheme()
   const [route, setRoute] = useRoute()
+  const notifications = useRunNotifications(route.session)
   const [rootName, setRootName] = useState("root")
   const [sheet, setSheet] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
@@ -224,6 +226,16 @@ function Workspace() {
             </DropdownMenuLabel>
             <DropdownMenuItem onSelect={() => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")}>
               {theme === "light" ? <Sun /> : theme === "dark" ? <Moon /> : <Monitor />} Theme: {theme}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!notifications.supported}
+              onSelect={(e) => {
+                e.preventDefault()
+                void notifications.toggle()
+              }}
+            >
+              {notifications.enabled ? <Bell /> : <BellOff />}
+              {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : "Notifications need HTTPS"}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
               <Bot /> Session defaults
