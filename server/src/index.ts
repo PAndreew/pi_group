@@ -10,6 +10,7 @@ import { PiRpcAdapter } from "./harness/pi-rpc.js";
 import type { HarnessAdapter } from "./harness/types.js";
 import { pushRoutes } from "./push.js";
 import { sessionRoutes } from "./sessions.js";
+import { attachTerminal } from "./terminal.js";
 import { loadStore, saveNow } from "./store.js";
 
 loadStore();
@@ -65,6 +66,7 @@ const server = app.listen(config.port, config.host, () => {
 	console.log(`  data dir:   ${config.dataDir}`);
 	console.log(`  pi:         ${config.piBin} (sessions in ${config.piSessionsDir})`);
 });
+attachTerminal(server);
 
 // Adapters load in the background so the UI is reachable at once (pi-ai's model catalog is large).
 void Promise.all(adapters.map((a) => a.init().catch((error) => console.error(`${a.id} init failed:`, error))));

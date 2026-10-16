@@ -4,7 +4,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
 import { LiveSessionBase } from "./live-base.js";
-import type { AgentMessage, CreateOptions, HarnessAdapter, ModelInfo, PromptInput, SessionListing } from "./types.js";
+import type { AgentMessage, CreateOptions, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing } from "./types.js";
 
 /*
  * pi-durable is experimental and its API changes between releases, so it is loaded dynamically and typed
@@ -510,6 +510,12 @@ export class PiDurableAdapter implements HarnessAdapter {
 		if (session?.state.running) await session.abort();
 		await session?.close();
 		return false;
+	}
+
+	/** Every conversation sees the same registry: pi-durable's coding tools plus this app's extension. */
+	async inventory(): Promise<SessionInventory> {
+		const tools = (this.registry?.snapshot().tools() ?? []).map(({ extension, tool }: Any) => ({ name: tool.name, description: tool.description, origin: extension.name }));
+		return { tools, commands: [], toolsNote: "pi durable runs its own tool set; pi extensions, skills and MCP servers do not apply to it." };
 	}
 
 	async shutdown() {

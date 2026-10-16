@@ -89,6 +89,28 @@ export interface LiveSession {
 	close(): Promise<void>;
 }
 
+export interface ToolInfo {
+	name: string;
+	description?: string;
+	/** Extension (or MCP server) that provides the tool, when known. */
+	origin?: string;
+}
+
+/** A slash command: extension command, prompt template or skill. */
+export interface CommandInfo {
+	name: string;
+	description?: string;
+	source: string;
+	path?: string;
+}
+
+/** What a session's agent can use. `commands` is absent when only a running session can report them. */
+export interface SessionInventory {
+	tools: ToolInfo[];
+	toolsNote?: string;
+	commands?: CommandInfo[];
+}
+
 export interface CreateOptions {
 	model?: { provider: string; id: string };
 	thinkingLevel?: string;
@@ -114,6 +136,8 @@ export interface HarnessAdapter {
 	create(cwd: string, options: CreateOptions): Promise<LiveSession>;
 	/** Stop and remove a session. Resolves false when the harness cannot erase it; the app then hides it. */
 	deleteSession(id: string, cwd: string): Promise<boolean>;
+	/** Tools and commands of a session, for the tools overview; never starts a process. */
+	inventory(id: string, cwd: string): Promise<SessionInventory>;
 	shutdown(): Promise<void>;
 }
 

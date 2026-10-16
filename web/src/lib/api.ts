@@ -91,6 +91,25 @@ export interface SessionState {
   live: boolean
 }
 
+export interface SessionTools {
+  tools: { name: string; description?: string; origin?: string }[]
+  toolsNote?: string
+  /** Extension commands, prompt templates and skills; absent unless the session is running. */
+  commands?: { name: string; description?: string; source: string; path?: string }[]
+  resources: { kind: "package" | "extension" | "skill" | "prompt"; name: string; scope: "user" | "project"; path?: string; description?: string }[]
+}
+
+export interface McpServer {
+  name: string
+  scope?: string
+  transport?: string
+  enabled: boolean
+  state?: string
+  tools?: string[]
+  error?: string
+  target?: string
+}
+
 export class ApiError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
@@ -157,6 +176,10 @@ export const api = {
   createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
     request<{ session: SessionSummary }>("POST", "/api/sessions", body),
   eventsUrl: (key: string) => `/api/sessions/${enc(key)}/events`,
+  tools: (key: string) => request<SessionTools>("GET", `/api/sessions/${enc(key)}/tools`),
+  mcp: (key: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/sessions/${enc(key)}/mcp`),
+  terminalUrl: (key: string, cols: number, rows: number) =>
+    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ key, cols: String(cols), rows: String(rows) })}`,
   prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
   abort: (key: string) => request("POST", `/api/sessions/${enc(key)}/abort`),

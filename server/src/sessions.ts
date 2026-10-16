@@ -2,6 +2,7 @@ import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { creationOptions } from "./preferences.js";
+import { mcpReport, piResources } from "./inventory.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, registerPrompt } from "./authorship.js";
 import { config } from "./config.js";
@@ -352,6 +353,20 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			};
 			send(res, { type: "state", state: hub.state(key, state) });
 		}
+	});
+
+	/** Tools, commands and installed pi resources (extensions, skills, prompts, packages) of a session. */
+	router.get("/sessions/:key/tools", async (req, res) => {
+		const { meta, adapter } = load(req);
+		const inventory = await adapter.inventory(meta.id, meta.cwd);
+		res.json({ ...inventory, resources: adapter.id === "pi" ? piResources(meta.cwd) : [] });
+	});
+
+	/** MCP servers available to a session's agent. */
+	router.get("/sessions/:key/mcp", async (req, res) => {
+		const { meta, adapter } = load(req);
+		if (adapter.id !== "pi") return void res.json({ servers: [], live: false, note: "pi durable has no MCP support; open a pi session to use MCP servers." });
+		res.json(await mcpReport(meta.cwd, req.user!.role === "admin"));
 	});
 
 	const writable = (req: Request) => {

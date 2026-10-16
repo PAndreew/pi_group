@@ -7,9 +7,54 @@ import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { config } from "../config.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
-import type { AgentMessage, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionListing } from "./types.js";
+import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, ToolInfo } from "./types.js";
 
 type RpcRecord = Record<string, any>;
+type Any = any;
+
+function piCommand(args: string[]) {
+	const isScript = config.piBin.endsWith(".js") || config.piBin.endsWith(".mjs");
+	return { command: isScript ? process.execPath : config.piBin, argv: isScript ? [config.piBin, ...args] : args, shell: process.platform === "win32" && !isScript };
+}
+
+/** Run a one-shot pi CLI command (e.g. `pi mcp list --json`) and collect its output. */
+export function runPi(args: string[], cwd: string, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
+	return new Promise((resolve) => {
+		const { command, argv, shell } = piCommand(args);
+		const child = spawn(command, argv, { cwd, env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" }, stdio: ["ignore", "pipe", "pipe"], shell });
+		let stdout = "";
+		let stderr = "";
+		child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
+		child.stderr.on("data", (chunk: Buffer) => (stderr = (stderr + chunk.toString("utf8")).slice(-4000)));
+		const timer = setTimeout(() => {
+			stderr += `
+pi ${args.join(" ")} timed out`;
+			child.kill();
+		}, timeoutMs);
+		child.on("error", (error) => (stderr += `
+${error.message}`));
+		child.on("close", (code) => {
+			clearTimeout(timer);
+			resolve({ code, stdout, stderr });
+		});
+	});
+}
+
+/**
+ * The tools a session declared to the model: pi stores the loadout as system entries with
+ * `toolsAdded` / `toolsRemoved` (the first request carries all of them, later ones patches).
+ */
+function declaredTools(records: RpcRecord[]): ToolInfo[] | undefined {
+	let tools: Map<string, ToolInfo> | undefined;
+	for (const record of records) {
+		const entry = [record, record.message, record.data].find((e) => e && (Array.isArray(e.toolsAdded) || Array.isArray(e.toolsRemoved)));
+		if (!entry) continue;
+		tools ??= new Map();
+		for (const t of entry.toolsRemoved ?? []) tools.delete(t.name);
+		for (const t of entry.toolsAdded ?? []) if (t?.name) tools.set(t.name, { name: t.name, description: t.description, origin: /^mcp__(.+?)__/.exec(t.name)?.[1] });
+	}
+	return tools && [...tools.values()];
+}
 
 /**
  * One `pi --mode rpc` child process. Pi's RPC framing is strict JSONL split on LF only
@@ -26,14 +71,12 @@ class RpcProcess {
 	onExit: (code: number | null) => void = () => {};
 
 	constructor(args: string[], cwd: string) {
-		const isScript = config.piBin.endsWith(".js") || config.piBin.endsWith(".mjs");
-		const command = isScript ? process.execPath : config.piBin;
-		const argv = isScript ? [config.piBin, ...args] : args;
+		const { command, argv, shell } = piCommand(args);
 		this.child = spawn(command, argv, {
 			cwd,
 			env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" },
 			stdio: ["pipe", "pipe", "pipe"],
-			shell: process.platform === "win32" && !isScript,
+			shell,
 		});
 		this.child.stdout.on("data", (chunk: Buffer) => this.read(this.decoder.write(chunk)));
 		this.child.stderr.on("data", (chunk: Buffer) => {
@@ -553,6 +596,23 @@ export class PiRpcAdapter implements HarnessAdapter {
 			this.files.delete(file);
 		}
 		return true;
+	}
+
+	async inventory(id: string, cwd: string): Promise<SessionInventory> {
+		const file = await this.fileOf(id, cwd);
+		const declared = file ? declaredTools(await readJsonl(file).catch(() => [])) : undefined;
+		const live = this.sessions.get(id);
+		let commands: CommandInfo[] | undefined;
+		if (live?.state.live) {
+			const data = await live.rpc.send<{ commands: Any[] }>({ type: "get_commands" }, 10_000).catch(() => undefined);
+			commands = data?.commands?.map((c) => ({ name: c.name, description: c.description, source: c.source, path: c.sourceInfo?.path }));
+		}
+		if (declared) return { tools: declared, commands };
+		return {
+			tools: ["read", "bash", "edit", "write"].map((name) => ({ name, origin: "built-in" })),
+			toolsNote: "pi's default tools. The exact list, including extension and MCP tools, is known after the agent's first reply.",
+			commands,
+		};
 	}
 
 	async shutdown() {

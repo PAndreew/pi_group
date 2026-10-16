@@ -20,18 +20,21 @@
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "web-push": "^3.6.7",
+    "ws": "^8.22.0",
     "zod": "^4.1.0"
   },
   "optionalDependencies": {
     "@earendil-works/chord": "^1.2.0",
     "@earendil-works/pi-ai": "^1.2.0",
-    "@earendil-works/pi-durable": "^1.2.0"
+    "@earendil-works/pi-durable": "^1.2.0",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.0.0",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }
