@@ -200,6 +200,7 @@ export function authRoutes(): Router {
 		if (id === req.user!.id) return void res.status(400).json({ error: "You cannot delete yourself" });
 		store.data.users = store.data.users.filter((u) => u.id !== id);
 		store.data.logins = store.data.logins.filter((l) => l.userId !== id);
+		store.data.pushSubscriptions = store.data.pushSubscriptions.filter((s) => s.userId !== id);
 		for (const meta of Object.values(store.data.sessions)) {
 			meta.shares = meta.shares.filter((s) => s.userId !== id);
 			if (meta.ownerId === id) delete meta.ownerId;

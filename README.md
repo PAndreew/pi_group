@@ -5,7 +5,8 @@ A small, mobile-first web UI that lets a **group of people share coding agents r
 - Browse the machine's folders and files, upload and download files
 - In-app viewers for Markdown, HTML (sandboxed), PDF (pdf.js, works on phones), source code (Python, JS/TS, shell, …), images, audio/video, CSV, JSON
 - List the agent sessions of each folder, start new ones, resume old ones (including sessions started with the `pi` CLI), delete them (owner or admin)
-- **Notifications** (user menu → Notifications): a browser notification when a run finishes or fails in a session you own, are shared on, or prompted, while the app is open in a background tab; an in-app toast when it is in front. Needs HTTPS (see below).
+- **Notifications** (user menu → Notifications): a system notification when a run finishes or fails in a session you own, are shared on, or prompted, also with the app closed (Web Push); an in-app toast when it is in front. Needs HTTPS (see below).
+- **Installable app (PWA)**: add it to the home screen for a full-screen app; the app shell is cached and the last state of recent sessions is shown at once while the live stream reconnects.
 - A home page (click the logo) with your three most recent sessions above a composer that starts a new session in the current folder
 - **Account-level session defaults**: save a provider/model/thinking combination from user menu → Session defaults (or the new-session dialog). Defaults persist across devices. New session in either Files or Sessions creates immediately in the current folder using those defaults; without defaults it opens configuration first.
 - **Mid-session model switching**: the robot-head button below the chat input opens provider, model and thinking controls; the attachment icon is beside it. Changing a session does not overwrite your saved defaults.
@@ -82,6 +83,8 @@ Run it as a service: see [`deploy/pi-group.service`](deploy/pi-group.service).
 
 The UI works over plain HTTP on a LAN, but browsers only allow notifications on HTTPS (or `localhost`). Outside your LAN, put it behind HTTPS (e.g. `tailscale serve 8787`, Caddy, nginx) and set `COOKIE_SECURE=true`. SSE needs proxy buffering off (nginx: `proxy_buffering off;`; the server already sends `X-Accel-Buffering: no`).
 
+Install it as an app: Android Chrome → menu → *Install app*; iPhone Safari → Share → *Add to Home Screen*. On iPhone (iOS 16.4+), notifications only work from the installed app, so turn them on there. Push messages go through the browser vendor's push service (Google, Apple, Mozilla; end-to-end encrypted), so the server needs outbound internet. Its VAPID keys are generated into `DATA_DIR/vapid.json` on first use; deleting that file means every device has to turn notifications on again.
+
 ## Configuration
 
 All settings are environment variables (or `.env`); see [`.env.example`](.env.example). The important ones:
@@ -94,6 +97,7 @@ All settings are environment variables (or `.env`); see [`.env.example`](.env.ex
 | `IDLE_TIMEOUT_MIN` | `30` | Stop idle pi processes |
 | `COOKIE_SECURE` | `false` | Set when served over HTTPS |
 | `ENABLE_DURABLE` | `true` | Offer the pi durable harness |
+| `VAPID_SUBJECT` | project URL | Contact (`mailto:` or `https:`) sent to push services |
 | `PI_GROUP_DEMO_MODEL` | unset | `1` adds an offline demo model to pi durable, to try the UI without API keys |
 
 ## Security model

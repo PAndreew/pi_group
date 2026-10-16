@@ -2,6 +2,7 @@ import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { creationOptions } from "./preferences.js";
+import { pushToUser } from "./push.js";
 import { attributeMessages, registerPrompt } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
@@ -86,6 +87,10 @@ class Hub {
 			const current = store.userById(user.id);
 			if (current && involved(current, meta)) send(res, notice);
 		}
+		// Push reaches devices whose app is closed or frozen; the service worker skips it when the app is in front.
+		for (const user of store.data.users) {
+			if (involved(user, meta)) void pushToUser(user.id, notice);
+		}
 	}
 
 	/** Turn running → idle transitions into "finished" or "error"; stopped processes and aborts stay quiet. */
@@ -155,6 +160,25 @@ function send(res: Response, event: unknown) {
 	res.write(`data: ${JSON.stringify(event)}\n\n`);
 }
 
+/**
+ * Start a server-sent event stream. Browsers retry after 1 s; the ping is a real (named) event so
+ * the client can notice a connection that silently died, e.g. after a phone switched networks.
+ */
+function openStream(req: Request, res: Response, onClose: () => void) {
+	res.writeHead(200, {
+		"Content-Type": "text/event-stream",
+		"Cache-Control": "no-cache, no-transform",
+		Connection: "keep-alive",
+		"X-Accel-Buffering": "no",
+	});
+	res.write("retry: 1000\n\n");
+	const ping = setInterval(() => res.write("event: ping\ndata: {}\n\n"), 15_000);
+	req.on("close", () => {
+		clearInterval(ping);
+		onClose();
+	});
+}
+
 export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const router = express.Router();
 	const hub = new Hub();
@@ -212,19 +236,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 
 	/** Server-sent run outcomes for every session the caller is involved in. */
 	router.get("/notifications", (req, res) => {
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache, no-transform",
-			Connection: "keep-alive",
-			"X-Accel-Buffering": "no",
-		});
-		res.write("retry: 5000\n\n");
-		const unwatch = hub.watch(req.user!, res);
-		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
-		req.on("close", () => {
-			clearInterval(ping);
-			unwatch();
-		});
+		openStream(req, res, hub.watch(req.user!, res));
 	});
 
 	router.get("/harnesses", async (_req, res) => {
@@ -320,13 +332,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** Server-sent events: full state first, then incremental updates. Viewing never starts a process. */
 	router.get("/sessions/:key/events", async (req, res) => {
 		const { key, meta, adapter } = load(req);
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache, no-transform",
-			Connection: "keep-alive",
-			"X-Accel-Buffering": "no",
-		});
-		res.write("retry: 3000\n\n");
+		openStream(req, res, () => hub.remove(key, res));
 		hub.add(key, res);
 		const live = adapter.live(meta.id);
 		if (live && hub.isAttached(key, live)) send(res, { type: "state", state: hub.state(key, live.state) });
@@ -346,11 +352,6 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			};
 			send(res, { type: "state", state: hub.state(key, state) });
 		}
-		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
-		req.on("close", () => {
-			clearInterval(ping);
-			hub.remove(key, res);
-		});
 	});
 
 	const writable = (req: Request) => {

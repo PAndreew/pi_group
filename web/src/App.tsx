@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
-import { useRunNotifications } from "@/hooks/use-run-notifications"
+import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
 import { api, type SessionSummary } from "@/lib/api"
 
 type Theme = "light" | "dark" | "system"
@@ -235,7 +235,7 @@ function Workspace() {
               }}
             >
               {notifications.enabled ? <Bell /> : <BellOff />}
-              {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : "Notifications need HTTPS"}
+              {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : notificationsUnavailable()}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
               <Bot /> Session defaults

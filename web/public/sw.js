@@ -1,7 +1,40 @@
-// Minimal service worker: shows run notifications (Android Chrome only allows them from a
-// service worker) and brings the app to the session when one is clicked. No caching.
+// Service worker: run notifications (Web Push, and Android Chrome only allows notifications from a
+// service worker), and an app-shell cache so a reopened app paints without waiting for the server.
+// API calls are never cached.
+const SHELL = "pi-group-shell-v1"
+const ASSETS = "pi-group-assets-v1"
+
 self.addEventListener("install", () => self.skipWaiting())
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()))
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    (async () => {
+      for (const name of await caches.keys()) if (name !== SHELL && name !== ASSETS) await caches.delete(name)
+      await self.clients.claim()
+    })()
+  )
+)
+
+const sessionUrl = (n) => `/#${new URLSearchParams({ ...(n.path ? { f: n.path } : {}), s: n.key })}`
+
+self.addEventListener("push", (event) => {
+  const notice = event.data?.json()
+  if (notice?.type !== "run") return
+  event.waitUntil(
+    (async () => {
+      // With the app in front, the page shows a toast instead.
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+      if (windows.some((c) => c.focused && c.visibilityState === "visible")) return
+      const error = notice.kind === "error"
+      await self.registration.showNotification(`${error ? "Agent error" : "Agent finished"} · ${notice.name}`, {
+        body: notice.text || (error ? "The run failed." : "The run is done."),
+        tag: `${notice.key}:${notice.kind}`,
+        icon: "/icon-192.png",
+        badge: "/badge-96.png",
+        data: { url: sessionUrl(notice) },
+      })
+    })()
+  )
+})
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
@@ -19,3 +52,57 @@ self.addEventListener("notificationclick", (event) => {
     })()
   )
 })
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event
+  const url = new URL(request.url)
+  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return
+  if (request.mode === "navigate") event.respondWith(page(event))
+  else if (url.pathname.startsWith("/assets/")) event.respondWith(asset(request))
+  else if (/\.(png|svg|ico|webmanifest)$/.test(url.pathname)) event.respondWith(staleWhileRevalidate(request))
+})
+
+/**
+ * The HTML: network first so a deployment shows up at once, but fall back to the cached copy when
+ * the server is slow or unreachable. A changed page means a new build, so old hashed assets go.
+ */
+async function page(event) {
+  const cache = await caches.open(SHELL)
+  const network = fetch(event.request).then(async (response) => {
+    if (!response.ok) return response
+    const previous = await cache.match("/")
+    const fresh = await response.clone().text()
+    if (previous && (await previous.text()) !== fresh) await caches.delete(ASSETS)
+    await cache.put("/", response.clone())
+    return response
+  })
+  event.waitUntil(network.catch(() => {}))
+  const timeout = new Promise((resolve) => setTimeout(resolve, 2500))
+  const first = await Promise.race([network.catch(() => undefined), timeout])
+  if (first?.ok) return first
+  return (await cache.match("/")) || first || network
+}
+
+/** Vite's hashed bundles never change under the same name. */
+async function asset(request) {
+  const cache = await caches.open(ASSETS)
+  const cached = await cache.match(request)
+  if (cached) return cached
+  const response = await fetch(request)
+  if (response.ok) await cache.put(request, response.clone())
+  return response
+}
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(SHELL)
+  const cached = await cache.match(request)
+  const network = fetch(request).then((response) => {
+    if (response.ok) void cache.put(request, response.clone())
+    return response
+  })
+  if (cached) {
+    network.catch(() => {})
+    return cached
+  }
+  return network
+}

@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { api, type User, type SessionDefaults } from "@/lib/api"
+import { unsubscribePush } from "@/hooks/use-run-notifications"
+import { ApiError, api, type User, type SessionDefaults } from "@/lib/api"
+import { clearStates } from "@/lib/state-cache"
 
 interface AuthValue {
   user: User | null
@@ -11,15 +13,34 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null)
 
+/** The signed-in user from last time, so a reopened app renders at once while /me revalidates. */
+const USER_KEY = "pi-group:user"
+function rememberedUser(): User | null {
+  try {
+    return JSON.parse(localStorage.getItem(USER_KEY) ?? "null")
+  } catch {
+    return null
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(rememberedUser)
+  const [loading, setLoading] = useState(() => !rememberedUser())
+
+  useEffect(() => {
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
+    else localStorage.removeItem(USER_KEY)
+  }, [user])
 
   useEffect(() => {
     api
       .me()
       .then(({ user }) => setUser(user))
-      .catch(() => setUser(null))
+      .catch((error) => {
+        // Offline or the server is restarting: keep the remembered user; only a 401 signs out.
+        if (error instanceof ApiError && error.status === 401) setUser(null)
+        else if (!rememberedUser()) setUser(null)
+      })
       .finally(() => setLoading(false))
     const onUnauthorized = () => setUser(null)
     window.addEventListener("pi-group:unauthorized", onUnauthorized)
@@ -32,7 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
+    await unsubscribePush()
     await api.logout().catch(() => {})
+    await clearStates()
     setUser(null)
   }, [])
 

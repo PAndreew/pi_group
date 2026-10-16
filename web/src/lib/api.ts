@@ -123,6 +123,9 @@ export const api = {
   me: () => request<{ user: User }>("GET", "/api/auth/me"),
   login: (username: string, password: string) => request<{ user: User }>("POST", "/api/auth/login", { username, password }),
   logout: () => request("POST", "/api/auth/logout"),
+  pushKey: () => request<{ publicKey: string }>("GET", "/api/push/key"),
+  pushSubscribe: (subscription: PushSubscriptionJSON) => request("POST", "/api/push/subscribe", subscription),
+  pushUnsubscribe: (endpoint: string) => request("POST", "/api/push/unsubscribe", { endpoint }),
   changePassword: (current: string, next: string) => request("POST", "/api/auth/password", { current, next }),
 
   directory: () => request<{ users: { id: string; username: string }[] }>("GET", "/api/users/directory"),

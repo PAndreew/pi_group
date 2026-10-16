@@ -8,6 +8,7 @@ import { fileRoutes, HttpError } from "./files.js";
 import { PiDurableAdapter } from "./harness/pi-durable.js";
 import { PiRpcAdapter } from "./harness/pi-rpc.js";
 import type { HarnessAdapter } from "./harness/types.js";
+import { pushRoutes } from "./push.js";
 import { sessionRoutes } from "./sessions.js";
 import { loadStore, saveNow } from "./store.js";
 
@@ -30,6 +31,7 @@ app.use(authenticate);
 const api = express.Router();
 api.use(authRoutes());
 api.use(fileRoutes());
+api.use(pushRoutes());
 api.use(sessionRoutes(adapters));
 api.use((_req, res) => void res.status(404).json({ error: "Not found" }));
 app.use("/api", api);

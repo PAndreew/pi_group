@@ -49,16 +49,25 @@ export interface SessionMeta {
 	deleted?: boolean;
 }
 
+/** A browser push subscription (one per device), delivering run notifications while the app is closed. */
+export interface PushSubscriptionRecord {
+	userId: string;
+	endpoint: string;
+	keys: { p256dh: string; auth: string };
+	createdAt: string;
+}
+
 interface Data {
 	users: User[];
 	logins: LoginSession[];
 	sessions: Record<string, SessionMeta>;
 	/** Folders that have a pi-durable storage, so they are reopened (and resumed) at startup. */
 	durableFolders: string[];
+	pushSubscriptions: PushSubscriptionRecord[];
 }
 
 const file = path.join(config.dataDir, "db.json");
-let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [] };
+let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {

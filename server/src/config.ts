@@ -49,5 +49,9 @@ export const config = {
 	cookieSecure: bool("COOKIE_SECURE", false),
 	loginTtlDays: num("LOGIN_TTL_DAYS", 30),
 	enableDurable: bool("ENABLE_DURABLE", true),
+	/** Contact for push services (mailto: or https:). Keys are generated into DATA_DIR/vapid.json unless set. */
+	vapidSubject: env("VAPID_SUBJECT", "https://github.com/PAndreew/pi_group"),
+	vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+	vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
 	webDist: path.resolve(env("WEB_DIST", path.join(import.meta.dirname, "..", "..", "web", "dist"))),
 };
