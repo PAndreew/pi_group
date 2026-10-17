@@ -1,4 +1,4 @@
-# π group
+# beezy
 
 A small, mobile-first web UI that lets a **group of people share coding agents running on one machine** (e.g. a Raspberry Pi). It talks to agent *harnesses* through adapters; the first targets are the [pi coding agent](https://github.com/earendil-works/pi) and **pi-durable**.
 

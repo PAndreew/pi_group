@@ -26,10 +26,11 @@ export function Home() {
   const folder = parseMessage(text, []).folder ?? chatFolder
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col">
+    <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col">
       <ChatList className="min-h-0 flex-1" />
       <div className="grid gap-1 border-t p-2 sm:p-3">
         <MentionComposer
+          folder={folder}
           value={text}
           onChange={setText}
           busy={busy}

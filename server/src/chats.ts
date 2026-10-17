@@ -229,8 +229,27 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		return chat;
 	};
 
+	// One active chat turn at a time. Resolve only when the harness reports the run outcome,
+	// not when prompt() returns (that only acknowledges receipt).
+	const turns = new Map<string, Promise<void>>();
+	const completed = new Map<string, () => void>();
+	const askPi = (chat: Chat, user: User, upTo: number) => {
+		const previous = turns.get(chat.id) ?? Promise.resolve();
+		const turn = previous.catch(() => {}).then(async () => {
+			const done = new Promise<void>((resolve) => completed.set(chat.id, resolve));
+			try {
+				if (await performAskPi(getChat(chat.id)!, user, upTo)) await done;
+			} finally {
+				completed.delete(chat.id);
+			}
+		});
+		turns.set(chat.id, turn);
+		void turn.finally(() => { if (turns.get(chat.id) === turn) turns.delete(chat.id); }).catch(() => {});
+		return turn;
+	};
+
 	/** Hand the human messages since pi's last turn to its session (created on first mention), and post a "working" reply. */
-	const askPi = async (chat: Chat, user: User, upTo: number) => {
+	const performAskPi = async (chat: Chat, user: User, upTo: number) => {
 		// pi knows its own replies; it only needs what people said since.
 		const fresh = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id > ? AND id <= ? ORDER BY id").all(chat.id, chat.piCursor, upTo) as Row[])
 			.map(toMessage)
@@ -255,11 +274,13 @@ export function mountChats(router: Router, deps: ChatDeps) {
 				intro = `You are pi, taking part in a group chat with ${people.join(", ")}. Each message below is prefixed with its author. Reply to what is asked of you; your reply is posted back to the chat.\n\n`;
 			}
 			await deps.promptSession(meta, user, { text: intro + transcript(fresh) });
+			return true;
 		} catch (error) {
 			pending.status = "error";
 			pending.message = { ...pending.message, content: [{ type: "text", text: `Could not reach pi: ${(error as Error).message}` }] };
 			update(pending);
 			fanOut(chat, "chat_update", pending);
+			return false;
 		}
 	};
 
@@ -275,6 +296,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		reply.message = outcome.message ? { ...outcome.message, author: undefined } : { ...reply.message, content: [{ type: "text", text }] };
 		update(reply);
 		fanOut(chat, "chat_update", reply, outcome.kind === "aborted" ? undefined : { author: "pi", text: outcome.kind === "error" ? `Error: ${text}` : text });
+		completed.get(chat.id)?.();
 	});
 	// Chats post pi's replies themselves; memory runs are background work.
 	deps.setQuiet((key) => Boolean(chatOfSession(key)) || Boolean(store.session(key)?.memory));
@@ -382,6 +404,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 
 	/** Fuzzy folder search for #mentions. */
 	router.get("/folders/search", (req, res) => {
+		ensureChatFolder();
 		const q = String(req.query.q ?? "").toLowerCase();
 		const folders = allFolders();
 		const scored = q ? folders.map((f) => ({ f, score: fuzzyScore(f.toLowerCase(), q) })).filter((x) => x.score > 0) : folders.slice(0, 200).map((f) => ({ f, score: 1 }));

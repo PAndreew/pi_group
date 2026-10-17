@@ -1,8 +1,8 @@
 // Service worker: run notifications (Web Push, and Android Chrome only allows notifications from a
 // service worker), and an app-shell cache so a reopened app paints without waiting for the server.
 // API calls are never cached.
-const SHELL = "pi-group-shell-v1"
-const ASSETS = "pi-group-assets-v1"
+const SHELL = "beezy-shell-v2"
+const ASSETS = "beezy-assets-v2"
 
 self.addEventListener("install", () => self.skipWaiting())
 self.addEventListener("activate", (event) =>

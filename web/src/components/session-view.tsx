@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerTools } from "@/components/composer-tools"
+import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
@@ -401,6 +402,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     e.target.value = ""
                   }}
                 />
+                <div className="relative min-w-0 flex-1">
+                <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
                 <Textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -409,6 +412,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   className="max-h-48 min-h-10 resize-none py-2"
                   rows={1}
                 />
+                </div>
                 {running && (
                   <Button variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
                     <CircleStop />

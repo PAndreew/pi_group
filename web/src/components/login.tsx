@@ -31,7 +31,7 @@ export function Login() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-xl">
-            <span className="font-mono">π</span> group
+            <img src="/beezy-logo.svg" alt="" className="size-8" /> beezy
           </CardTitle>
           <CardDescription>Sign in to your shared agent workspace.</CardDescription>
         </CardHeader>

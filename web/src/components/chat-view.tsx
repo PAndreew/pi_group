@@ -194,6 +194,8 @@ export function ChatView({ chatId }: { chatId: string }) {
           }}
         />
         <MentionComposer
+          folder={chat?.folder ?? ""}
+          sessionKey={chat?.sessionKey}
           value={text}
           onChange={setText}
           busy={sending || uploading}

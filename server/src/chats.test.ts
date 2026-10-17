@@ -28,6 +28,7 @@ function fakeHarness() {
 			lastActivity: Date.now(),
 			subscribe: (l: (event: SessionEvent) => void) => ((listener = l), l({ type: "state", state }), () => {}),
 			prompt: async (input: PromptInput) => {
+				assert.equal(state.running, false, "chat prompts must wait for the active turn");
 				prompts.push({ id, cwd, text: input.text });
 				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }] });
 				state.running = true;
@@ -36,7 +37,7 @@ function fakeHarness() {
 					state.messages.push({ role: "assistant", content: [{ type: "text", text: `reply to ${id}` }], stopReason: "stop" });
 					state.running = false;
 					status();
-				}, 30);
+				}, 100);
 			},
 			close: async () => {},
 		};
@@ -99,6 +100,12 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		return { status: res.status, body: await res.json() };
 	};
 	try {
+		// Home's explorer is offered the default folder before the first chat exists.
+		assert.equal(existsSync(config.chatFolder), false);
+		const homeFolders = await call("anna", "GET", "/folders/search?q=");
+		assert.equal(homeFolders.status, 200);
+		assert.ok(existsSync(path.join(dir, homeFolders.body.chatFolder)), "the explorer's default folder must exist");
+
 		// A human chat: no pi yet.
 		const created = await call("anna", "POST", "/chats", { text: "hello bob, the deploy failed", userIds: [bob.id] });
 		assert.equal(created.status, 200);
@@ -132,6 +139,18 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		await until(() => prompts.length === 2, "second prompt");
 		assert.equal(prompts[1].text, "anna: thanks! @pi also check the cron job");
 		assert.ok(!(await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.kind === "session" && c.id === meta.key), "a chat's session is not listed twice");
+
+		// Messages arriving during a turn wait; ordinary messages remain chat context, not new runs.
+		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "ordinary note while working" });
+		await call("bob", "POST", `/chats/${chatId}/messages`, { text: "@pi queued request one" });
+		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "@pi queued request two" });
+		await until(async () => !(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "queued requests to finish");
+		const queued = (await call("anna", "GET", `/chats/${chatId}`)).body.messages;
+		assert.equal(queued.filter((m: any) => m.status === "error").length, 0);
+		assert.equal(prompts.length, 4);
+		assert.match(prompts[2].text, /ordinary note while working/);
+		assert.match(prompts[2].text, /queued request one/);
+		assert.equal(prompts[3].text, "anna: @pi queued request two");
 
 		// Only @pi: a plain session, in the chosen folder.
 		const solo = await call("anna", "POST", "/chats", { text: "summarise the API", pi: true, folder: "projects/api-server" });
