@@ -23,7 +23,7 @@ function PiMessage({ m, onWatch }: { m: ChatMessage; onWatch?: () => void }) {
       <PiAvatar />
       <div className="grid min-w-0 max-w-[85%] gap-1 rounded-2xl rounded-tl-sm border bg-card px-3 py-2">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">pi</span>
+          <span className="font-medium text-foreground">Beezy</span>
           <span>{time(m.createdAt)}</span>
           {onWatch && (
             <button type="button" className="ml-auto flex items-center gap-1 hover:text-foreground" onClick={onWatch}>
@@ -33,7 +33,7 @@ function PiMessage({ m, onWatch }: { m: ChatMessage; onWatch?: () => void }) {
         </div>
         {m.status === "working" ? (
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> pi is working…
+            <Loader2 className="size-3.5 animate-spin" /> Beezy is working…
           </span>
         ) : m.status === "error" ? (
           <span className="flex items-start gap-1.5 text-sm text-destructive">
@@ -195,7 +195,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           <div className="truncate text-sm font-medium">{chat?.title ?? "…"}</div>
           {chat && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="truncate">{chat.members.map((m) => (m.id === user?.id ? "you" : m.username)).join(", ")}{chat.pi ? ", pi" : ""}</span>
+              <span className="truncate">{chat.members.map((m) => (m.id === user?.id ? "you" : m.username)).join(", ")}{chat.pi ? ", Beezy" : ""}</span>
               <span className="flex shrink-0 items-center gap-0.5">
                 · <Folder className="size-3" />/{chat.folder}
               </span>

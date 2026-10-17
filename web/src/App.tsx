@@ -11,6 +11,8 @@ import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
+import { AuthorAvatar } from "@/components/author-avatar"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
 import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
@@ -123,6 +125,7 @@ function Workspace() {
   const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   const nav: Nav = useMemo(
     () => ({
@@ -176,6 +179,7 @@ function Workspace() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="max-w-32">
+                {user && <AuthorAvatar id={user.id} name={user.username} />}
                 <span className="truncate">{user?.username}</span>
               </Button>
             </DropdownMenuTrigger>
@@ -198,6 +202,9 @@ function Workspace() {
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
                 <Bot /> Session defaults
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
+                <Users /> Profile picture
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
                 <KeyRound /> Change password
@@ -254,6 +261,7 @@ function Workspace() {
         />
         <NewSessionDialog folder={route.folder} open={defaultsOpen} onOpenChange={setDefaultsOpen} onCreated={() => {}} defaultsOnly />
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
+        <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
       </div>
     </NavContext.Provider>

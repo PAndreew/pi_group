@@ -187,7 +187,7 @@ export function MentionComposer({
               >
                 {s.kind === "pi" && (
                   <>
-                    <PiAvatar small /> <span className="font-medium">pi</span> <span className="text-xs text-muted-foreground">coding agent</span>
+                    <PiAvatar small /> <span className="font-medium">Beezy</span> <span className="text-xs text-muted-foreground">coding agent</span>
                   </>
                 )}
                 {s.kind === "person" && (
@@ -256,17 +256,10 @@ export function MentionComposer({
   )
 }
 
-/** pi's avatar, beside people's. */
+/** Beezy's avatar, beside people's. */
 export function PiAvatar({ small }: { small?: boolean }) {
   return (
-    <span
-      role="img"
-      aria-label="pi"
-      title="pi"
-      className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-neutral-900 font-mono font-bold text-white dark:bg-white dark:text-neutral-900", small ? "size-6 text-xs" : "size-8 text-sm")}
-    >
-      π
-    </span>
+    <img src="/beezy-logo.svg" alt="Beezy" title="Beezy" className={cn("shrink-0 rounded-full", small ? "size-6" : "size-8")} />
   )
 }
 

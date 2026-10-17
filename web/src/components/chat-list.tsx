@@ -73,12 +73,12 @@ export function ChatList({ selected, className }: { selected?: string; className
               <span className="flex min-w-0 items-center gap-1.5">
                 {item.kind === "session" && item.memory && <Brain className="size-3.5 shrink-0 text-muted-foreground" />}
                 <span className={cn("min-w-0 flex-1 truncate text-sm", item.kind === "chat" && item.unread > 0 && "font-semibold")}>{item.title}</span>
-                {item.running && <span className="size-2 shrink-0 animate-pulse rounded-full bg-green-500" title="pi is working" />}
+                {item.running && <span className="size-2 shrink-0 animate-pulse rounded-full bg-green-500" title="Beezy is working" />}
                 <span className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(item.updatedAt)}</span>
               </span>
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="min-w-0 flex-1 truncate">
-                  {item.kind === "chat" ? (item.last ? `${item.last.author === user?.username ? "You" : item.last.author}: ${item.last.text || "…"}` : "") : item.running ? "pi is working…" : `pi · ${item.harness}`}
+                  {item.kind === "chat" ? (item.last ? `${item.last.author === user?.username ? "You" : item.last.author === "pi" ? "Beezy" : item.last.author}: ${item.last.text || "…"}` : "") : item.running ? "Beezy is working…" : `Beezy · ${item.harness}`}
                 </span>
                 {(item.kind === "session" || item.pi) && item.folder && (
                   <span title={`/${item.folder}`} className="flex min-w-0 max-w-[50%] items-center gap-0.5">

@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
+import { PiAvatar } from "@/components/mention-composer"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
@@ -145,9 +146,9 @@ function AgentBubble({
 }) {
   return (
     <div className="flex items-start gap-2">
-      <AuthorAvatar id="agent" name="π" />
+      <PiAvatar />
       <div className="agent-bubble max-w-[88%] min-w-0 rounded-2xl rounded-bl-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
-        <div className="mb-1 text-xs font-semibold">Agent</div>
+        <div className="mb-1 text-xs font-semibold">Beezy</div>
         <StepStrip steps={run.steps} onOpen={onOpen} onAll={() => onOpen(null)} />
         {run.answer && (
           <div>

@@ -13,6 +13,7 @@ export interface User {
 	username: string;
 	passwordHash: string;
 	sessionDefaults?: SessionDefaults;
+	avatar?: string;
 	role: Role;
 	createdAt: string;
 }

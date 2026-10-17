@@ -137,6 +137,25 @@ export function authRoutes(): Router {
 		res.json({ user: publicUser(req.user) });
 	});
 
+	router.put("/auth/avatar", requireAuth, (req, res) => {
+		const avatar = req.body?.avatar;
+		if (avatar !== null && (typeof avatar !== "string" || avatar.length > 350_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || !Buffer.from(avatar.split(",")[1], "base64").subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))) {
+			return void res.status(400).json({ error: "Upload a PNG image under 250 KB" });
+		}
+		req.user!.avatar = avatar ?? undefined;
+		save();
+		res.json({ ok: true });
+	});
+
+	router.get("/users/:id/avatar", requireAuth, (req, res) => {
+		const avatar = store.data.users.find((u) => u.id === req.params.id)?.avatar;
+		res.setHeader("Cache-Control", "no-store");
+		if (!avatar) return void res.sendStatus(404);
+		res.setHeader("Content-Type", "image/png");
+		res.setHeader("X-Content-Type-Options", "nosniff");
+		res.send(Buffer.from(avatar.split(",")[1], "base64"));
+	});
+
 	router.put("/auth/defaults", requireAuth, (req, res) => {
 		req.user!.sessionDefaults = sessionDefaultsSchema.parse(req.body);
 		save();

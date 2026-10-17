@@ -219,6 +219,7 @@ export const api = {
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User }>("GET", "/api/auth/me"),
   login: (username: string, password: string) => request<{ user: User }>("POST", "/api/auth/login", { username, password }),
+  saveAvatar: (avatar: string | null) => request("PUT", "/api/auth/avatar", { avatar }),
   logout: () => request("POST", "/api/auth/logout"),
   pushKey: () => request<{ publicKey: string }>("GET", "/api/push/key"),
   pushSubscribe: (subscription: PushSubscriptionJSON) => request("POST", "/api/push/subscribe", subscription),
