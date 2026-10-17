@@ -26,7 +26,7 @@ const KEYS: { label: string; data?: string; ctrl?: true }[] = [
 type Status = { state: "connecting" | "open" } | { state: "closed"; reason: string }
 
 /** A shell on the server in the session's folder; closing the dialog ends it. Loaded on demand. */
-export default function TerminalDialog({ sessionKey, title, open, onOpenChange }: { sessionKey: string; title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+export default function TerminalDialog({ sessionKey, path, title, open, onOpenChange }: { sessionKey?: string; path?: string; title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [host, setHost] = useState<HTMLDivElement | null>(null)
   const [status, setStatus] = useState<Status>({ state: "connecting" })
   const [ctrl, setCtrl] = useState(false)
@@ -49,7 +49,7 @@ export default function TerminalDialog({ sessionKey, title, open, onOpenChange }
     term.open(host)
     fit.fit()
     setStatus({ state: "connecting" })
-    const ws = new WebSocket(api.terminalUrl(sessionKey, term.cols, term.rows))
+    const ws = new WebSocket(api.terminalUrl({ key: sessionKey, path }, term.cols, term.rows))
     const send = (data: string) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "input", data }))
     session.current = { term, send }
     ws.onopen = () => {
@@ -82,7 +82,7 @@ export default function TerminalDialog({ sessionKey, title, open, onOpenChange }
       term.dispose()
       session.current = undefined
     }
-  }, [open, host, sessionKey, attempt])
+  }, [open, host, sessionKey, path, attempt])
 
   const press = (key: (typeof KEYS)[number]) => {
     if (key.ctrl) setCtrl((c) => !c)

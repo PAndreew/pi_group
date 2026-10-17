@@ -3,6 +3,7 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { authenticate, authRoutes, ensureAdmin } from "./auth.js";
+import { closeChats } from "./chats.js";
 import { config } from "./config.js";
 import { fileRoutes, HttpError } from "./files.js";
 import { PiDurableAdapter } from "./harness/pi-durable.js";
@@ -81,6 +82,7 @@ async function shutdown() {
 	server.close();
 	await Promise.allSettled(adapters.map((a) => a.shutdown()));
 	saveNow();
+	closeChats();
 	process.exit(0);
 }
 process.on("SIGINT", shutdown);

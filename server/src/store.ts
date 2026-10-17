@@ -47,6 +47,10 @@ export interface SessionMeta {
 	authorship?: Authorship;
 	/** Tombstone for sessions the harness cannot erase (pi-durable); hidden everywhere. */
 	deleted?: boolean;
+	/** When the memory consolidator last folded this session into memory. */
+	consolidatedAt?: string;
+	/** The master session that keeps the consolidated memory. */
+	memory?: boolean;
 }
 
 /** A browser push subscription (one per device), delivering run notifications while the app is closed. */

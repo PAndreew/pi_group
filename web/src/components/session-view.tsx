@@ -1,35 +1,28 @@
 import {
   ArrowUp,
-  Bot,
   CircleStop,
   Eye,
-  Gauge,
-  Hammer,
   Loader2,
   MoreVertical,
-  Paperclip,
   Pencil,
   Pin,
   PinOff,
   Power,
   Share2,
-  SquareTerminal,
   Trash2,
   TriangleAlert,
   X,
 } from "lucide-react"
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { ComposerTools } from "@/components/composer-tools"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
-import { McpDialog, McpIcon } from "@/components/mcp-dialog"
-import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
 import { StepStrip } from "@/components/step-strip"
-import { ToolsDialog } from "@/components/tools-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -41,9 +34,6 @@ import { useSessionStream } from "@/hooks/use-session-stream"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
 import { cn, formatBytes } from "@/lib/utils"
-
-/** xterm.js is large; load it only when someone opens a terminal. */
-const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
 const MAX_INLINE_IMAGE = 5 * 1024 * 1024
 
@@ -162,7 +152,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
-  const [panel, setPanel] = useState<"terminal" | "tools" | "mcp" | "monitor">()
   const [shareOpen, setShareOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [newName, setNewName] = useState("")
@@ -429,14 +418,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
               </div>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files"><Paperclip /></Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => setModelOpen(true)} aria-label="Switch model" title="Provider, model and thinking"><Bot /></Button>
-                {user?.role === "admin" && <Button variant="ghost" size="icon-sm" onClick={() => setPanel("terminal")} aria-label="Terminal" title="Terminal in this folder"><SquareTerminal /></Button>}
-                <Button variant="ghost" size="icon-sm" onClick={() => setPanel("tools")} aria-label="pi tools" title="pi tools, commands and skills"><Hammer /></Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => setPanel("mcp")} aria-label="MCP servers" title="MCP servers"><McpIcon /></Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => setPanel("monitor")} aria-label="Resource monitor" title="Resource monitor"><Gauge /></Button>
-              </div>
+              <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()} onModel={() => setModelOpen(true)} onInsert={setText} />
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
             </>
           ) : (
@@ -454,26 +436,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           <ThinkingPicker value={state?.thinkingLevel} disabled={!canWrite} onChange={(level) => act(() => api.setThinking(sessionKey, level))} />
         </DialogContent>
       </Dialog>
-      <ToolsDialog
-        sessionKey={sessionKey}
-        open={panel === "tools"}
-        onOpenChange={(o) => setPanel(o ? "tools" : undefined)}
-        onInsert={(command) => {
-          setText(command)
-          setPanel(undefined)
-        }}
-      />
-      <ResourceMonitorDialog
-        open={panel === "monitor"}
-        onOpenChange={(o) => setPanel(o ? "monitor" : undefined)}
-        onOpenSession={(s) => (window.location.hash = `#${new URLSearchParams({ ...(s.path ? { f: s.path } : {}), s: s.key })}`)}
-      />
-      <McpDialog sessionKey={sessionKey} open={panel === "mcp"} onOpenChange={(o) => setPanel(o ? "mcp" : undefined)} />
-      {panel === "terminal" && (
-        <Suspense>
-          <TerminalDialog sessionKey={sessionKey} title={summary ? `/${summary.path}` : ""} open onOpenChange={(o) => !o && setPanel(undefined)} />
-        </Suspense>
-      )}
       <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       <ExtensionDialogView dialog={canWrite ? state?.dialogs[0] : undefined} onAnswer={(answer) => state?.dialogs[0] && act(() => api.answerDialog(sessionKey, { id: state.dialogs[0].id, ...answer }))} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}

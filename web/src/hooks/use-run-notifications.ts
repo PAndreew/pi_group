@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
-import { liveStream } from "@/lib/live-stream"
+import { messageText } from "@/lib/steps"
+import { subscribeUserEvents } from "@/lib/user-stream"
 
 interface RunNotice {
   type: "run"
@@ -76,24 +77,53 @@ async function showSystemNotification(n: RunNotice) {
   }
 }
 
+/** Same tag as the service worker's push for this chat message, so the two collapse into one. */
+async function showChatNotification(chatId: string, title: string, body: string) {
+  // renotify (alert again for a newer message in the same chat) is missing from the DOM typings.
+  const options: NotificationOptions & { renotify?: boolean } = { body, tag: `chat:${chatId}`, renotify: true, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: `/#c=${encodeURIComponent(chatId)}` } }
+  const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined)
+  if (registration) return registration.showNotification(title, options)
+  const notification = new Notification(title, options)
+  notification.onclick = () => {
+    window.focus()
+    window.location.hash = `c=${encodeURIComponent(chatId)}`
+    notification.close()
+  }
+}
+
 /**
- * Finished/failed runs in sessions the user is involved in. While the app is open the server streams
+ * Finished/failed runs in sessions the user is involved in, and chat messages. While the app is open the server streams
  * them: a toast when the app is in front (unless that session is on screen), a system notification
  * when it is in the background. Web Push covers the app being closed or frozen by the phone.
  */
-export function useRunNotifications(currentSession: string | undefined) {
+export function useRunNotifications(currentSession: string | undefined, currentChat?: string) {
   const supported = notificationsSupported()
   const [enabled, setEnabled] = useState(() => supported && localStorage.getItem(STORAGE_KEY) === "1" && Notification.permission === "granted")
   const current = useRef(currentSession)
   current.current = currentSession
+  const chat = useRef(currentChat)
+  chat.current = currentChat
+
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled
 
   useEffect(
     () =>
-      liveStream("/api/notifications", {
-        onMessage: (data) => {
-          const notice = JSON.parse(data) as RunNotice
+      subscribeUserEvents((event) => {
+          if (event.type === "chat_message" || event.type === "chat_update") {
+            const m = event.message as { id: number; message: { role: string; content: unknown; author?: { id: string; username: string } }; status?: string }
+            // Only finished pi replies and other people's messages are news.
+            const self = (JSON.parse(localStorage.getItem("pi-group:user") ?? "null") as { id?: string } | null)?.id
+            if (m.message.author?.id === self || m.status === "working" || (event.type === "chat_message" && m.message.role === "assistant")) return
+            const inFront = document.visibilityState === "visible" && document.hasFocus()
+            if (inFront && chat.current === event.chatId) return
+            const who = m.message.role === "assistant" ? "pi" : (m.message.author?.username ?? "someone")
+            const text = m.status === "error" ? "The run failed." : m.status === "aborted" ? "Stopped." : messageText(m.message.content)
+            if (inFront) toast(`${who}: ${text.slice(0, 120)}`, { action: { label: "Open", onClick: () => (window.location.hash = `c=${encodeURIComponent(event.chatId)}`) } })
+            else if (enabledRef.current && Notification.permission === "granted") void showChatNotification(event.chatId, who, text.slice(0, 300))
+            return
+          }
+          const notice = event as unknown as RunNotice
           if (notice.type !== "run") return
           const inFront = document.visibilityState === "visible" && document.hasFocus()
           if (inFront) {
@@ -104,7 +134,6 @@ export function useRunNotifications(currentSession: string | undefined) {
             return
           }
           if (enabledRef.current && Notification.permission === "granted") void showSystemNotification(notice)
-        },
       }),
     [],
   )

@@ -1,20 +1,22 @@
-import { Activity, Bell, BellOff, Bot, KeyRound, Loader2, LogOut, Menu, Monitor, Moon, Sun, Users } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { Activity, ArrowLeft, Bell, BellOff, Bot, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Sun, Users } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Toaster, toast } from "sonner"
+import { ChatList } from "@/components/chat-list"
+import { ChatView } from "@/components/chat-view"
 import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
 import { SessionView } from "@/components/session-view"
-import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
 import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
 import { api, type SessionSummary } from "@/lib/api"
+import { type Nav, NavContext } from "@/lib/nav"
+import { cn } from "@/lib/utils"
 
 type Theme = "light" | "dark" | "system"
 
@@ -33,18 +35,20 @@ function useTheme() {
 
 interface Route {
   folder: string
+  chat?: string
   session?: string
   file?: string
 }
 
 function readRoute(): Route {
   const params = new URLSearchParams(window.location.hash.slice(1))
-  return { folder: params.get("f") ?? "", session: params.get("s") ?? undefined, file: params.get("file") ?? undefined }
+  return { folder: params.get("f") ?? "", chat: params.get("c") ?? undefined, session: params.get("s") ?? undefined, file: params.get("file") ?? undefined }
 }
 
 function writeRoute(route: Route) {
   const params = new URLSearchParams()
   if (route.folder) params.set("f", route.folder)
+  if (route.chat) params.set("c", route.chat)
   if (route.session) params.set("s", route.session)
   if (route.file) params.set("file", route.file)
   const hash = `#${params.toString()}`
@@ -113,198 +117,146 @@ function Workspace() {
   const { user, logout } = useAuth()
   const [theme, setTheme] = useTheme()
   const [route, setRoute] = useRoute()
-  const notifications = useRunNotifications(route.session)
-  const [rootName, setRootName] = useState("root")
-  const [sheet, setSheet] = useState(false)
-  const [newOpen, setNewOpen] = useState(false)
+  const notifications = useRunNotifications(route.session, route.chat)
+  const [newFolder, setNewFolder] = useState<string>()
   const [defaultsOpen, setDefaultsOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
-  const [version, setVersion] = useState(0)
-  /** First prompt typed on the home page while the new-session dialog is open. */
-  const pendingPrompt = useRef<string>(undefined)
 
+  const nav: Nav = useMemo(
+    () => ({
+      home: () => setRoute({ chat: undefined, session: undefined, file: undefined }),
+      openChat: (id) => setRoute({ chat: id, session: undefined, file: undefined }),
+      openSession: (key, folder) => setRoute({ session: key, chat: undefined, file: undefined, ...(folder !== undefined ? { folder } : {}) }),
+      openFile: (path) => setRoute({ file: path, chat: undefined, session: undefined }),
+      newSession: (folder) => setNewFolder(folder),
+      openDefaults: () => setDefaultsOpen(true),
+    }),
+    [setRoute],
+  )
+
+  /** Explorer → New session: create with the saved defaults, or ask for them first. */
   useEffect(() => {
-    api.fsInfo().then(({ rootName }) => setRootName(rootName), () => {})
-  }, [])
-
-  const openSession = (key: string) => {
-    setRoute({ session: key, file: undefined })
-    setSheet(false)
-  }
-  const openFile = (path: string) => {
-    setRoute({ file: path, session: undefined })
-    setSheet(false)
-  }
-
-  const goHome = () => {
-    setRoute({ session: undefined, file: undefined })
-    setSheet(false)
-  }
-
-  const onSessionDeleted = (key: string) => {
-    setVersion((v) => v + 1)
-    if (route.session === key) goHome()
-  }
-
-  const sendFirstPrompt = async (key: string, prompt?: string) => {
-    if (prompt) await api.prompt(key, { text: prompt }).catch((error) => toast.error(error.message))
-  }
-
-  /** Create a session in the current folder with the saved defaults, optionally sending a first prompt. */
-  const quickCreate = async (prompt?: string) => {
-    if (creating) return false
-    if (!user?.sessionDefaults) {
-      pendingPrompt.current = prompt
-      setNewOpen(true)
-      return false
-    }
+    if (newFolder === undefined || !user?.sessionDefaults || creating) return
+    const folder = newFolder
+    setNewFolder(undefined)
     setCreating(true)
+    api
+      .createSession({ harness: user.sessionDefaults.harness, path: folder })
+      .then(({ session }) => nav.openSession(session.key, folder), (error) => toast.error(error.message))
+      .finally(() => setCreating(false))
+  }, [newFolder, user, creating, nav])
+
+  const consolidate = async () => {
     try {
-      const { session } = await api.createSession({ harness: user.sessionDefaults.harness, path: route.folder })
-      await sendFirstPrompt(session.key, prompt)
-      setVersion((v) => v + 1)
-      openSession(session.key)
-      return true
+      const r = await api.consolidateMemory()
+      toast.info(r.started ? `Consolidating ${r.pending} conversation${r.pending === 1 ? "" : "s"} into memory…` : (r.reason ?? "Nothing new to consolidate."))
     } catch (error) {
       toast.error((error as Error).message)
-      return false
-    } finally {
-      setCreating(false)
     }
   }
 
-  const sidebar = (
-    <Sidebar
-      rootName={rootName}
-      folder={route.folder}
-      selectedSession={route.session}
-      selectedFile={route.file}
-      onFolder={(folder) => setRoute({ folder })}
-      onSession={openSession}
-      onFile={openFile}
-      onNewSession={() => void quickCreate()}
-      onSessionDeleted={onSessionDeleted}
-      creating={creating}
-      version={version}
-    />
-  )
-
-  const menuButton = (
-    <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setSheet(true)} aria-label="Open navigation">
-      <Menu />
+  const back = (
+    <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={nav.home} aria-label="Back to chats">
+      <ArrowLeft />
     </Button>
   )
+  const inside = Boolean(route.chat || route.session || route.file)
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
-        {!route.session && !route.file && menuButton}
-        <button type="button" onClick={goHome} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
-          <span className="font-mono">π</span> group
-        </button>
-        <div className="flex-1" />
-        <ActiveSessions
-          onOpen={(s) => {
-            setRoute({ folder: s.path, session: s.key, file: undefined })
+    <NavContext.Provider value={nav}>
+      <div className="flex h-dvh flex-col">
+        <header className={cn("h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
+          <button type="button" onClick={nav.home} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
+            <span className="font-mono">π</span> group
+          </button>
+          <div className="flex-1" />
+          <ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="max-w-32">
+                <span className="truncate">{user?.username}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                {user?.username} · {user?.role}
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")}>
+                {theme === "light" ? <Sun /> : theme === "dark" ? <Moon /> : <Monitor />} Theme: {theme}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!notifications.supported}
+                onSelect={(e) => {
+                  e.preventDefault()
+                  void notifications.toggle()
+                }}
+              >
+                {notifications.enabled ? <Bell /> : <BellOff />}
+                {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : notificationsUnavailable()}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
+                <Bot /> Session defaults
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
+                <KeyRound /> Change password
+              </DropdownMenuItem>
+              {user?.role === "admin" && (
+                <>
+                  <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
+                    <Users /> Manage users
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void consolidate()}>
+                    <Brain /> Consolidate memory now
+                  </DropdownMenuItem>
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => void logout()}>
+                <LogOut /> Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </header>
+
+        <div className="flex min-h-0 flex-1">
+          {inside && <ChatList selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex" />}
+          <main className="min-w-0 flex-1">
+            {route.chat ? (
+              <ChatView key={route.chat} chatId={route.chat} />
+            ) : route.session ? (
+              <SessionView key={route.session} sessionKey={route.session} header={back} onDeleted={nav.home} />
+            ) : route.file ? (
+              <div className="flex h-full flex-col">
+                <div className="flex items-center gap-1 border-b px-2 py-1">
+                  {back}
+                  <span className="truncate text-xs text-muted-foreground">/{route.file}</span>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <FileViewer path={route.file} />
+                </div>
+              </div>
+            ) : (
+              <Home />
+            )}
+          </main>
+        </div>
+
+        <NewSessionDialog
+          folder={newFolder ?? route.folder}
+          open={newFolder !== undefined && !user?.sessionDefaults}
+          onOpenChange={(open) => !open && setNewFolder(undefined)}
+          onCreated={(s) => {
+            setNewFolder(undefined)
+            nav.openSession(s.key, s.path)
           }}
         />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="max-w-32">
-              <span className="truncate">{user?.username}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {user?.username} · {user?.role}
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")}>
-              {theme === "light" ? <Sun /> : theme === "dark" ? <Moon /> : <Monitor />} Theme: {theme}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!notifications.supported}
-              onSelect={(e) => {
-                e.preventDefault()
-                void notifications.toggle()
-              }}
-            >
-              {notifications.enabled ? <Bell /> : <BellOff />}
-              {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : notificationsUnavailable()}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
-              <Bot /> Session defaults
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
-              <KeyRound /> Change password
-            </DropdownMenuItem>
-            {user?.role === "admin" && (
-              <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
-                <Users /> Manage users
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void logout()}>
-              <LogOut /> Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-80 shrink-0 border-r md:block">{sidebar}</aside>
-        <main className="min-w-0 flex-1">
-          {route.session ? (
-            <SessionView key={route.session} sessionKey={route.session} header={menuButton} onDeleted={onSessionDeleted} />
-          ) : route.file ? (
-            <div className="flex h-full flex-col">
-              <div className="flex items-center gap-1 border-b px-2 py-1 md:hidden">
-                {menuButton}
-                <span className="truncate text-xs text-muted-foreground">/{route.file}</span>
-              </div>
-              <div className="min-h-0 flex-1">
-                <FileViewer path={route.file} />
-              </div>
-            </div>
-          ) : (
-            <Home
-              folder={route.folder}
-              version={version}
-              onOpen={(s) => setRoute({ folder: s.path, session: s.key, file: undefined })}
-              onStart={quickCreate}
-              onDefaults={() => setDefaultsOpen(true)}
-            />
-          )}
-        </main>
+        <NewSessionDialog folder={route.folder} open={defaultsOpen} onOpenChange={setDefaultsOpen} onCreated={() => {}} defaultsOnly />
+        <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
+        <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
       </div>
-
-      <Sheet open={sheet} onOpenChange={setSheet}>
-        <SheetContent side="left" className="gap-0 p-0 pt-8">
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SheetDescription className="sr-only">Folders, sessions and files</SheetDescription>
-          {sidebar}
-        </SheetContent>
-      </Sheet>
-
-      <NewSessionDialog
-        folder={route.folder}
-        open={newOpen}
-        onOpenChange={(open) => {
-          setNewOpen(open)
-          if (!open) pendingPrompt.current = undefined
-        }}
-        onCreated={(s) => {
-          const prompt = pendingPrompt.current
-          pendingPrompt.current = undefined
-          void sendFirstPrompt(s.key, prompt).then(() => setVersion((v) => v + 1))
-          openSession(s.key)
-        }}
-      />
-      <NewSessionDialog folder={route.folder} open={defaultsOpen} onOpenChange={setDefaultsOpen} onCreated={() => {}} defaultsOnly />
-      <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
-      <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
-    </div>
+    </NavContext.Provider>
   )
 }
 

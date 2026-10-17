@@ -7,6 +7,7 @@ import type { Request, Response } from "express";
 import { WebSocketServer, type WebSocket } from "ws";
 import { authenticate } from "./auth.js";
 import { config } from "./config.js";
+import { resolveSafe } from "./files.js";
 import { store } from "./store.js";
 
 /** A shell on a pseudo-terminal, whichever backend provides it. */
@@ -123,8 +124,8 @@ function sameOrigin(req: IncomingMessage) {
 }
 
 /**
- * Admin shell over a WebSocket at /api/terminal?key=<session>&cols=&rows=, started in the session's
- * folder. Client frames are JSON: {type:"input",data} or {type:"resize",cols,rows}; server frames
+ * Admin shell over a WebSocket at /api/terminal?key=<session>|path=<folder>&cols=&rows=, started in
+ * the session's folder (or the given one). Client frames are JSON: {type:"input",data} or {type:"resize",cols,rows}; server frames
  * are raw terminal output. Closing the socket ends the shell.
  */
 export function attachTerminal(server: Server) {
@@ -143,7 +144,14 @@ export function attachTerminal(server: Server) {
 		if (request.user.role !== "admin") return refuse("403 Forbidden");
 		if (!sameOrigin(req)) return refuse("403 Forbidden");
 		const meta = store.session(url.searchParams.get("key") ?? "");
-		const cwd = meta && existsSync(meta.cwd) ? meta.cwd : existsSync(config.fsRoot) ? config.fsRoot : os.homedir();
+		const folder = (() => {
+			try {
+				return url.searchParams.has("path") ? resolveSafe(url.searchParams.get("path")) : undefined;
+			} catch {
+				return undefined;
+			}
+		})();
+		const cwd = meta && existsSync(meta.cwd) ? meta.cwd : folder && existsSync(folder) ? folder : existsSync(config.fsRoot) ? config.fsRoot : os.homedir();
 		wss.handleUpgrade(req, socket, head, (ws) => void run(ws, cwd, size(url.searchParams.get("cols"), 80, 500), size(url.searchParams.get("rows"), 24, 200)));
 	});
 

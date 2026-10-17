@@ -4,13 +4,15 @@ import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { creationOptions } from "./preferences.js";
+import { mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
+import { mountMemory } from "./memory.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, registerPrompt } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
 import { contentText } from "./harness/live-base.js";
-import type { HarnessAdapter, LiveSession, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
+import type { AgentMessage, HarnessAdapter, LiveSession, PromptInput, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
 import { type Access, type SessionMeta, save, saveNow, store, type User } from "./store.js";
 
 export type EffectiveAccess = "admin" | "owner" | Access;
@@ -31,6 +33,13 @@ export function involved(user: User, meta: SessionMeta) {
 	if (meta.ownerId === user.id || (meta.visibility === "shared" && meta.shares.some((s) => s.userId === user.id))) return true;
 	const ledger = meta.authorship;
 	return Boolean(ledger && (Object.values(ledger.authors).some((a) => a.id === user.id) || ledger.pending.some((p) => p.author.id === user.id)));
+}
+
+export interface RunOutcome {
+	kind: "finished" | "error" | "aborted";
+	text: string;
+	/** The final assistant message, for "finished". */
+	message?: AgentMessage;
 }
 
 export interface RunNotice {
@@ -73,6 +82,25 @@ class Hub {
 	private attached = new Map<string, { live: LiveSession; unsubscribe: () => void }>();
 	private running = new Map<string, boolean>();
 	private watchers = new Set<{ user: User; res: Response }>();
+	private runListeners = new Set<(key: string, outcome: RunOutcome) => void>();
+	/** Sessions whose outcomes are reported elsewhere (a chat posts pi's reply), so no run notification. */
+	quiet: (key: string) => boolean = () => false;
+
+	/** Called when a run ends, including aborted and stopped ones. */
+	onRun(listener: (key: string, outcome: RunOutcome) => void) {
+		this.runListeners.add(listener);
+		return () => this.runListeners.delete(listener);
+	}
+
+	/** Send an event on one user's stream (every open tab or device). */
+	sendTo(userId: string, event: unknown) {
+		for (const { user, res } of this.watchers) if (user.id === userId) send(res, event);
+	}
+
+	private finish(key: string, outcome: RunOutcome) {
+		for (const listener of this.runListeners) listener(key, outcome);
+		if (outcome.kind !== "aborted" && !this.quiet(key)) this.announce(key, outcome.kind, outcome.text);
+	}
 
 	/** Per-user stream of run outcomes (finished / failed) for browser notifications. */
 	watch(user: User, res: Response) {
@@ -96,11 +124,11 @@ class Hub {
 		}
 	}
 
-	/** Turn running → idle transitions into "finished" or "error"; stopped processes and aborts stay quiet. */
+	/** Turn running → idle transitions into outcomes; only "finished" and "error" notify, aborts and stopped processes stay quiet. */
 	private observe(key: string, live: LiveSession, event: SessionEvent) {
 		const running = event.type === "state" ? event.state.running : event.type === "status" ? event.status.running : undefined;
 		if (event.type === "notify" && event.level === "error" && !live.state.running) {
-			this.announce(key, "error", event.text);
+			this.finish(key, { kind: "error", text: event.text });
 			return;
 		}
 		if (running === undefined) return;
@@ -108,8 +136,10 @@ class Hub {
 		this.running.set(key, running);
 		if (!was || running) return;
 		const state = live.state;
-		if (state.notice?.level === "error") this.announce(key, "error", state.notice.text);
-		else if (state.live && lastAssistant(state)?.stopReason !== "aborted") this.announce(key, "finished", contentText(lastAssistant(state)?.content));
+		const last = lastAssistant(state);
+		if (state.notice?.level === "error") this.finish(key, { kind: "error", text: state.notice.text });
+		else if (!state.live || last?.stopReason === "aborted") this.finish(key, { kind: "aborted", text: "" });
+		else this.finish(key, { kind: "finished", text: contentText(last?.content), message: last });
 	}
 
 	count(key: string) {
@@ -186,7 +216,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const router = express.Router();
 	const hub = new Hub();
 	const byId = new Map(adapters.map((a) => [a.id, a]));
-	router.use(["/sessions", "/harnesses", "/notifications"], requireAuth);
+	router.use(["/sessions", "/harnesses", "/notifications", "/tools", "/mcp"], requireAuth);
 
 	const adapterOf = (id: string) => {
 		const adapter = byId.get(id);
@@ -213,6 +243,46 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const live = await adapter.open(meta.id, meta.cwd);
 		hub.attach(meta.key, live);
 		return live;
+	};
+
+	/** Start a session for `user` in `cwd` with their saved defaults unless overridden. */
+	const createSession = async (
+		user: User,
+		input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"] },
+	) => {
+		const adapter = adapterOf(input.harness);
+		const live = await adapter.create(input.cwd, { ...creationOptions(input, user.sessionDefaults), name: input.name });
+		const meta = store.upsertSession({
+			key: `${adapter.id}:${live.id}`,
+			harness: adapter.id,
+			id: live.id,
+			cwd: input.cwd,
+			ownerId: user.id,
+			name: input.name || undefined,
+			visibility: input.visibility ?? "private",
+			shares: (input.shares ?? []).filter((s) => s.userId !== user.id && store.userById(s.userId)),
+		});
+		hub.attach(meta.key, live);
+		return meta;
+	};
+
+	/** Send a prompt as `user`, starting the runtime if needed; while a run is going it is queued as a follow-up unless a mode is given. */
+	const promptSession = async (meta: SessionMeta, user: User, body: PromptInput) => {
+		const live = await ensureLive(meta, adapterOf(meta.harness));
+		const input = { ...body, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
+		const current = store.session(meta.key)!;
+		const ledger = current.authorship ??= { authors: {}, pending: [] };
+		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
+		saveNow();
+		try {
+			await live.prompt(input);
+		} catch (error) {
+			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
+			save();
+			throw error;
+		}
+		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(input.text), updatedAt: new Date().toISOString() });
+		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 
 	const summary = (meta: SessionMeta, user: User, listing?: SessionListing) => {
@@ -330,20 +400,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				shares: shareSchema.default([]),
 			})
 			.parse(req.body);
-		const adapter = adapterOf(body.harness);
-		const cwd = resolveSafe(body.path);
-		const live = await adapter.create(cwd, { ...creationOptions(body, req.user!.sessionDefaults), name: body.name });
-		const meta = store.upsertSession({
-			key: `${adapter.id}:${live.id}`,
-			harness: adapter.id,
-			id: live.id,
-			cwd,
-			ownerId: req.user!.id,
-			name: body.name || undefined,
-			visibility: body.visibility,
-			shares: body.shares.filter((s) => s.userId !== req.user!.id && store.userById(s.userId)),
-		});
-		hub.attach(meta.key, live);
+		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path) });
 		res.json({ session: summary(meta, req.user!) });
 	});
 
@@ -384,6 +441,20 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ ...inventory, resources: adapter.id === "pi" ? piResources(meta.cwd) : [] });
 	});
 
+	/** What pi would have in a folder before any session exists (the home screen's composer). */
+	router.get("/tools", (req, res) => {
+		const cwd = resolveSafe(req.query.path);
+		res.json({
+			tools: ["read", "bash", "edit", "write"].map((name) => ({ name, origin: "built-in" })),
+			toolsNote: "pi's default tools. A running session also lists its extension and MCP tools.",
+			resources: piResources(cwd),
+		});
+	});
+
+	router.get("/mcp", async (req, res) => {
+		res.json(await mcpReport(resolveSafe(req.query.path), req.user!.role === "admin"));
+	});
+
 	/** MCP servers available to a session's agent. */
 	router.get("/sessions/:key/mcp", async (req, res) => {
 		const { meta, adapter } = load(req);
@@ -398,7 +469,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 
 	router.post("/sessions/:key/prompt", async (req, res) => {
-		const { meta, adapter } = writable(req);
+		const { meta } = writable(req);
 		const body = z
 			.object({
 				text: z.string().min(1).max(200_000),
@@ -406,20 +477,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				mode: z.enum(["steer", "followUp"]).optional(),
 			})
 			.parse(req.body);
-		const live = await ensureLive(meta, adapter);
-		const current = store.session(meta.key)!;
-		const ledger = current.authorship ??= { authors: {}, pending: [] };
-		const promptId = registerPrompt(ledger, live.state.messages, body, { id: req.user!.id, username: req.user!.username });
-		saveNow();
-		try {
-			await live.prompt(body);
-		} catch (error) {
-			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
-			save();
-			throw error;
-		}
-		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
-		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${req.user!.username}: ${body.mode ?? "prompt"}`, author: req.user!.username, silent: true });
+		await promptSession(meta, req.user!, body);
 		res.json({ ok: true });
 	});
 
@@ -507,6 +565,26 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const next = store.upsertSession({ ...meta, ownerId: body.userId, shares: meta.shares.filter((s) => s.userId !== body.userId) });
 		res.json({ session: summary(next, req.user!) });
 	});
+
+	const harnessFor = async (user: User) => {
+		const preferred = user.sessionDefaults?.harness;
+		for (const adapter of [...(preferred && byId.has(preferred) ? [byId.get(preferred)!] : []), ...adapters]) {
+			if ((await adapter.available()).ok) return adapter.id;
+		}
+		throw new HttpError(503, "No agent harness is available");
+	};
+	const chatDeps = {
+		createSession,
+		promptSession,
+		harnessFor,
+		sendTo: (userId: string, event: unknown) => hub.sendTo(userId, event),
+		onRun: (listener: Parameters<Hub["onRun"]>[0]) => void hub.onRun(listener),
+		setQuiet: (quiet: (key: string) => boolean) => void (hub.quiet = quiet),
+		sessionSummary: (meta: SessionMeta, user: User) => summary(meta, user),
+		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
+	};
+	mountChats(router, chatDeps);
+	mountMemory(router, chatDeps);
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
 	setInterval(() => {

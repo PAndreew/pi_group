@@ -58,7 +58,7 @@ function ServerRow({ server }: { server: McpServer }) {
 }
 
 /** MCP servers this session's agent can use, with their live connection state when pi can report it. */
-export function McpDialog({ sessionKey, open, onOpenChange }: { sessionKey: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function McpDialog({ sessionKey, path, open, onOpenChange }: { sessionKey?: string; path?: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [data, setData] = useState<{ servers: McpServer[]; live: boolean; note?: string }>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
@@ -66,11 +66,10 @@ export function McpDialog({ sessionKey, open, onOpenChange }: { sessionKey: stri
   const load = useCallback(() => {
     setLoading(true)
     setError(undefined)
-    api
-      .mcp(sessionKey)
+    ;(sessionKey ? api.mcp(sessionKey) : api.mcpAt(path ?? ""))
       .then(setData, (e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [sessionKey])
+  }, [sessionKey, path])
 
   useEffect(() => {
     if (open) load()

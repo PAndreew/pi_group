@@ -4,13 +4,19 @@ A small, mobile-first web UI that lets a **group of people share coding agents r
 
 - Browse the machine's folders and files, upload and download files
 - In-app viewers for Markdown, HTML (sandboxed), PDF (pdf.js, works on phones), source code (Python, JS/TS, shell, …), images, audio/video, CSV, JSON
-- **One file explorer** for everything: open folders, start a session in the current folder with *New session*, and unfold any folder with sessions (count badge, green dot while running) to open, resume or delete them in place, including sessions started with the `pi` CLI
+- **Chats, messenger style.** The home screen lists earlier chats; the message box starts a new one:
+  - mention `@pi` alone for a pi chat (a regular session), one or more `@people` for a chat between people, or both;
+  - add `#folder` (fuzzy search) to choose where pi works, otherwise it uses the shared chat folder (`CHAT_FOLDER`). A chat's folder is fixed;
+  - in a chat with people, `@pi` brings pi in: it gets everything said since its last turn, and its reply is posted back. Chat members can open and steer pi's session;
+  - messages are stored in pi's message format (role, content, timestamp, author) in `DATA_DIR/chats.sqlite`; existing sessions appear as pi chats.
+- **Memory.** Chats untouched for `MEMORY_AFTER_DAYS` (default 7) are consolidated, one at a time, by a "Memory" pi session in the chat folder into `MEMORY.md` (an index) and `memory/<chat>.md`. The folder's `AGENTS.md` tells pi sessions there to consult them. Admins can run it at once from the user menu.
+- **One file explorer** (the folder icon under the message box) for everything: open folders, start a session in the current folder with *New session*, and unfold any folder with sessions (count badge, green dot while running) to open, resume or delete them in place, including sessions started with the `pi` CLI
 - **Notifications** (user menu → Notifications): a system notification when a run finishes or fails in a session you own, are shared on, or prompted, also with the app closed (Web Push); an in-app toast when it is in front. Needs HTTPS (see below).
 - **Installable app (PWA)**: add it to the home screen for a full-screen app; the app shell is cached and the last state of recent sessions is shown at once while the live stream reconnects.
 - A home page (click the logo) with your three most recent sessions above a composer that starts a new session in the current folder
 - **Account-level session defaults**: save a provider/model/thinking combination from user menu → Session defaults (or the new-session dialog). Defaults persist across devices. New session in either Files or Sessions creates immediately in the current folder using those defaults; without defaults it opens configuration first.
 - **Mid-session model switching**: the robot-head button below the chat input opens provider, model and thinking controls; the attachment icon is beside it. Changing a session does not overwrite your saved defaults.
-- **Terminal, tools, MCP and resource monitor** (buttons beside the model selector):
+- **Icons under every message box**, each opening its own modal (attach, model, terminal, tools, MCP, monitor, folders):
   - **Terminal** (admins only): a shell on the server in the session's folder, with an Esc/Tab/Ctrl/arrow key bar for phones. If the server runs in Termux, this is the Termux shell. It uses `node-pty` when it could be built, otherwise `python3`; one of them must be available.
   - **pi tools:** the tools the session's agent declared; its slash commands, skills and prompt templates (while it runs); and the extensions, skills, prompts and packages installed in `~/.pi/agent` and the project's `.pi/`. Tapping a command puts it in the message box.
   - **MCP servers:** the servers from `mcp.json`, with live state and tool names from `pi mcp list`. Secrets are never shown, and launch commands only to admins.
@@ -102,6 +108,8 @@ All settings are environment variables (or `.env`); see [`.env.example`](.env.ex
 | `IDLE_TIMEOUT_MIN` | `30` | Stop idle pi processes |
 | `COOKIE_SECURE` | `false` | Set when served over HTTPS |
 | `ENABLE_DURABLE` | `true` | Offer the pi durable harness |
+| `CHAT_FOLDER` | `FS_ROOT/pi-chat` | Shared folder for chats without a `#folder`; holds the memory files |
+| `MEMORY_AFTER_DAYS` | `7` | Consolidate chats idle this long into memory; `0` turns it off |
 | `VAPID_SUBJECT` | project URL | Contact (`mailto:` or `https:`) sent to push services |
 | `PI_GROUP_DEMO_MODEL` | unset | `1` adds an offline demo model to pi durable, to try the UI without API keys |
 

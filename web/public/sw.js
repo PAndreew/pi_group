@@ -18,6 +18,7 @@ const sessionUrl = (n) => `/#${new URLSearchParams({ ...(n.path ? { f: n.path } 
 
 self.addEventListener("push", (event) => {
   const notice = event.data?.json()
+  if (notice?.type === "chat") return event.waitUntil(chatNotification(notice))
   if (notice?.type !== "run") return
   event.waitUntil(
     (async () => {
@@ -35,6 +36,20 @@ self.addEventListener("push", (event) => {
     })()
   )
 })
+
+/** A chat message: "author · chat" with the text; skipped when the app is in front (it shows a toast). */
+async function chatNotification(notice) {
+  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+  if (windows.some((c) => c.focused && c.visibilityState === "visible")) return
+  await self.registration.showNotification(notice.author === notice.title ? notice.author : `${notice.author} · ${notice.title}`, {
+    body: notice.text,
+    tag: `chat:${notice.chatId}`,
+    renotify: true,
+    icon: "/icon-192.png",
+    badge: "/badge-96.png",
+    data: { url: `/#c=${encodeURIComponent(notice.chatId)}` },
+  })
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()

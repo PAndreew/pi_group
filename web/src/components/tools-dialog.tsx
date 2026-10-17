@@ -45,7 +45,7 @@ function Row({ name, badge, description, title, onClick }: { name: string; badge
 }
 
 /** Tools the session's agent can call, its slash commands and skills, and what pi has installed. */
-export function ToolsDialog({ sessionKey, open, onOpenChange, onInsert }: { sessionKey: string; open: boolean; onOpenChange: (open: boolean) => void; onInsert?: (text: string) => void }) {
+export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: { sessionKey?: string; path?: string; open: boolean; onOpenChange: (open: boolean) => void; onInsert?: (text: string) => void }) {
   const [data, setData] = useState<SessionTools>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
@@ -53,11 +53,10 @@ export function ToolsDialog({ sessionKey, open, onOpenChange, onInsert }: { sess
   const load = useCallback(() => {
     setLoading(true)
     setError(undefined)
-    api
-      .tools(sessionKey)
+    ;(sessionKey ? api.tools(sessionKey) : api.toolsAt(path ?? ""))
       .then(setData, (e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [sessionKey])
+  }, [sessionKey, path])
 
   useEffect(() => {
     if (open) load()
@@ -76,7 +75,7 @@ export function ToolsDialog({ sessionKey, open, onOpenChange, onInsert }: { sess
               {loading ? <Loader2 className="animate-spin" /> : <RotateCw />}
             </Button>
           </DialogTitle>
-          <DialogDescription>What this session's agent can use. Tap a command to put it in the message box.</DialogDescription>
+          <DialogDescription>{sessionKey ? "What this session's agent can use. Tap a command to put it in the message box." : `What pi has in /${path ?? ""}.`}</DialogDescription>
         </DialogHeader>
         <div className="-mx-2 grid min-h-0 gap-4 overflow-y-auto px-2">
           {error && <p className="text-sm text-destructive">{error}</p>}

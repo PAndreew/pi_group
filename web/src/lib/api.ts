@@ -149,6 +149,33 @@ export interface MonitorReport {
   sessions: MonitorSession[]
 }
 
+export type PiStatus = "working" | "done" | "error" | "aborted"
+
+/** A chat message in pi's message shape; pi's own carry a status while it works. */
+export interface ChatMessage {
+  id: number
+  chatId: string
+  message: AgentMessage
+  status?: PiStatus
+  sessionKey?: string
+  createdAt: string
+}
+
+export interface Chat {
+  id: string
+  title: string
+  folder: string
+  sessionKey?: string
+  pi: boolean
+  members: { id: string; username: string }[]
+  updatedAt: string
+}
+
+/** The home screen list: chats with people, and sessions shown as pi-only chats. */
+export type ChatListItem =
+  | { kind: "chat"; id: string; title: string; folder: string; pi: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } }
+  | { kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean }
+
 export class ApiError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
@@ -210,6 +237,16 @@ export const api = {
   sessions: (path: string) => request<{ path: string; sessions: SessionSummary[] }>("GET", `/api/sessions?${q({ path })}`),
   sessionCounts: (path: string) => request<{ counts: Record<string, { total: number; running: number }> }>("GET", `/api/sessions/counts?${q({ path })}`),
   monitor: () => request<MonitorReport>("GET", "/api/monitor"),
+  chats: () => request<{ chats: ChatListItem[] }>("GET", "/api/chats"),
+  /** Admins: fold every conversation not yet in memory into it now. */
+  consolidateMemory: () => request<{ started: boolean; pending?: number; reason?: string }>("POST", "/api/memory/consolidate", { all: true }),
+  chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),
+  startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
+  sendChat: (id: string, text: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages`, { text }),
+  readChat: (id: string, upTo: number) => request("POST", `/api/chats/${enc(id)}/read`, { upTo }),
+  searchFolders: (query: string) => request<{ folders: string[]; chatFolder: string }>("GET", `/api/folders/search?${q({ q: query })}`),
+  toolsAt: (path: string) => request<SessionTools>("GET", `/api/tools?${q({ path })}`),
+  mcpAt: (path: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/mcp?${q({ path })}`),
   activeSessions: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/active"),
   recentSessions: (limit = 3) => request<{ sessions: SessionSummary[] }>("GET", `/api/sessions/recent?${q({ limit: String(limit) })}`),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
@@ -219,8 +256,9 @@ export const api = {
   eventsUrl: (key: string) => `/api/sessions/${enc(key)}/events`,
   tools: (key: string) => request<SessionTools>("GET", `/api/sessions/${enc(key)}/tools`),
   mcp: (key: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/sessions/${enc(key)}/mcp`),
-  terminalUrl: (key: string, cols: number, rows: number) =>
-    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ key, cols: String(cols), rows: String(rows) })}`,
+  /** A session's folder, or a plain folder when there is no session yet. */
+  terminalUrl: (target: { key?: string; path?: string }, cols: number, rows: number) =>
+    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ ...(target.key ? { key: target.key } : { path: target.path ?? "" }), cols: String(cols), rows: String(rows) })}`,
   prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
   abort: (key: string) => request("POST", `/api/sessions/${enc(key)}/abort`),
