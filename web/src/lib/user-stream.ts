@@ -1,8 +1,9 @@
 import { liveStream } from "@/lib/live-stream"
 
 /**
- * The signed-in user's event stream (/api/notifications): run outcomes and chat messages. One
- * connection per tab, shared by every subscriber; it opens with the first and closes with the last.
+ * The signed-in user's event stream (/api/notifications): run outcomes and chat messages, plus a
+ * local "stream_open" on every (re)connect. One connection per tab, shared by every subscriber; it
+ * opens with the first and closes with the last.
  */
 type Listener = (event: { type: string; [key: string]: any }) => void
 
@@ -12,6 +13,10 @@ let close: (() => void) | undefined
 export function subscribeUserEvents(listener: Listener) {
   listeners.add(listener)
   close ??= liveStream("/api/notifications", {
+    // Events sent while the connection was down are lost; this tells views to catch up.
+    onOpen: () => {
+      for (const l of listeners) l({ type: "stream_open" })
+    },
     onMessage: (data) => {
       const event = JSON.parse(data)
       for (const l of listeners) l(event)

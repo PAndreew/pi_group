@@ -35,14 +35,17 @@ export function ChatList({ selected, className }: { selected?: string; className
     void load()
     const poll = setInterval(load, 20_000)
     const unsubscribe = subscribeUserEvents((event) => {
-      if (!["chat_message", "chat_update", "run"].includes(event.type)) return
+      if (!["chat_message", "chat_update", "run", "stream_open"].includes(event.type)) return
       clearTimeout(timer.current)
       timer.current = setTimeout(load, 300)
     })
+    const onVisible = () => document.visibilityState === "visible" && void load()
+    document.addEventListener("visibilitychange", onVisible)
     return () => {
       clearInterval(poll)
       clearTimeout(timer.current)
       unsubscribe()
+      document.removeEventListener("visibilitychange", onVisible)
     }
   }, [selected])
 

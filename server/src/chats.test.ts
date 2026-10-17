@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
@@ -140,6 +140,15 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(prompts[1].text, "anna: thanks! @pi also check the cron job");
 		assert.ok(!(await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.kind === "session" && c.id === meta.key), "a chat's session is not listed twice");
 
+		// Catch-up after a dropped connection: everything after the last message seen, plus the current state of checked ones.
+		const all = (await call("anna", "GET", `/chats/${chatId}`)).body.messages;
+		const caught = await call("anna", "GET", `/chats/${chatId}/messages?after=${all[1].id}&check=${all[0].id}`);
+		assert.deepEqual(
+			caught.body.messages.map((m: any) => m.id),
+			[all[0].id, ...all.slice(2).map((m: any) => m.id)],
+		);
+		assert.equal((await call("carol", "GET", `/chats/${chatId}/messages?after=0`)).status, 404);
+
 		// Messages arriving during a turn wait; ordinary messages remain chat context, not new runs.
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "ordinary note while working" });
 		await call("bob", "POST", `/chats/${chatId}/messages`, { text: "@pi queued request one" });
@@ -162,6 +171,9 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		// Fuzzy #folder search.
 		const found = await call("anna", "GET", "/folders/search?q=apisrv");
 		assert.equal(found.body.folders[0], "projects/api-server");
+		writeFileSync(path.join(dir, "projects", "api-server", "server.ts"), "");
+		const files = await call("anna", "GET", "/folders/search?q=apisrvts&files=1");
+		assert.deepEqual(files.body.entries[0], { path: "projects/api-server/server.ts", type: "file" });
 
 		// Memory: an admin can consolidate everything now; the master session gets one prompt per conversation.
 		await until(async () => !(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "pi to finish");

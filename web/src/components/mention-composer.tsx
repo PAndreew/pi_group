@@ -1,10 +1,10 @@
-import { ArrowUp, Folder, Loader2, X } from "lucide-react"
+import { ArrowUp, File, Folder, Loader2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { cn, relativePath } from "@/lib/utils"
 
 export interface Person {
   id: string
@@ -42,7 +42,12 @@ export function parseMessage(raw: string, everyone: Person[]): ParsedMessage {
   return { raw: raw.trim(), text, pi: names.includes("pi"), people: mentioned, folder: folders.at(-1) }
 }
 
-type Suggestion = { kind: "pi" } | { kind: "person"; person: Person } | { kind: "folder"; path: string } | { kind: "skill"; name: string; description?: string }
+type Suggestion =
+  | { kind: "pi" }
+  | { kind: "person"; person: Person }
+  | { kind: "folder"; path: string }
+  | { kind: "path"; path: string; type: "dir" | "file" }
+  | { kind: "skill"; name: string; description?: string }
 
 /** The token being typed at the caret, if it is a mention. */
 function activeToken(value: string, caret: number) {
@@ -51,8 +56,8 @@ function activeToken(value: string, caret: number) {
 }
 
 /**
- * A message box with @ (pi and people) and # (folders, fuzzy) suggestions. Enter sends,
- * Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
+ * A message box with @ (pi and people), # (fuzzy folders or files) and / (skills) suggestions.
+ * Enter sends, Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
  */
 export function MentionComposer({
   value,
@@ -61,7 +66,7 @@ export function MentionComposer({
   placeholder,
   busy,
   selfId,
-  folders = true,
+  hash = "folder",
   folder = "",
   sessionKey,
 }: {
@@ -71,8 +76,11 @@ export function MentionComposer({
   placeholder: string
   busy?: boolean
   selfId?: string
-  /** Offer #folder suggestions (off once a chat's folder is fixed). */
-  folders?: boolean
+  /**
+   * What # offers: "folder" picks the folder for a new chat (#path token), "paths" mentions files and
+   * folders, inserted as `paths` relative to `folder` so pi can open them.
+   */
+  hash?: "folder" | "paths" | "off"
   folder?: string
   sessionKey?: string
 }) {
@@ -105,13 +113,18 @@ export function MentionComposer({
       }, () => { if (alive) setOptions([]) })
       return () => { alive = false }
     }
-    if (!folders) return setOptions([])
+    if (hash === "off") return setOptions([])
     let alive = true
     const timer = setTimeout(() => {
-      api.searchFolders(token.query.replaceAll(NBSP, " ")).then(
-        (r) => {
+      const query = token.query.replaceAll(NBSP, " ")
+      const search: Promise<Suggestion[]> =
+        hash === "paths"
+          ? api.searchPaths(query).then((r) => r.entries.map((e) => ({ kind: "path" as const, path: e.path, type: e.type })))
+          : api.searchFolders(query).then((r) => r.folders.map((path) => ({ kind: "folder" as const, path })))
+      search.then(
+        (found) => {
           if (!alive) return
-          setOptions(r.folders.map((path) => ({ kind: "folder" as const, path })))
+          setOptions(found)
           setIndex(0)
         },
         () => {},
@@ -121,7 +134,7 @@ export function MentionComposer({
       alive = false
       clearTimeout(timer)
     }
-  }, [token, everyone, folders, selfId, folder, sessionKey])
+  }, [token, everyone, hash, selfId, folder, sessionKey])
 
   const sync = (next: string, caret: number) => {
     onChange(next)
@@ -131,7 +144,16 @@ export function MentionComposer({
   const pick = (s: Suggestion) => {
     if (!token) return
     const caret = input.current?.selectionStart ?? value.length
-    const insert = s.kind === "pi" ? "@pi " : s.kind === "person" ? `@${s.person.username} ` : s.kind === "skill" ? `/skill:${s.name} ` : `#${s.path.replaceAll(" ", NBSP)} `
+    const insert =
+      s.kind === "pi"
+        ? "@pi "
+        : s.kind === "person"
+          ? `@${s.person.username} `
+          : s.kind === "skill"
+            ? `/skill:${s.name} `
+            : s.kind === "path"
+              ? `\`${relativePath(folder, s.path)}${s.type === "dir" ? "/" : ""}\` `
+              : `#${s.path.replaceAll(" ", NBSP)} `
     const next = value.slice(0, token.start) + insert + value.slice(caret)
     const at = token.start + insert.length
     onChange(next)
@@ -155,7 +177,7 @@ export function MentionComposer({
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
-            <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : s.path} role="option" aria-selected={i === index}>
+            <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
               <button
                 type="button"
                 className={cn("flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm", i === index && "bg-accent")}
@@ -182,6 +204,12 @@ export function MentionComposer({
                     <Folder className="size-4 shrink-0 text-sky-600 dark:text-sky-400" /> <span className="truncate">/{s.path}</span>
                   </>
                 )}
+                {s.kind === "path" && (
+                  <>
+                    {s.type === "dir" ? <Folder className="size-4 shrink-0 text-sky-600 dark:text-sky-400" /> : <File className="size-4 shrink-0 text-muted-foreground" />}
+                    <span className="truncate">/{s.path}</span>
+                  </>
+                )}
               </button>
             </li>
           ))}
@@ -192,7 +220,7 @@ export function MentionComposer({
         value={value}
         placeholder={placeholder}
         rows={1}
-        className="max-h-48 min-h-12 resize-none py-3 pr-14"
+        className="max-h-48 min-h-12 resize-none py-[11px] md:py-[13px] pr-14"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
         onSelect={(e) => setToken(activeToken(value, e.currentTarget.selectionStart))}
         onBlur={() => setTimeout(() => setToken(undefined), 100)}
@@ -220,7 +248,8 @@ export function MentionComposer({
           }
         }}
       />
-      <Button className="absolute right-1.5 bottom-1.5" size="icon-sm" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
+      {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
+      <Button className="absolute right-2 bottom-2" size="icon-sm" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
         {busy ? <Loader2 className="animate-spin" /> : <ArrowUp />}
       </Button>
     </div>

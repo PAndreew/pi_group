@@ -402,14 +402,30 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		res.json({ ok: true });
 	});
 
-	/** Fuzzy folder search for #mentions. */
+	/** Messages after `after`, plus the current state of `check` (pi replies the client still shows as working): the catch-up after a dropped connection. */
+	router.get("/chats/:id/messages", (req, res) => {
+		const chat = membership(String(req.params.id), req.user!);
+		const after = z.coerce.number().int().min(0).catch(0).parse(req.query.after);
+		const check = String(req.query.check ?? "")
+			.split(",")
+			.map(Number)
+			.filter((n) => Number.isInteger(n) && n > 0)
+			.slice(0, 100);
+		const fresh = database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id > ? ORDER BY id LIMIT 500").all(chat.id, after) as Row[];
+		const updated = check.length ? (database().prepare(`SELECT * FROM messages WHERE chat_id = ? AND id IN (${check.map(() => "?").join(",")})`).all(chat.id, ...check) as Row[]) : [];
+		res.json({ messages: [...updated, ...fresh].map(toMessage) });
+	});
+
+	/** Fuzzy search for #mentions: folders, or with files=1 files and folders. */
 	router.get("/folders/search", (req, res) => {
 		ensureChatFolder();
 		const q = String(req.query.q ?? "").toLowerCase();
-		const folders = allFolders();
-		const scored = q ? folders.map((f) => ({ f, score: fuzzyScore(f.toLowerCase(), q) })).filter((x) => x.score > 0) : folders.slice(0, 200).map((f) => ({ f, score: 1 }));
-		scored.sort((a, b) => b.score - a.score || a.f.length - b.f.length);
-		res.json({ folders: scored.slice(0, 15).map((x) => x.f), chatFolder: toRel(config.chatFolder) });
+		const withFiles = req.query.files === "1";
+		const entries = withFiles ? allEntries() : allFolders().map((p) => ({ path: p, type: "dir" as const }));
+		const scored = q ? entries.map((e) => ({ e, score: fuzzyScore(e.path.toLowerCase(), q) })).filter((x) => x.score > 0) : entries.slice(0, 200).map((e) => ({ e, score: 1 }));
+		scored.sort((a, b) => b.score - a.score || a.e.path.length - b.e.path.length);
+		const top = scored.slice(0, 15).map((x) => x.e);
+		res.json({ folders: top.filter((e) => e.type === "dir").map((e) => e.path), entries: top, chatFolder: toRel(config.chatFolder) });
 	});
 }
 
@@ -437,6 +453,33 @@ function allFolders() {
 	}
 	folderCache = { at: Date.now(), folders };
 	return folders;
+}
+
+/** Files and folders under FS_ROOT a few levels deep, for #file mentions; cached briefly. */
+let entryCache: { at: number; entries: { path: string; type: "dir" | "file" }[] } | undefined;
+function allEntries() {
+	if (entryCache && Date.now() - entryCache.at < 60_000) return entryCache.entries;
+	const entries: { path: string; type: "dir" | "file" }[] = [];
+	const queue: { dir: string; depth: number }[] = [{ dir: config.fsRoot, depth: 0 }];
+	while (queue.length && entries.length < 50_000) {
+		const { dir, depth } = queue.shift()!;
+		let list;
+		try {
+			list = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		for (const entry of list) {
+			if (entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
+			const full = path.join(dir, entry.name);
+			if (entry.isDirectory()) {
+				entries.push({ path: toRel(full), type: "dir" });
+				if (depth < 5) queue.push({ dir: full, depth: depth + 1 });
+			} else if (entry.isFile()) entries.push({ path: toRel(full), type: "file" });
+		}
+	}
+	entryCache = { at: Date.now(), entries };
+	return entries;
 }
 
 /** Subsequence match; contiguous runs, segment starts and hits in the last segment score higher. */

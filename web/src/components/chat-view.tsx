@@ -72,6 +72,13 @@ function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; show
   )
 }
 
+/** Add or replace messages by id, keeping them in order. */
+function mergeMessages(current: ChatMessage[] | undefined, incoming: ChatMessage[]) {
+  const byId = new Map((current ?? []).map((m) => [m.id, m]))
+  for (const m of incoming) byId.set(m.id, m)
+  return [...byId.values()].sort((a, b) => a.id - b.id)
+}
+
 /** A chat between people, with pi when someone mentions @pi. */
 export function ChatView({ chatId }: { chatId: string }) {
   const { user } = useAuth()
@@ -84,29 +91,60 @@ export function ChatView({ chatId }: { chatId: string }) {
   const scroller = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
+  const latest = useRef<ChatMessage[]>(undefined)
+  latest.current = messages
+
   useEffect(() => {
     setChat(undefined)
     setMessages(undefined)
+    let alive = true
+    const merge = (incoming: ChatMessage[]) => setMessages((current) => mergeMessages(current, incoming))
+    const refreshHeader = () => api.chat(chatId).then((r) => alive && setChat(r.chat), () => {})
     const load = () =>
       api.chat(chatId).then(
         (r) => {
+          if (!alive) return
           setChat(r.chat)
-          setMessages(r.messages)
+          // Merge rather than replace: events may have arrived while this was loading.
+          merge(r.messages)
         },
         (error) => toast.error(error.message),
       )
-    void load()
+    /** Fetch what was missed: everything after the newest message we have, and the state of replies still working. */
+    const sync = () => {
+      const current = latest.current
+      if (!current) return void load()
+      const after = current.reduce((max, m) => Math.max(max, m.id), 0)
+      const check = current.filter((m) => m.status === "working").map((m) => m.id)
+      api.chatSince(chatId, after, check).then(
+        (r) => {
+          if (!alive || !r.messages.length) return
+          merge(r.messages)
+          if (r.messages.some((m) => m.id > after)) void refreshHeader()
+        },
+        () => {},
+      )
+    }
+    void load().then(sync)
     const unsubscribe = subscribeUserEvents((event) => {
+      if (event.type === "stream_open") return sync()
       if (event.chatId !== chatId) return
-      if (event.type === "chat_message") {
-        setMessages((current) => (current && !current.some((m) => m.id === event.message.id) ? [...current, event.message] : current))
-        // The first @pi links a session, and mentions can add people: refresh the header.
-        if (event.message.status === "working" || event.message.message.role === "user") api.chat(chatId).then((r) => setChat(r.chat), () => {})
-      } else if (event.type === "chat_update") {
-        setMessages((current) => current?.map((m) => (m.id === event.message.id ? event.message : m)))
-      }
+      if (event.type === "chat_message" || event.type === "chat_update") merge([event.message])
+      // The first @pi links a session, and mentions can add people: refresh the header.
+      if (event.type === "chat_message" && (event.message.status === "working" || event.message.message.role === "user")) void refreshHeader()
     })
-    return unsubscribe
+    const onVisible = () => document.visibilityState === "visible" && sync()
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("online", sync)
+    // Safety net while the chat is on screen, in case an event is lost anyway.
+    const poll = setInterval(() => document.visibilityState === "visible" && sync(), 12_000)
+    return () => {
+      alive = false
+      unsubscribe()
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("online", sync)
+      clearInterval(poll)
+    }
   }, [chatId])
 
   // Keep the newest message in view and mark it read while the chat is on screen.
@@ -121,7 +159,7 @@ export function ChatView({ chatId }: { chatId: string }) {
     setSending(true)
     try {
       const { message } = await api.sendChat(chatId, raw)
-      setMessages((current) => (current && !current.some((m) => m.id === message.id) ? [...current, message] : current))
+      setMessages((current) => mergeMessages(current, [message]))
       setText("")
     } catch (error) {
       toast.error((error as Error).message)
@@ -200,8 +238,8 @@ export function ChatView({ chatId }: { chatId: string }) {
           onChange={setText}
           busy={sending || uploading}
           selfId={user?.id}
-          folders={false}
-          placeholder={chat?.pi ? "Message… (@pi to ask pi)" : "Message… (@pi to bring in pi)"}
+          hash="paths"
+          placeholder={chat?.pi ? "Message… (@pi to ask pi, # for files)" : "Message… (@pi to bring in pi)"}
           onSubmit={(message) => send(message.raw)}
         />
         {chat && (

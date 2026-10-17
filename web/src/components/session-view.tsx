@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerTools } from "@/components/composer-tools"
+import { PathDropup } from "@/components/path-dropup"
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
@@ -68,8 +69,79 @@ function UserBubble({ message }: { message: AgentMessage }) {
   )
 }
 
+type DialogAnswer = { value?: string; confirmed?: boolean; cancelled?: boolean }
+/** A question the agent asked in a run and how it was answered (kept for this page view). */
+type Answered = { runKey: string; dialog: ExtensionDialog; answer: DialogAnswer }
+
+function answerLabel(dialog: ExtensionDialog, answer: DialogAnswer) {
+  if (answer.cancelled) return "Cancelled"
+  if (dialog.method === "confirm") return answer.confirmed ? "Yes" : "No"
+  return answer.value?.trim() || "(empty)"
+}
+
+/**
+ * A question from the agent (select / confirm / input / editor), shown inside its bubble so the
+ * conversation scrolls past it once answered. Without write access it is shown but not answerable.
+ */
+function InlineQuestion({ dialog, onAnswer }: { dialog: ExtensionDialog; onAnswer?: (answer: DialogAnswer) => void }) {
+  const [value, setValue] = useState(dialog.prefill ?? "")
+  useEffect(() => setValue(dialog.prefill ?? ""), [dialog])
+  const text = dialog.method === "input" || dialog.method === "editor"
+  return (
+    <div className="mt-2 grid gap-2 rounded-xl bg-background p-3 text-foreground">
+      <div className="grid gap-0.5">
+        <span className="text-sm font-medium">{dialog.title ?? "The agent asks"}</span>
+        {dialog.message && <span className="text-xs whitespace-pre-wrap text-muted-foreground">{dialog.message}</span>}
+      </div>
+      {!onAnswer ? (
+        <span className="text-xs text-muted-foreground">Waiting for someone with write access to answer.</span>
+      ) : (
+        <>
+          {dialog.method === "select" && (
+            <div className="grid gap-1.5">
+              {dialog.options?.map((o) => (
+                <Button key={o} variant="outline" size="sm" className="h-auto justify-start py-1.5 text-left whitespace-normal" onClick={() => onAnswer({ value: o })}>
+                  {o}
+                </Button>
+              ))}
+            </div>
+          )}
+          {text && <Textarea value={value} onChange={(e) => setValue(e.target.value)} placeholder={dialog.placeholder} rows={dialog.method === "editor" ? 6 : 2} className="min-h-0" />}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => onAnswer(dialog.method === "confirm" ? { confirmed: false } : { cancelled: true })}>
+              {dialog.method === "confirm" ? "No" : "Cancel"}
+            </Button>
+            {dialog.method === "confirm" && (
+              <Button size="sm" onClick={() => onAnswer({ confirmed: true })}>
+                Yes
+              </Button>
+            )}
+            {text && (
+              <Button size="sm" onClick={() => onAnswer({ value })}>
+                Submit
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 /** The agent's side of a run, mirrored from the user bubble: steps first, then the answer. */
-function AgentBubble({ run, onOpen }: { run: Run; onOpen: (index: number | null) => void }) {
+function AgentBubble({
+  run,
+  onOpen,
+  question,
+  onAnswer,
+  answered = [],
+}: {
+  run: Run
+  onOpen: (index: number | null) => void
+  question?: ExtensionDialog
+  onAnswer?: (answer: DialogAnswer) => void
+  answered?: Answered[]
+}) {
   return (
     <div className="flex items-start gap-2">
       <AuthorAvatar id="agent" name="π" />
@@ -82,7 +154,14 @@ function AgentBubble({ run, onOpen }: { run: Run; onOpen: (index: number | null)
             {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary-foreground/60 align-middle" />}
           </div>
         )}
-        {run.running && !run.answerStreaming && (
+        {answered.map((a) => (
+          <div key={a.dialog.id} className="mt-2 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs">
+            <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
+            <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
+          </div>
+        ))}
+        {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
+        {run.running && !run.answerStreaming && !question && (
           <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
             <Loader2 className="size-3 animate-spin" /> working…
           </div>
@@ -92,50 +171,24 @@ function AgentBubble({ run, onOpen }: { run: Run; onOpen: (index: number | null)
   )
 }
 
-function RunView({ run, onOpen }: { run: Run; onOpen: (index: number | null) => void }) {
+function RunView({
+  run,
+  onOpen,
+  question,
+  onAnswer,
+  answered,
+}: {
+  run: Run
+  onOpen: (index: number | null) => void
+  question?: ExtensionDialog
+  onAnswer?: (answer: DialogAnswer) => void
+  answered?: Answered[]
+}) {
   return (
     <div className="space-y-2">
       {run.user && <UserBubble message={run.user} />}
-      {(run.steps.length > 0 || run.running || run.answer) && <AgentBubble run={run} onOpen={onOpen} />}
+      {(run.steps.length > 0 || run.running || run.answer || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} />}
     </div>
-  )
-}
-
-function ExtensionDialogView({ dialog, onAnswer }: { dialog?: ExtensionDialog; onAnswer: (answer: { value?: string; confirmed?: boolean; cancelled?: boolean }) => void }) {
-  const [value, setValue] = useState("")
-  useEffect(() => setValue(dialog?.prefill ?? ""), [dialog])
-  return (
-    <Dialog open={Boolean(dialog)} onOpenChange={(open) => !open && onAnswer({ cancelled: true })}>
-      <DialogContent>
-        {dialog && (
-          <>
-            <DialogHeader>
-              <DialogTitle>{dialog.title ?? "The agent asks"}</DialogTitle>
-              {dialog.message && <DialogDescription className="whitespace-pre-wrap">{dialog.message}</DialogDescription>}
-            </DialogHeader>
-            {dialog.method === "select" && (
-              <div className="grid gap-2">
-                {dialog.options?.map((o) => (
-                  <Button key={o} variant="outline" className="h-auto justify-start py-2 text-left whitespace-normal" onClick={() => onAnswer({ value: o })}>
-                    {o}
-                  </Button>
-                ))}
-              </div>
-            )}
-            {(dialog.method === "input" || dialog.method === "editor") && (
-              <Textarea value={value} onChange={(e) => setValue(e.target.value)} placeholder={dialog.placeholder} rows={dialog.method === "editor" ? 8 : 2} />
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => onAnswer(dialog.method === "confirm" ? { confirmed: false } : { cancelled: true })}>
-                {dialog.method === "confirm" ? "No" : "Cancel"}
-              </Button>
-              {dialog.method === "confirm" && <Button onClick={() => onAnswer({ confirmed: true })}>Yes</Button>}
-              {(dialog.method === "input" || dialog.method === "editor") && <Button onClick={() => onAnswer({ value })}>Submit</Button>}
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -156,6 +209,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [shareOpen, setShareOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [newName, setNewName] = useState("")
+  const [answered, setAnswered] = useState<Answered[]>([])
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -198,11 +252,29 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   }, [runs])
   const visibleRuns = runs.map((run, index) => ({ run, index })).filter(({ run }) => authorFilter === "all" || (run.user && (run.user.author?.id ?? "unknown") === authorFilter))
 
-  // Keep the newest output in view unless the user scrolled up to read.
+  const act = async (fn: () => Promise<unknown>, ok?: string) => {
+    try {
+      await fn()
+      if (ok) toast.success(ok)
+    } catch (error) {
+      toast.error((error as Error).message)
+    }
+  }
+
+  // The agent's open question appears in the latest run's bubble.
+  const question = state?.dialogs[0]
+  const lastRun = runs.at(-1)
+  const answer = (dialog: ExtensionDialog) => (value: DialogAnswer) =>
+    act(async () => {
+      await api.answerDialog(sessionKey, { id: dialog.id, ...value })
+      if (lastRun) setAnswered((list) => [...list, { runKey: lastRun.key, dialog, answer: value }])
+    })
+
+  // Keep the newest output (and any new question) in view unless the user scrolled up to read.
   useEffect(() => {
     const el = scroller.current
     if (el && stick.current) el.scrollTop = el.scrollHeight
-  }, [runs])
+  }, [runs, question?.id])
 
   const canWrite = summary?.access === "owner" || summary?.access === "admin" || summary?.access === "write"
   const running = Boolean(state?.running)
@@ -235,15 +307,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       toast.error((error as Error).message)
     } finally {
       setSending(false)
-    }
-  }
-
-  const act = async (fn: () => Promise<unknown>, ok?: string) => {
-    try {
-      await fn()
-      if (ok) toast.success(ok)
-    } catch (error) {
-      toast.error((error as Error).message)
     }
   }
 
@@ -336,7 +399,14 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           {authorFilter !== "all" && <p className="text-xs text-muted-foreground">Showing this author’s prompts with their agent responses. <button className="underline" onClick={() => setAuthorFilter("all")}>Show everyone</button></p>}
           {state && runs.length > 0 && visibleRuns.length === 0 && <p className="text-sm text-muted-foreground">No prompts from this author.</p>}
           {visibleRuns.map(({ run, index }) => (
-            <RunView key={run.key} run={run} onOpen={(step) => setOpen({ run: index, step })} />
+            <RunView
+              key={run.key}
+              run={run}
+              onOpen={(step) => setOpen({ run: index, step })}
+              question={run === lastRun ? question : undefined}
+              onAnswer={run === lastRun && question && canWrite ? answer(question) : undefined}
+              answered={answered.filter((a) => a.runKey === run.key)}
+            />
           ))}
           {state?.notice?.level === "error" && !running && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive">
@@ -404,20 +474,22 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 />
                 <div className="relative min-w-0 flex-1">
                 <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
+                <PathDropup value={text} folder={summary?.path ?? ""} onChange={setText} />
                 <Textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
                   placeholder={running ? (mode === "steer" ? "Steer the agent…" : "Queue a follow-up…") : "Message the agent…"}
-                  className={cn("max-h-48 min-h-12 resize-none py-3 pr-14", running && "pr-24")}
+                  className={cn("max-h-48 min-h-12 resize-none py-[11px] md:py-[13px] pr-14", running && "pr-24")}
                   rows={1}
                 />
                 {running && (
-                  <Button className="absolute right-12 bottom-1.5" variant="destructive" size="icon-sm" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
+                  <Button className="absolute right-11 bottom-2" variant="destructive" size="icon-sm" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
                     <CircleStop />
                   </Button>
                 )}
-                <Button className="absolute right-1.5 bottom-1.5" size="icon-sm" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
+                {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
+                <Button className="absolute right-2 bottom-2" size="icon-sm" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
                 </div>
@@ -441,7 +513,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
         </DialogContent>
       </Dialog>
       <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
-      <ExtensionDialogView dialog={canWrite ? state?.dialogs[0] : undefined} onAnswer={(answer) => state?.dialogs[0] && act(() => api.answerDialog(sessionKey, { id: state.dialogs[0].id, ...answer }))} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

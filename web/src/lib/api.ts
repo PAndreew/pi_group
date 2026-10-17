@@ -242,9 +242,13 @@ export const api = {
   consolidateMemory: () => request<{ started: boolean; pending?: number; reason?: string }>("POST", "/api/memory/consolidate", { all: true }),
   chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),
   startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
+  /** Messages after `after`, plus the current state of `check` (replies still shown as working). */
+  chatSince: (id: string, after: number, check: number[]) =>
+    request<{ messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}/messages?${q({ after: String(after), check: check.join(",") })}`),
   sendChat: (id: string, text: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages`, { text }),
   readChat: (id: string, upTo: number) => request("POST", `/api/chats/${enc(id)}/read`, { upTo }),
   searchFolders: (query: string) => request<{ folders: string[]; chatFolder: string }>("GET", `/api/folders/search?${q({ q: query })}`),
+  searchPaths: (query: string) => request<{ entries: { path: string; type: "dir" | "file" }[] }>("GET", `/api/folders/search?${q({ q: query, files: "1" })}`),
   toolsAt: (path: string) => request<SessionTools>("GET", `/api/tools?${q({ path })}`),
   mcpAt: (path: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/mcp?${q({ path })}`),
   activeSessions: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/active"),

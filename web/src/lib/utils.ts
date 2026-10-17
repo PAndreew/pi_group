@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** `to` relative to the folder `from` (both relative to the file root), e.g. "../other/x.ts". */
+export function relativePath(from: string, to: string) {
+  const a = from.split("/").filter(Boolean)
+  const b = to.split("/").filter(Boolean)
+  let same = 0
+  while (same < a.length && same < b.length && a[same] === b[same]) same++
+  return [...a.slice(same).map(() => ".."), ...b.slice(same)].join("/") || "."
+}
+
 export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   const units = ["KB", "MB", "GB", "TB"]
