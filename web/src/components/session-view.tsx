@@ -409,18 +409,18 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
                   placeholder={running ? (mode === "steer" ? "Steer the agent…" : "Queue a follow-up…") : "Message the agent…"}
-                  className="max-h-48 min-h-10 resize-none py-2"
+                  className={cn("max-h-48 min-h-12 resize-none py-3 pr-14", running && "pr-24")}
                   rows={1}
                 />
-                </div>
                 {running && (
-                  <Button variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
+                  <Button className="absolute right-12 bottom-1.5" variant="destructive" size="icon-sm" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
                     <CircleStop />
                   </Button>
                 )}
-                <Button size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
+                <Button className="absolute right-1.5 bottom-1.5" size="icon-sm" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
+                </div>
               </div>
               <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()} onModel={() => setModelOpen(true)} onInsert={setText} />
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
