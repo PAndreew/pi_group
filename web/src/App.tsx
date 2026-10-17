@@ -169,7 +169,7 @@ function Workspace() {
       <div className="flex h-dvh flex-col">
         <header className={cn("h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
           <button type="button" onClick={nav.home} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
-            <img src="/beezy-logo.svg" alt="" className="size-7" /> beezy
+            <img src="/beezy-logo.svg" alt="beezy" className="size-7" />
           </button>
           <div className="flex-1" />
           <ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} />

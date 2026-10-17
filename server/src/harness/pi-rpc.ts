@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { config } from "../config.js";
+import { expireInteractions, interactionEnvironment } from "../interactions.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
 import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage, ToolInfo } from "./types.js";
 
@@ -74,11 +75,12 @@ class RpcProcess {
 	onRecord: (record: RpcRecord) => void = () => {};
 	onExit: (code: number | null) => void = () => {};
 
-	constructor(args: string[], cwd: string) {
+	constructor(args: string[], cwd: string, sessionKey?: string) {
+		if (sessionKey) args = [...args, "--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", "request-user-input.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		this.child = spawn(command, argv, {
 			cwd,
-			env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" },
+			env: { ...process.env, PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) },
 			stdio: ["pipe", "pipe", "pipe"],
 			shell,
 		});
@@ -90,6 +92,7 @@ class RpcProcess {
 			this.stderrTail += `\n${error.message}`;
 		});
 		this.child.on("exit", (code) => {
+			if (sessionKey) expireInteractions(sessionKey);
 			this.exited = true;
 			for (const { reject } of this.pending.values()) reject(new Error(`pi exited (${code}): ${this.stderrTail.trim().slice(-500)}`));
 			this.pending.clear();
@@ -572,7 +575,7 @@ export class PiRpcAdapter implements HarnessAdapter {
 			const file = await this.fileOf(id, cwd);
 			if (!file) throw new Error("Session file not found");
 			const records = await readJsonl(file);
-			const session = new PiLiveSession(id, cwd, new RpcProcess(["--mode", "rpc", "--session", file], cwd));
+			const session = new PiLiveSession(id, cwd, new RpcProcess(["--mode", "rpc", "--session", file], cwd, `pi:${id}`));
 			await session.start(entriesToMessages(records));
 			return this.track(session);
 		})().finally(() => this.starting.delete(id));
@@ -584,7 +587,7 @@ export class PiRpcAdapter implements HarnessAdapter {
 		const id = randomUUID();
 		const args = ["--mode", "rpc", "--session-id", id];
 		if (options.name) args.push("--name", options.name);
-		const session = new PiLiveSession(id, cwd, new RpcProcess(args, cwd));
+		const session = new PiLiveSession(id, cwd, new RpcProcess(args, cwd, `pi:${id}`));
 		await session.start([]);
 		this.track(session);
 		if (options.model) await session.setModel(options.model.provider, options.model.id);

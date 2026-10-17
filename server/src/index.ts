@@ -11,11 +11,13 @@ import { PiRpcAdapter } from "./harness/pi-rpc.js";
 import type { HarnessAdapter } from "./harness/types.js";
 import { monitorRoutes } from "./monitor.js";
 import { pushRoutes } from "./push.js";
+import { expireInteractions } from "./interactions.js";
 import { sessionRoutes } from "./sessions.js";
 import { attachTerminal } from "./terminal.js";
 import { loadStore, saveNow } from "./store.js";
 
 loadStore();
+expireInteractions();
 ensureAdmin();
 
 const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter()];
@@ -41,7 +43,15 @@ api.use((_req, res) => void res.status(404).json({ error: "Not found" }));
 app.use("/api", api);
 
 if (existsSync(config.webDist)) {
-	app.use(express.static(config.webDist, { index: false, maxAge: "1h" }));
+	app.use(express.static(config.webDist, {
+		index: false,
+		maxAge: "1h",
+		setHeaders(res, file) {
+			if (file.endsWith(".webmanifest") || path.basename(file) === "sw.js") {
+				res.setHeader("Cache-Control", "no-cache");
+			}
+		},
+	}));
 	app.get(/^(?!\/api\/).*/, (_req, res) => {
 		// HTML must always discover the latest hashed assets after a local deployment.
 		res.setHeader("Cache-Control", "no-store");

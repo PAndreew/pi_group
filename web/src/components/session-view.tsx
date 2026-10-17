@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
+import { InteractionCards } from "@/components/interaction-cards"
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
@@ -408,6 +409,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               answered={answered.filter((a) => a.runKey === run.key)}
             />
           ))}
+          <InteractionCards sessionKey={sessionKey} canWrite={canWrite} />
           {state?.notice?.level === "error" && !running && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />

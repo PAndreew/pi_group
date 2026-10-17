@@ -91,6 +91,16 @@ export interface SessionState {
   live: boolean
 }
 
+export interface Interaction {
+  id: string
+  sessionKey: string
+  toolCallId: string
+  spec: { version: 1; type: "single_choice" | "multi_choice"; title: string; description?: string; options: { id: string; label: string; description?: string }[]; submitLabel?: string }
+  status: "pending" | "answered" | "cancelled" | "expired"
+  selected?: string[]
+  respondent?: { id: string; username: string }
+}
+
 export interface SessionTools {
   tools: { name: string; description?: string; origin?: string }[]
   toolsNote?: string
@@ -204,6 +214,8 @@ const q = (params: Record<string, string>) => new URLSearchParams(params).toStri
 const enc = encodeURIComponent
 
 export const api = {
+  interactions: (key: string) => request<{ interactions: Interaction[] }>("GET", `/api/sessions/${enc(key)}/interactions`),
+  answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User }>("GET", "/api/auth/me"),
   login: (username: string, password: string) => request<{ user: User }>("POST", "/api/auth/login", { username, password }),

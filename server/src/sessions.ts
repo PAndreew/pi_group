@@ -6,6 +6,7 @@ import { requireAuth } from "./auth.js";
 import { creationOptions } from "./preferences.js";
 import { mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
+import { mountInteractions } from "./interactions.js";
 import { mountMemory } from "./memory.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, registerPrompt } from "./authorship.js";
@@ -238,6 +239,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (!meta || !access) throw new HttpError(404, "Session not found");
 		return { key, meta, access, adapter: adapterOf(meta.harness) };
 	};
+
+	mountInteractions(router, load);
 
 	const ensureLive = async (meta: SessionMeta, adapter: HarnessAdapter) => {
 		const live = await adapter.open(meta.id, meta.cwd);

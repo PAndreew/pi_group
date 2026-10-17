@@ -3,6 +3,7 @@ import path from "node:path";
 import { config } from "./config.js";
 import type { SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
+import type { Interaction } from "./interactions.js";
 
 export type Role = "admin" | "member";
 export type Access = "read" | "write";
@@ -68,10 +69,11 @@ interface Data {
 	/** Folders that have a pi-durable storage, so they are reopened (and resumed) at startup. */
 	durableFolders: string[];
 	pushSubscriptions: PushSubscriptionRecord[];
+	interactions: Interaction[];
 }
 
 const file = path.join(config.dataDir, "db.json");
-let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [] };
+let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {

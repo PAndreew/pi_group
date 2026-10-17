@@ -1,8 +1,8 @@
 // Service worker: run notifications (Web Push, and Android Chrome only allows notifications from a
 // service worker), and an app-shell cache so a reopened app paints without waiting for the server.
 // API calls are never cached.
-const SHELL = "beezy-shell-v2"
-const ASSETS = "beezy-assets-v2"
+const SHELL = "beezy-shell-v3"
+const ASSETS = "beezy-assets-v3"
 
 self.addEventListener("install", () => self.skipWaiting())
 self.addEventListener("activate", (event) =>
@@ -19,6 +19,17 @@ const sessionUrl = (n) => `/#${new URLSearchParams({ ...(n.path ? { f: n.path } 
 self.addEventListener("push", (event) => {
   const notice = event.data?.json()
   if (notice?.type === "chat") return event.waitUntil(chatNotification(notice))
+  if (notice?.type === "interaction") return event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+    if (windows.some((c) => c.focused && c.visibilityState === "visible")) return
+    await self.registration.showNotification("beezy · Awaiting your input", {
+      body: notice.title,
+      tag: `interaction:${notice.id}`,
+      icon: "/icon-192.png",
+      badge: "/badge-96.png",
+      data: { url: sessionUrl(notice) },
+    })
+  })())
   if (notice?.type !== "run") return
   event.waitUntil(
     (async () => {
@@ -72,6 +83,8 @@ self.addEventListener("fetch", (event) => {
   const { request } = event
   const url = new URL(request.url)
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return
+  // Let the browser revalidate install metadata rather than returning an old cached app name.
+  if (url.pathname.endsWith(".webmanifest")) return
   if (request.mode === "navigate") event.respondWith(page(event))
   else if (url.pathname.startsWith("/assets/")) event.respondWith(asset(request))
   else if (/\.(png|svg|ico|webmanifest)$/.test(url.pathname)) event.respondWith(staleWhileRevalidate(request))

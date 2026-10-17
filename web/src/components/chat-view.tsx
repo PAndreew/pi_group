@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerTools } from "@/components/composer-tools"
+import { InteractionCards } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
@@ -217,6 +218,7 @@ export function ChatView({ chatId }: { chatId: string }) {
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
             return <HumanMessage key={m.id} m={m} own={author === user?.id} showName={author !== previous} />
           })}
+          <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
         </div>
       </div>
 
