@@ -35,12 +35,11 @@ interface Route {
   folder: string
   session?: string
   file?: string
-  tab: string
 }
 
 function readRoute(): Route {
   const params = new URLSearchParams(window.location.hash.slice(1))
-  return { folder: params.get("f") ?? "", session: params.get("s") ?? undefined, file: params.get("file") ?? undefined, tab: params.get("t") ?? "sessions" }
+  return { folder: params.get("f") ?? "", session: params.get("s") ?? undefined, file: params.get("file") ?? undefined }
 }
 
 function writeRoute(route: Route) {
@@ -48,7 +47,6 @@ function writeRoute(route: Route) {
   if (route.folder) params.set("f", route.folder)
   if (route.session) params.set("s", route.session)
   if (route.file) params.set("file", route.file)
-  if (route.tab !== "sessions") params.set("t", route.tab)
   const hash = `#${params.toString()}`
   if (hash !== window.location.hash) window.history.pushState(null, "", hash)
 }
@@ -181,8 +179,6 @@ function Workspace() {
     <Sidebar
       rootName={rootName}
       folder={route.folder}
-      tab={route.tab}
-      onTab={(tab) => setRoute({ tab })}
       selectedSession={route.session}
       selectedFile={route.file}
       onFolder={(folder) => setRoute({ folder })}
@@ -211,7 +207,7 @@ function Workspace() {
         <div className="flex-1" />
         <ActiveSessions
           onOpen={(s) => {
-            setRoute({ folder: s.path, session: s.key, file: undefined, tab: "sessions" })
+            setRoute({ folder: s.path, session: s.key, file: undefined })
           }}
         />
         <DropdownMenu>
@@ -275,7 +271,7 @@ function Workspace() {
             <Home
               folder={route.folder}
               version={version}
-              onOpen={(s) => setRoute({ folder: s.path, session: s.key, file: undefined, tab: "sessions" })}
+              onOpen={(s) => setRoute({ folder: s.path, session: s.key, file: undefined })}
               onStart={quickCreate}
               onDefaults={() => setDefaultsOpen(true)}
             />

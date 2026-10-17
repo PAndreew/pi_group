@@ -7,7 +7,7 @@ import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { config } from "../config.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
-import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, ToolInfo } from "./types.js";
+import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage, ToolInfo } from "./types.js";
 
 type RpcRecord = Record<string, any>;
 type Any = any;
@@ -67,6 +67,10 @@ class RpcProcess {
 	private decoder = new StringDecoder("utf8");
 	stderrTail = "";
 	exited = false;
+
+	get pid() {
+		return this.child.pid;
+	}
 	onRecord: (record: RpcRecord) => void = () => {};
 	onExit: (code: number | null) => void = () => {};
 
@@ -613,6 +617,17 @@ export class PiRpcAdapter implements HarnessAdapter {
 			toolsNote: "pi's default tools. The exact list, including extension and MCP tools, is known after the agent's first reply.",
 			commands,
 		};
+	}
+
+	async usage(id: string, cwd: string): Promise<SessionUsage> {
+		const live = this.sessions.get(id);
+		const file = await this.fileOf(id, cwd);
+		const storageBytes = file ? (await fs.stat(file).catch(() => undefined))?.size : undefined;
+		// get_session_stats: token totals and cost so far; tolerated if this pi version lacks it.
+		const stats = live?.state.live ? await live.rpc.send<Any>({ type: "get_session_stats" }, 3_000).catch(() => undefined) : undefined;
+		const tokens = stats?.tokens && typeof stats.tokens === "object" ? stats.tokens : undefined;
+		const cost = typeof stats?.cost === "number" ? stats.cost : typeof stats?.cost?.total === "number" ? stats.cost.total : undefined;
+		return { pid: live?.rpc.pid, storageBytes, tokens, cost };
 	}
 
 	async shutdown() {

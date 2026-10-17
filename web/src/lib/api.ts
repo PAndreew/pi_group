@@ -110,6 +110,45 @@ export interface McpServer {
   target?: string
 }
 
+export interface MonitorSession {
+  key: string
+  name: string
+  harness: string
+  path: string
+  running: boolean
+  viewers: number
+  lastActivity: string
+  messages: number
+  model?: string
+  pinned: boolean
+  pid?: number
+  processes?: number
+  rssBytes?: number
+  cpuPercent?: number
+  storageBytes?: number
+  sharedStorage?: boolean
+  tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number }
+  cost?: number
+}
+
+export interface MonitorReport {
+  at: string
+  system: {
+    hostname: string
+    platform: string
+    uptimeSec: number
+    cpus: number
+    loadAvg?: number[]
+    memTotal: number
+    memAvailable: number
+    disk?: { free: number; total: number }
+    processInfo: boolean
+  }
+  server: { pid: number; uptimeSec: number; rssBytes: number; heapUsedBytes: number; cpuPercent: number; eventLoopLagMs: number; node: string }
+  storage: { piSessions: { bytes: number; files: number }; durable: { bytes: number; files: number } }
+  sessions: MonitorSession[]
+}
+
 export class ApiError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
@@ -169,6 +208,8 @@ export const api = {
   models: (harness: string) => request<{ models: ModelInfo[] }>("GET", `/api/harnesses/${enc(harness)}/models`),
 
   sessions: (path: string) => request<{ path: string; sessions: SessionSummary[] }>("GET", `/api/sessions?${q({ path })}`),
+  sessionCounts: (path: string) => request<{ counts: Record<string, { total: number; running: number }> }>("GET", `/api/sessions/counts?${q({ path })}`),
+  monitor: () => request<MonitorReport>("GET", "/api/monitor"),
   activeSessions: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/active"),
   recentSessions: (limit = 3) => request<{ sessions: SessionSummary[] }>("GET", `/api/sessions/recent?${q({ limit: String(limit) })}`),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),

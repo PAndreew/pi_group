@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
@@ -252,8 +254,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ models: await adapterOf(String(req.params.id)).listModels() });
 	});
 
-	router.get("/sessions", async (req, res) => {
-		const cwd = resolveSafe(req.query.path);
+	/** Sessions of one folder that `user` may see, running first, then most recent. */
+	const folderSessions = async (cwd: string, user: User) => {
 		const results = await Promise.all(
 			adapters.map(async (adapter) => {
 				if (!(await adapter.available()).ok) return [];
@@ -265,12 +267,32 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				});
 			}),
 		);
-		const sessions = results
+		return results
 			.flat()
-			.filter(({ meta }) => !meta.deleted && accessOf(req.user!, meta))
-			.map(({ meta, listing }) => summary(meta, req.user!, listing))
+			.filter(({ meta }) => !meta.deleted && accessOf(user, meta))
+			.map(({ meta, listing }) => summary(meta, user, listing))
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
-		res.json({ path: toRel(cwd), sessions });
+	};
+
+	router.get("/sessions", async (req, res) => {
+		const cwd = resolveSafe(req.query.path);
+		res.json({ path: toRel(cwd), sessions: await folderSessions(cwd, req.user!) });
+	});
+
+	/** Session counts of each subfolder, for the badges and accordions of the file explorer. */
+	router.get("/sessions/counts", async (req, res) => {
+		const cwd = resolveSafe(req.query.path);
+		const dirs = (await fs.readdir(cwd, { withFileTypes: true }).catch(() => []))
+			.filter((e) => e.isDirectory() && e.name !== "node_modules")
+			.slice(0, 300);
+		const counts: Record<string, { total: number; running: number }> = {};
+		await Promise.all(
+			dirs.map(async (dir) => {
+				const sessions = await folderSessions(path.join(cwd, dir.name), req.user!);
+				if (sessions.length) counts[toRel(path.join(cwd, dir.name))] = { total: sessions.length, running: sessions.filter((s) => s.running).length };
+			}),
+		);
+		res.json({ counts });
 	});
 
 	/** Running sessions the caller can see, across all folders (for the "running" indicator). */

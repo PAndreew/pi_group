@@ -4,16 +4,17 @@ A small, mobile-first web UI that lets a **group of people share coding agents r
 
 - Browse the machine's folders and files, upload and download files
 - In-app viewers for Markdown, HTML (sandboxed), PDF (pdf.js, works on phones), source code (Python, JS/TS, shell, …), images, audio/video, CSV, JSON
-- List the agent sessions of each folder, start new ones, resume old ones (including sessions started with the `pi` CLI), delete them (owner or admin)
+- **One file explorer** for everything: open folders, start a session in the current folder with *New session*, and unfold any folder with sessions (count badge, green dot while running) to open, resume or delete them in place, including sessions started with the `pi` CLI
 - **Notifications** (user menu → Notifications): a system notification when a run finishes or fails in a session you own, are shared on, or prompted, also with the app closed (Web Push); an in-app toast when it is in front. Needs HTTPS (see below).
 - **Installable app (PWA)**: add it to the home screen for a full-screen app; the app shell is cached and the last state of recent sessions is shown at once while the live stream reconnects.
 - A home page (click the logo) with your three most recent sessions above a composer that starts a new session in the current folder
 - **Account-level session defaults**: save a provider/model/thinking combination from user menu → Session defaults (or the new-session dialog). Defaults persist across devices. New session in either Files or Sessions creates immediately in the current folder using those defaults; without defaults it opens configuration first.
 - **Mid-session model switching**: the robot-head button below the chat input opens provider, model and thinking controls; the attachment icon is beside it. Changing a session does not overwrite your saved defaults.
-- **Terminal, tools and MCP** (buttons beside the model selector):
+- **Terminal, tools, MCP and resource monitor** (buttons beside the model selector):
   - **Terminal** (admins only): a shell on the server in the session's folder, with an Esc/Tab/Ctrl/arrow key bar for phones. If the server runs in Termux, this is the Termux shell. It uses `node-pty` when it could be built, otherwise `python3`; one of them must be available.
   - **pi tools:** the tools the session's agent declared; its slash commands, skills and prompt templates (while it runs); and the extensions, skills, prompts and packages installed in `~/.pi/agent` and the project's `.pi/`. Tapping a command puts it in the message box.
   - **MCP servers:** the servers from `mcp.json`, with live state and tool names from `pi mcp list`. Secrets are never shown, and launch commands only to admins.
+  - **Resource monitor:** live sessions with memory (pi process plus the tools it started), CPU, session file size, tokens and cost; system memory and disk meters; load, server memory and event-loop lag. Refreshes every 3 s. Per-process numbers need Linux, Termux or macOS.
 - Each run is shown as **a horizontal row of small squares**, one per step (reasoning, shell, read, edit, write, search, other tool, answer), each with an icon and a number. Tap one for the details in a modal, then step through with Prev/Next.
 - **Steer** a running agent (delivered after the current tool step), queue a **follow-up**, or **stop** it
 - **Session avatars + author filters**: locally generated initials identify each prompt's author. Filter by a person to see their prompts together with the agent's steps and responses; choose Everyone to restore the full conversation. Authorship is recorded from the authenticated account, persists in app metadata, and does not alter model prompts. Older/CLI messages (and indistinguishable identical prompts queued by different people) show **Unknown author**, never the session owner by assumption.

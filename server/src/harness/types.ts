@@ -111,6 +111,17 @@ export interface SessionInventory {
 	commands?: CommandInfo[];
 }
 
+/** Resource use of one live session, for the resource monitor. */
+export interface SessionUsage {
+	/** OS process of the session (its children, e.g. bash tools, count towards it); absent when it runs inside the server. */
+	pid?: number;
+	/** Bytes on disk: the session file, or the folder's shared storage when `sharedStorage`. */
+	storageBytes?: number;
+	sharedStorage?: boolean;
+	tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
+	cost?: number;
+}
+
 export interface CreateOptions {
 	model?: { provider: string; id: string };
 	thinkingLevel?: string;
@@ -138,6 +149,8 @@ export interface HarnessAdapter {
 	deleteSession(id: string, cwd: string): Promise<boolean>;
 	/** Tools and commands of a session, for the tools overview; never starts a process. */
 	inventory(id: string, cwd: string): Promise<SessionInventory>;
+	/** Resource use of a live session. */
+	usage(id: string, cwd: string): Promise<SessionUsage>;
 	shutdown(): Promise<void>;
 }
 

@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
 import { LiveSessionBase } from "./live-base.js";
-import type { AgentMessage, CreateOptions, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing } from "./types.js";
+import type { AgentMessage, CreateOptions, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage } from "./types.js";
 
 /*
  * pi-durable is experimental and its API changes between releases, so it is loaded dynamically and typed
@@ -516,6 +517,13 @@ export class PiDurableAdapter implements HarnessAdapter {
 	async inventory(): Promise<SessionInventory> {
 		const tools = (this.registry?.snapshot().tools() ?? []).map(({ extension, tool }: Any) => ({ name: tool.name, description: tool.description, origin: extension.name }));
 		return { tools, commands: [], toolsNote: "pi durable runs its own tool set; pi extensions, skills and MCP servers do not apply to it." };
+	}
+
+	/** Runs inside the server process; storage is one SQLite file (plus WAL) shared by the folder's sessions. */
+	async usage(_id: string, cwd: string): Promise<SessionUsage> {
+		const file = this.storagePath(cwd);
+		const sizes = await Promise.all([file, `${file}-wal`].map((f) => fs.stat(f).then((s) => s.size, () => 0)));
+		return { storageBytes: sizes[0] + sizes[1], sharedStorage: true };
 	}
 
 	async shutdown() {

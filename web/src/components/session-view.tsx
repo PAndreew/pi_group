@@ -3,6 +3,7 @@ import {
   Bot,
   CircleStop,
   Eye,
+  Gauge,
   Hammer,
   Loader2,
   MoreVertical,
@@ -23,6 +24,7 @@ import { AuthorAvatar } from "@/components/author-avatar"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
 import { McpDialog, McpIcon } from "@/components/mcp-dialog"
+import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
@@ -160,7 +162,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
-  const [panel, setPanel] = useState<"terminal" | "tools" | "mcp">()
+  const [panel, setPanel] = useState<"terminal" | "tools" | "mcp" | "monitor">()
   const [shareOpen, setShareOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [newName, setNewName] = useState("")
@@ -433,7 +435,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 {user?.role === "admin" && <Button variant="ghost" size="icon-sm" onClick={() => setPanel("terminal")} aria-label="Terminal" title="Terminal in this folder"><SquareTerminal /></Button>}
                 <Button variant="ghost" size="icon-sm" onClick={() => setPanel("tools")} aria-label="pi tools" title="pi tools, commands and skills"><Hammer /></Button>
                 <Button variant="ghost" size="icon-sm" onClick={() => setPanel("mcp")} aria-label="MCP servers" title="MCP servers"><McpIcon /></Button>
-                <button type="button" className="min-w-0 truncate text-xs text-muted-foreground" onClick={() => setModelOpen(true)}>{state?.model?.id ?? "Choose model"}{state?.thinkingLevel ? ` · ${state.thinkingLevel}` : ""}</button>
+                <Button variant="ghost" size="icon-sm" onClick={() => setPanel("monitor")} aria-label="Resource monitor" title="Resource monitor"><Gauge /></Button>
               </div>
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
             </>
@@ -460,6 +462,11 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           setText(command)
           setPanel(undefined)
         }}
+      />
+      <ResourceMonitorDialog
+        open={panel === "monitor"}
+        onOpenChange={(o) => setPanel(o ? "monitor" : undefined)}
+        onOpenSession={(s) => (window.location.hash = `#${new URLSearchParams({ ...(s.path ? { f: s.path } : {}), s: s.key })}`)}
       />
       <McpDialog sessionKey={sessionKey} open={panel === "mcp"} onOpenChange={(o) => setPanel(o ? "mcp" : undefined)} />
       {panel === "terminal" && (
