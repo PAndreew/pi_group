@@ -2,7 +2,6 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { config } from "./config.js";
-import { runPi } from "./harness/pi-rpc.js";
 
 /**
  * What pi has installed for a folder, read from disk without starting pi: the user's agent dir
@@ -140,27 +139,12 @@ function safeUrl(value: string) {
 	}
 }
 
-/** MCP servers pi would load in `cwd`: `pi mcp list --json` connects to each; the config files are the fallback. */
+/** Read MCP configuration without invoking unsupported CLI commands or starting an agent. */
 export async function mcpReport(cwd: string, admin: boolean): Promise<McpReport> {
-	const configured = configuredServers(cwd, admin);
-	const result = await runPi(["mcp", "list", "--json"], cwd, 45_000);
-	try {
-		const data = JSON.parse(result.stdout) as { servers: Record<string, unknown>[]; errors?: unknown[]; note?: string };
-		const servers = data.servers.map((s) => ({
-			name: String(s.name),
-			scope: s.scope as string | undefined,
-			transport: s.transport as string | undefined,
-			enabled: s.enabled !== false,
-			state: s.state as string | undefined,
-			tools: Array.isArray(s.tools) ? s.tools.map(String) : undefined,
-			error: s.error ? String(s.error) : undefined,
-			target: configured.find((c) => c.name === s.name)?.target,
-		}));
-		const errors = (data.errors ?? []).map((e) => (typeof e === "string" ? e : JSON.stringify(e)));
-		return { servers, live: true, note: [data.note, ...errors].filter(Boolean).join(" ") || undefined };
-	} catch {
-		const reason = result.stderr.trim().split("\n").at(-1) || `pi mcp list exited with ${result.code}`;
-		return { servers: configured, live: false, note: `Showing the config files only; pi could not report live status (${reason}).` };
-	}
+	return {
+		servers: configuredServers(cwd, admin),
+		live: false,
+		note: "Showing configured MCP servers only; live MCP status is not available through this pi CLI.",
+	};
 }
 

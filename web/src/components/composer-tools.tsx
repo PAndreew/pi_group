@@ -43,7 +43,7 @@ export function ComposerTools({
 
   return (
     <>
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center justify-center gap-0.5">
         {onAttach && icon("attach", "Attach files", <Paperclip />, onAttach)}
         {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot />, onModel ?? nav.openDefaults)}
         {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal />, () => setPanel("terminal"))}

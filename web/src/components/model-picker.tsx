@@ -25,14 +25,14 @@ export function ModelPicker({
 
   if (models.length === 0) {
     return (
-      <span className="text-xs text-muted-foreground">
+      <span className="min-w-0 break-all text-xs text-muted-foreground">
         {value ? `${value.provider}/${value.id}` : "No models available. Configure a provider in pi (pi auth / API key env vars)."}
       </span>
     )
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5">
       {providers.length > 1 && (
         <Select
           value={provider}
@@ -42,7 +42,7 @@ export function ModelPicker({
             if (first) onChange({ provider: p, id: first.id })
           }}
         >
-          <SelectTrigger size={size} className={cn("max-w-36", compact && "text-xs")} aria-label="Provider">
+          <SelectTrigger size={size} className={cn("w-full min-w-0 sm:w-auto sm:max-w-36", compact && "text-xs")} aria-label="Provider">
             <SelectValue placeholder="Provider" />
           </SelectTrigger>
           <SelectContent>
@@ -55,7 +55,7 @@ export function ModelPicker({
         </Select>
       )}
       <Select value={current ? current.id : undefined} disabled={disabled} onValueChange={(id) => onChange({ provider: provider!, id })}>
-        <SelectTrigger size={size} className={cn("max-w-56 min-w-0", compact && "text-xs")} aria-label="Model">
+        <SelectTrigger size={size} className={cn("w-full min-w-0 sm:w-auto sm:max-w-56", compact && "text-xs")} aria-label="Model">
           <SelectValue placeholder={value ? value.id : "Model"} />
         </SelectTrigger>
         <SelectContent>

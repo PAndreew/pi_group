@@ -150,7 +150,7 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <div className="relative flex items-end gap-2">
+    <div className="relative">
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
@@ -192,7 +192,7 @@ export function MentionComposer({
         value={value}
         placeholder={placeholder}
         rows={1}
-        className="max-h-48 min-h-10 resize-none py-2"
+        className="max-h-48 min-h-12 resize-none py-3 pr-14"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
         onSelect={(e) => setToken(activeToken(value, e.currentTarget.selectionStart))}
         onBlur={() => setTimeout(() => setToken(undefined), 100)}
@@ -220,7 +220,7 @@ export function MentionComposer({
           }
         }}
       />
-      <Button size="icon" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
+      <Button className="absolute right-1.5 bottom-1.5" size="icon-sm" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
         {busy ? <Loader2 className="animate-spin" /> : <ArrowUp />}
       </Button>
     </div>

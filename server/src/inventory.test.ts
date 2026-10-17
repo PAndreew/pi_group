@@ -16,7 +16,7 @@ test("installed pi resources and MCP config are read from disk without secrets",
 	mkdirSync(path.join(project, ".git"), { recursive: true });
 	process.env.DATA_DIR = path.join(dir, "data");
 	process.env.PI_CODING_AGENT_DIR = agent;
-	// No pi on PATH under this name: the MCP report falls back to the config files.
+	// MCP inventory must work without launching pi (the CLI has no MCP JSON command).
 	process.env.PI_BIN = path.join(dir, "no-such-pi");
 
 	write(path.join(agent, "settings.json"), JSON.stringify({ packages: ["npm:@acme/pi-tools@1.0.0", { source: "git:github.com/acme/x" }] }));
@@ -31,7 +31,7 @@ test("installed pi resources and MCP config are read from disk without secrets",
 	try {
 		const { piResources, mcpReport } = await import("./inventory.js");
 		const resources = piResources(project);
-		const names = resources.map((r) => `${r.kind}:${r.name}:${r.scope}`).sort();
+		const names = resources.filter((r) => !r.path || r.path.startsWith(dir + path.sep)).map((r) => `${r.kind}:${r.name}:${r.scope}`).sort();
 		assert.deepEqual(names, [
 			"extension:folder-ext:user",
 			"extension:hello:user",
@@ -40,10 +40,11 @@ test("installed pi resources and MCP config are read from disk without secrets",
 			"prompt:/fix-tests:project",
 			"skill:pdf:user",
 		]);
-		assert.equal(resources.find((r) => r.kind === "skill")?.description, "Work with PDF files");
+		assert.equal(resources.find((r) => r.kind === "skill" && r.name === "pdf")?.description, "Work with PDF files");
 
 		const asAdmin = await mcpReport(project, true);
 		assert.equal(asAdmin.live, false);
+		assert.equal(asAdmin.note, "Showing configured MCP servers only; live MCP status is not available through this pi CLI.");
 		const github = asAdmin.servers.find((s) => s.name === "github");
 		assert.equal(github?.enabled, false, "the project entry overrides enabled");
 		assert.equal(github?.target, "npx -y server-github");

@@ -80,13 +80,13 @@ export function NewSessionDialog({
   const selected = harnesses.find((h) => h.id === harness)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="grid-cols-[minmax(0,1fr)]">
         <DialogHeader>
           <DialogTitle>{defaultsOnly ? "Session defaults" : "New session"}</DialogTitle>
-          <DialogDescription className="truncate">{defaultsOnly ? "Your default provider, model and thinking level, saved across devices." : `in /${folder}`}</DialogDescription>
+          <DialogDescription className="min-w-0 break-words">{defaultsOnly ? "Your default provider, model and thinking level, saved across devices." : `in /${folder}`}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid gap-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
             <Label>Harness</Label>
             <Select value={harness} onValueChange={setHarness}>
               <SelectTrigger className="w-full">
@@ -104,11 +104,11 @@ export function NewSessionDialog({
             </Select>
             {selected && <p className="text-xs text-muted-foreground">{selected.ok ? selected.description : selected.reason}</p>}
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
             <Label>Model</Label>
             {loadingModels ? <Loader2 className="size-4 animate-spin" /> : <ModelPicker models={models} value={model} onChange={setModel} />}
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
             <Label>Thinking</Label>
             <ThinkingPicker value={thinking} onChange={setThinking} />
           </div>
