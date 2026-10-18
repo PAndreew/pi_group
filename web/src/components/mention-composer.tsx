@@ -69,6 +69,7 @@ export function MentionComposer({
   hash = "folder",
   folder = "",
   sessionKey,
+  controls,
 }: {
   value: string
   onChange: (value: string) => void
@@ -83,6 +84,7 @@ export function MentionComposer({
   hash?: "folder" | "paths" | "off"
   folder?: string
   sessionKey?: string
+  controls?: React.ReactNode
 }) {
   const input = useRef<HTMLTextAreaElement>(null)
   const [everyone, setEveryone] = useState<Person[]>([])
@@ -172,7 +174,7 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <div className="relative">
+    <div className="relative rounded-md border focus-within:ring-1 focus-within:ring-ring">
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
@@ -220,7 +222,7 @@ export function MentionComposer({
         value={value}
         placeholder={placeholder}
         rows={1}
-        className="max-h-48 min-h-12 resize-none py-[11px] md:py-[13px] pr-14"
+        className="max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
         onSelect={(e) => setToken(activeToken(value, e.currentTarget.selectionStart))}
         onBlur={() => setTimeout(() => setToken(undefined), 100)}
@@ -248,10 +250,13 @@ export function MentionComposer({
           }
         }}
       />
+      <div className="flex items-center gap-1 px-2 pb-2">
+      {controls}
       {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-      <Button className="absolute right-2 bottom-2" size="icon-sm" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
+      <Button className="ml-auto shrink-0" size="icon-sm" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
         {busy ? <Loader2 className="animate-spin" /> : <ArrowUp />}
       </Button>
+      </div>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -184,6 +185,7 @@ const toModelInfo = (m: any): ModelInfo => ({
 	id: m.id,
 	name: m.name ?? m.id,
 	reasoning: m.reasoning,
+	thinkingLevels: getSupportedThinkingLevels(m),
 	contextWindow: m.contextWindow,
 	input: m.input,
 });

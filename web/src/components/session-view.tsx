@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { PiAvatar } from "@/components/mention-composer"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
 import { InteractionCards } from "@/components/interaction-cards"
@@ -497,7 +498,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     e.target.value = ""
                   }}
                 />
-                <div className="relative min-w-0 flex-1">
+                <div className="relative min-w-0 flex-1 rounded-md border">
                 <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
                 <PathDropup value={text} folder={summary?.path ?? ""} onChange={setText} />
                 <Textarea
@@ -505,16 +506,19 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
                   placeholder={running ? (mode === "steer" ? "Steer the agent…" : "Queue a follow-up…") : "Message the agent…"}
-                  className={cn("max-h-48 min-h-12 resize-none py-[11px] md:py-[13px] pr-14", running && "pr-24")}
+                  className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
                   rows={1}
                 />
                 {running && (
-                  <Button className="absolute right-11 bottom-2" variant="destructive" size="icon-sm" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
+                  <Button className="shrink-0" variant="destructive" size="icon-sm" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
                     <CircleStop />
                   </Button>
                 )}
                 {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-                <Button className="absolute right-2 bottom-2" size="icon-sm" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
+                <div className="flex items-center gap-1 px-2 pb-2">
+                <AgentToggle checked disabled />
+                <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
+                <Button className="shrink-0" size="icon-sm" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
                 </div>
@@ -523,6 +527,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
             </>
           ) : (
+                </div>
             <p className="flex items-center justify-center gap-1.5 py-2 text-sm text-muted-foreground">
               <Eye className="size-4" /> You have view-only access.
             </p>

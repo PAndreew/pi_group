@@ -11,7 +11,8 @@ export interface ModelInfo {
 	provider: string;
 	id: string;
 	name: string;
-	reasoning?: boolean;
+	thinkingLevels?: string[];
+  reasoning?: boolean;
 	contextWindow?: number;
 	input?: string[];
 }

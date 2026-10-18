@@ -1,3 +1,4 @@
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -375,7 +376,7 @@ export class PiDurableAdapter implements HarnessAdapter {
 	async listModels(): Promise<ModelInfo[]> {
 		if (!this.models) return [];
 		const models = await this.models.getAvailable();
-		return (models as Any[]).map((m) => ({ provider: m.provider, id: m.id, name: m.name ?? m.id, reasoning: m.reasoning, contextWindow: m.contextWindow, input: m.input }));
+		return (models as Any[]).map((m) => ({ provider: m.provider, id: m.id, name: m.name ?? m.id, reasoning: m.reasoning, thinkingLevels: getSupportedThinkingLevels(m), contextWindow: m.contextWindow, input: m.input }));
 	}
 
 	private storagePath(folder: string) {

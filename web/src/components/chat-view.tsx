@@ -2,6 +2,7 @@ import { ArrowLeft, ExternalLink, Folder, Loader2, TriangleAlert } from "lucide-
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
@@ -93,6 +94,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const [text, setText] = useState("")
   const [reply, setReply] = useState<ReplyTarget>()
   const [sending, setSending] = useState(false)
+  const [agent, setAgent] = useState(false)
   const [uploading, setUploading] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -259,8 +261,9 @@ export function ChatView({ chatId }: { chatId: string }) {
           busy={sending || uploading}
           selfId={user?.id}
           hash="paths"
-          placeholder={chat?.pi ? "Message… (@pi to ask pi, # for files)" : "Message… (@pi to bring in pi)"}
-          onSubmit={(message) => send(message.raw)}
+          placeholder="Message… (# for files)"
+          controls={<><AgentToggle checked={agent} onChange={setAgent} /><ComposerControls sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading} /></>}
+          onSubmit={(message) => send(agent && !message.pi ? `@pi ${message.raw}` : message.raw)}
         />
         {chat && (
           <ComposerTools
