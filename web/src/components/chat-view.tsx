@@ -5,6 +5,8 @@ import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
+import { ReplyButton, ReplyPreview, selectReply } from "@/components/message-reply"
+import { replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
@@ -16,7 +18,7 @@ import { cn } from "@/lib/utils"
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
-function PiMessage({ m, onWatch }: { m: ChatMessage; onWatch?: () => void }) {
+function PiMessage({ m, onWatch, children }: { m: ChatMessage; onWatch?: () => void; children?: React.ReactNode }) {
   const text = messageText(m.message.content)
   return (
     <div className="flex items-start gap-2">
@@ -44,6 +46,7 @@ function PiMessage({ m, onWatch }: { m: ChatMessage; onWatch?: () => void }) {
         ) : (
           <Markdown text={text} className="text-sm" />
         )}
+        {children}
       </div>
     </div>
   )
@@ -86,7 +89,9 @@ export function ChatView({ chatId }: { chatId: string }) {
   const nav = useNav()
   const [chat, setChat] = useState<Chat>()
   const [messages, setMessages] = useState<ChatMessage[]>()
+  const stick = useRef(true)
   const [text, setText] = useState("")
+  const [reply, setReply] = useState<ReplyTarget>()
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
@@ -96,6 +101,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   latest.current = messages
 
   useEffect(() => {
+    stick.current = true
     setChat(undefined)
     setMessages(undefined)
     let alive = true
@@ -152,16 +158,18 @@ export function ChatView({ chatId }: { chatId: string }) {
   const lastId = messages?.at(-1)?.id
   useEffect(() => {
     const el = scroller.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el && stick.current) el.scrollTop = el.scrollHeight
     if (lastId && document.visibilityState === "visible") void api.readChat(chatId, lastId).catch(() => {})
   }, [chatId, lastId, messages])
 
   const send = async (raw: string) => {
     setSending(true)
     try {
-      const { message } = await api.sendChat(chatId, raw)
+      const { message } = await api.sendChat(chatId, replyPrompt(raw, reply, true))
       setMessages((current) => mergeMessages(current, [message]))
       setText("")
+      setReply(undefined)
+      stick.current = true
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -186,8 +194,8 @@ export function ChatView({ chatId }: { chatId: string }) {
   const watch = chat?.sessionKey ? () => nav.openSession(chat.sessionKey!, chat.folder) : undefined
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-2 border-b px-2 py-1.5">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center gap-2 border-b px-2 py-1.5">
         <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={nav.home} aria-label="Back to chats">
           <ArrowLeft />
         </Button>
@@ -209,20 +217,30 @@ export function ChatView({ chatId }: { chatId: string }) {
         )}
       </header>
 
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div ref={scroller} onScroll={(event) => {
+        const el = event.currentTarget
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      }} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {!messages && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         <div className="mx-auto grid max-w-3xl gap-2">
           {messages?.map((m, i) => {
-            if (m.message.role === "assistant") return <PiMessage key={m.id} m={m} onWatch={watch} />
-            const author = (m.message.author as { id?: string } | undefined)?.id
+            const sourceId = `chat-${chatId}-${m.id}`
+            const author = (m.message.author as { username?: string } | undefined)?.username ?? "Unknown author"
+            const content = messageText(m.message.content)
+            const action = content && m.status !== "working" ? <ReplyButton onClick={() => selectReply(setReply, { author: m.message.role === "assistant" ? "Beezy" : author, text: content, sourceId, assistant: m.message.role === "assistant" })} /> : null
+            if (m.message.role === "assistant") {
+              return <div key={m.id} id={sourceId}><PiMessage m={m} onWatch={watch}>{action}</PiMessage></div>
+            }
+            const authorId = (m.message.author as { id?: string } | undefined)?.id
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
-            return <HumanMessage key={m.id} m={m} own={author === user?.id} showName={author !== previous} />
+            return <div key={m.id} id={sourceId}><HumanMessage m={m} own={authorId === user?.id} showName={authorId !== previous} /><div className={cn(authorId === user?.id && "text-right")}>{action}</div></div>
           })}
           <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
         </div>
       </div>
 
-      <div className={cn("mx-auto grid w-full max-w-3xl gap-1 border-t p-2 sm:p-3", !chat && "pointer-events-none opacity-60")}>
+      <div data-chat-composer className={cn("mx-auto grid w-full max-w-3xl shrink-0 gap-1 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3", !chat && "pointer-events-none opacity-60")}>
+        {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
         <input
           ref={fileInput}
           type="file"

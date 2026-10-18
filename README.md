@@ -91,6 +91,21 @@ npm run user -- list
 
 Run it as a service: see [`deploy/pi-group.service`](deploy/pi-group.service).
 
+### Replies and mobile scrolling
+
+Use **Reply** on a human or completed assistant message in a chat/session. A preview above the composer lets you jump to the source or cancel without losing your draft. Sending includes a plain-text quotation in the normal prompt; it does not rewrite Pi history or create a session branch. Replying to Beezy in a group automatically addresses `@pi`; mentions inside quotations do not invite people or invoke the agent.
+
+The app document is locked to the visible mobile viewport; only the message list scrolls, keeping the header and composer outside it. Software keyboard resizing follows `visualViewport`, with pinch zoom preserved.
+
+Regression checks (browser tests use mocked APIs, never real sessions):
+
+```bash
+npm test --prefix web
+(cd web && npx playwright install chromium --only-shell)
+# Start npm run dev:web in another terminal, then:
+TEST_URL=http://localhost:5173 npm run test:browser --prefix web
+```
+
 ### Phones and HTTPS
 
 The UI works over plain HTTP on a LAN, but browsers only allow notifications on HTTPS (or `localhost`). Outside your LAN, put it behind HTTPS (e.g. `tailscale serve 8787`, Caddy, nginx) and set `COOKIE_SECURE=true`. SSE needs proxy buffering off (nginx: `proxy_buffering off;`; the server already sends `X-Accel-Buffering: no`).

@@ -23,6 +23,8 @@ import { InteractionCards } from "@/components/interaction-cards"
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
+import { ReplyButton, ReplyPreview, selectReply } from "@/components/message-reply"
+import { replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
@@ -175,6 +177,7 @@ function AgentBubble({
 
 function RunView({
   run,
+  onReply,
   onOpen,
   question,
   onAnswer,
@@ -185,11 +188,25 @@ function RunView({
   question?: ExtensionDialog
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
+  onReply?: (reply: ReplyTarget) => void
 }) {
+  const sourceId = `run-${run.key}`
+  const userText = run.user ? messageText(run.user.content) : ""
+  const answerText = run.answer
   return (
-    <div className="space-y-2">
-      {run.user && <UserBubble message={run.user} />}
-      {(run.steps.length > 0 || run.running || run.answer || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} />}
+    <div className="space-y-2" id={sourceId}>
+      {run.user && (
+        <>
+          <UserBubble message={run.user} />
+          {onReply && userText && (
+            <div className="text-right">
+              <ReplyButton onClick={() => onReply({ author: run.user?.author?.username ?? "Unknown author", text: userText, sourceId })} />
+            </div>
+          )}
+        </>
+      )}
+      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} />}
+      {onReply && answerText && !run.running && <ReplyButton onClick={() => onReply({ author: "Beezy", text: answerText, sourceId, assistant: true })} />}
     </div>
   )
 }
@@ -204,6 +221,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [open, setOpen] = useState<{ run: number; step: number | null } | null>(null)
   const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
+  const [reply, setReply] = useState<ReplyTarget>()
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
@@ -287,13 +305,14 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
     if ((!body && files.length === 0) || !summary) return
     setSending(true)
     try {
-      let prompt = body
+      const message = replyPrompt(body, reply)
+      let prompt = message
       let images: { data: string; mimeType: string }[] | undefined
       if (files.length) {
         const dir = summary.path ? `${summary.path}/uploads` : "uploads"
         const uploaded = await api.upload(dir, files)
         const rel = uploaded.files.map((f) => (summary.path && f.path.startsWith(`${summary.path}/`) ? f.path.slice(summary.path.length + 1) : f.path))
-        prompt = `${body || "See the attached files."}\n\nAttached files (relative to the working directory):\n${rel.map((p) => `- ${p}`).join("\n")}`
+        prompt = `${message || "See the attached files."}\n\nAttached files (relative to the working directory):\n${rel.map((p) => `- ${p}`).join("\n")}`
         const model = models.find((m) => m.provider === state?.model?.provider && m.id === state?.model?.id)
         if (!model || model.input?.includes("image")) {
           const imgs = files.filter((f) => f.type.startsWith("image/") && f.size <= MAX_INLINE_IMAGE)
@@ -303,6 +322,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       await api.prompt(sessionKey, { text: prompt, images, mode: running ? mode : undefined })
       setText("")
       setFiles([])
+      setReply(undefined)
       stick.current = true
       if (!summary.live) refresh()
     } catch (error) {
@@ -324,8 +344,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const queue = [...(state?.queue.steering ?? []).map((t) => ({ t, k: "steer" })), ...(state?.queue.followUp ?? []).map((t) => ({ t, k: "follow-up" }))]
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-1.5 border-b px-2 py-1.5 sm:px-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center gap-1.5 border-b px-2 py-1.5 sm:px-3">
         {header}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium" title={title}>
@@ -393,7 +413,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           const el = e.currentTarget
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
         }}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <div className="mx-auto max-w-3xl space-y-5 px-3 py-4 sm:px-4">
           {!state && <Loader2 className="mx-auto mt-10 animate-spin text-muted-foreground" />}
@@ -404,6 +424,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
             <RunView
               key={run.key}
               run={run}
+              onReply={canWrite ? (target) => selectReply(setReply, target) : undefined}
               onOpen={(step) => setOpen({ run: index, step })}
               question={run === lastRun ? question : undefined}
               onAnswer={run === lastRun && question && canWrite ? answer(question) : undefined}
@@ -420,8 +441,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
         </div>
       </div>
 
-      <div className="border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
+      <div data-chat-composer className="shrink-0 border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
         <div className="mx-auto max-w-3xl space-y-2">
+          {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
           {queue.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {queue.map((q, i) => (

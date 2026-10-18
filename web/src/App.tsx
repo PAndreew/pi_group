@@ -15,6 +15,7 @@ import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
+import { useAppViewport } from "@/hooks/use-app-viewport"
 import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
 import { api, type SessionSummary } from "@/lib/api"
 import { type Nav, NavContext } from "@/lib/nav"
@@ -169,7 +170,7 @@ function Workspace() {
 
   return (
     <NavContext.Provider value={nav}>
-      <div className="flex h-dvh flex-col">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <header className={cn("h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
           <button type="button" onClick={nav.home} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
             <img src="/beezy-logo.svg" alt="beezy" className="size-7" />
@@ -229,7 +230,7 @@ function Workspace() {
 
         <div className="flex min-h-0 flex-1">
           {inside && <ChatList selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex" />}
-          <main className="min-w-0 flex-1">
+          <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
             {route.chat ? (
               <ChatView key={route.chat} chatId={route.chat} />
             ) : route.session ? (
@@ -280,6 +281,7 @@ function Gate() {
 }
 
 export default function App() {
+  useAppViewport()
   return (
     <AuthProvider>
       <TooltipProvider>

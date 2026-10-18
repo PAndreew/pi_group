@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "node --experimental-strip-types --test test/*.test.mjs",
+    "test:browser": "node test/chat-mobile.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -35,6 +37,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "playwright": "1.62.1",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }
