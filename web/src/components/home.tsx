@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { ChatList } from "@/components/chat-list"
-import { AgentToggle, ComposerControls } from "@/components/composer-controls"
+import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { MentionComposer, parseMessage } from "@/components/mention-composer"
 import { useAuth } from "@/hooks/use-auth"
@@ -18,6 +18,7 @@ export function Home() {
   const [text, setText] = useState("")
   const [busy, setBusy] = useState(false)
   const [agent, setAgent] = useState(false)
+  const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [chatFolder, setChatFolder] = useState("pi-chat")
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export function Home() {
           placeholder="Start a chat: message, @someone, #folder…"
           controls={<>
             <AgentToggle checked={agent} onChange={setAgent} disabled={busy} />
-            <ComposerControls disabled={busy} onCamera={(files) => {
+            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || !agent} onCamera={(files) => {
               if (!files.length) return
               setBusy(true)
               void api.upload(folder, files).then(({ files: uploaded }) => {
@@ -54,7 +55,7 @@ export function Home() {
             if (!message.text) return void toast.info("Write a message too.")
             setBusy(true)
             try {
-              const started = await api.startChat({ text: message.text, pi: message.pi, userIds: message.people.map((p) => p.id), folder: message.folder })
+              const started = await api.startChat({ text: message.text, pi: message.pi, userIds: message.people.map((p) => p.id), folder: message.folder, ...(message.pi ? composerConfig : {}) })
               setText("")
               if (started.chat) nav.openChat(started.chat)
               else if (started.session) nav.openSession(started.session, message.folder ?? chatFolder)

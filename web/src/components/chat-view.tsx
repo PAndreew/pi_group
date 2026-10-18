@@ -2,7 +2,7 @@ import { ArrowLeft, ExternalLink, Folder, Loader2, TriangleAlert } from "lucide-
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
-import { AgentToggle, ComposerControls } from "@/components/composer-controls"
+import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
@@ -93,8 +93,9 @@ export function ChatView({ chatId }: { chatId: string }) {
   const stick = useRef(true)
   const [text, setText] = useState("")
   const [reply, setReply] = useState<ReplyTarget>()
-  const [sending, setSending] = useState(false)
   const [agent, setAgent] = useState(false)
+  const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
+  const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -167,7 +168,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const send = async (raw: string) => {
     setSending(true)
     try {
-      const { message } = await api.sendChat(chatId, replyPrompt(raw, reply, true))
+      const { message } = await api.sendChat(chatId, replyPrompt(raw, reply, true), agent ? composerConfig : undefined)
       setMessages((current) => mergeMessages(current, [message]))
       setText("")
       setReply(undefined)
@@ -234,10 +235,10 @@ export function ChatView({ chatId }: { chatId: string }) {
               return <div key={m.id} id={sourceId}><PiMessage m={m} onWatch={watch}>{action}</PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
+          <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
             return <div key={m.id} id={sourceId}><HumanMessage m={m} own={authorId === user?.id} showName={authorId !== previous} /><div className={cn(authorId === user?.id && "text-right")}>{action}</div></div>
           })}
-          <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
         </div>
       </div>
 
@@ -262,7 +263,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           selfId={user?.id}
           hash="paths"
           placeholder="Message… (# for files)"
-          controls={<><AgentToggle checked={agent} onChange={setAgent} /><ComposerControls sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading} /></>}
+          controls={<><AgentToggle checked={agent} onChange={setAgent} /><ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading || !agent} /></>}
           onSubmit={(message) => send(agent && !message.pi ? `@pi ${message.raw}` : message.raw)}
         />
         {chat && (

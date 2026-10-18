@@ -255,11 +255,11 @@ export const api = {
   /** Admins: fold every conversation not yet in memory into it now. */
   consolidateMemory: () => request<{ started: boolean; pending?: number; reason?: string }>("POST", "/api/memory/consolidate", { all: true }),
   chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),
-  startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
+  startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
   /** Messages after `after`, plus the current state of `check` (replies still shown as working). */
   chatSince: (id: string, after: number, check: number[]) =>
     request<{ messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}/messages?${q({ after: String(after), check: check.join(",") })}`),
-  sendChat: (id: string, text: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages`, { text }),
+  sendChat: (id: string, text: string, config?: { model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages`, { text, ...config }),
   readChat: (id: string, upTo: number) => request("POST", `/api/chats/${enc(id)}/read`, { upTo }),
   searchFolders: (query: string) => request<{ folders: string[]; chatFolder: string }>("GET", `/api/folders/search?${q({ q: query })}`),
   searchPaths: (query: string) => request<{ entries: { path: string; type: "dir" | "file" }[] }>("GET", `/api/folders/search?${q({ q: query, files: "1" })}`),

@@ -173,7 +173,7 @@ export function ensureChatFolder() {
 
 /** What the chat module needs from the session layer. */
 export interface ChatDeps {
-	createSession: (user: User, input: { harness: string; cwd: string; name?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"] }) => Promise<SessionMeta>;
+	createSession: (user: User, input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"] }) => Promise<SessionMeta>;
 	promptSession: (meta: SessionMeta, user: User, input: PromptInput) => Promise<void>;
 	/** Harness for a user's new sessions: their saved default if available, else the first that works. */
 	harnessFor: (user: User) => Promise<string>;
@@ -233,12 +233,12 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	// not when prompt() returns (that only acknowledges receipt).
 	const turns = new Map<string, Promise<void>>();
 	const completed = new Map<string, () => void>();
-	const askPi = (chat: Chat, user: User, upTo: number) => {
+	const askPi = (chat: Chat, user: User, upTo: number, options: { model?: { provider: string; id: string }; thinkingLevel?: string } = {}) => {
 		const previous = turns.get(chat.id) ?? Promise.resolve();
 		const turn = previous.catch(() => {}).then(async () => {
 			const done = new Promise<void>((resolve) => completed.set(chat.id, resolve));
 			try {
-				if (await performAskPi(getChat(chat.id)!, user, upTo)) await done;
+				if (await performAskPi(getChat(chat.id)!, user, upTo, options)) await done;
 			} finally {
 				completed.delete(chat.id);
 			}
@@ -249,7 +249,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	};
 
 	/** Hand the human messages since pi's last turn to its session (created on first mention), and post a "working" reply. */
-	const performAskPi = async (chat: Chat, user: User, upTo: number) => {
+	const performAskPi = async (chat: Chat, user: User, upTo: number, options: { model?: { provider: string; id: string }; thinkingLevel?: string } = {}) => {
 		// pi knows its own replies; it only needs what people said since.
 		const fresh = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id > ? AND id <= ? ORDER BY id").all(chat.id, chat.piCursor, upTo) as Row[])
 			.map(toMessage)
@@ -264,7 +264,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			if (!meta) {
 				const cwd = resolveSafe(chat.folder);
 				if (cwd === config.chatFolder) ensureChatFolder();
-				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, name: chatTitle({ ...chat, pi: true }) });
+				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, name: chatTitle({ ...chat, pi: true }) });
 				database().prepare("UPDATE chats SET session_key = ? WHERE id = ?").run(meta.key, chat.id);
 				chat = { ...chat, sessionKey: meta.key, pi: true };
 				addMembers(chat, []);
@@ -301,13 +301,14 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	// Chats post pi's replies themselves; memory runs are background work.
 	deps.setQuiet((key) => Boolean(chatOfSession(key)) || Boolean(store.session(key)?.memory));
 
-	const sendSchema = z.object({ text: z.string().trim().min(1).max(50_000) });
+	const configSchema = z.object({ model: z.object({ provider: z.string().min(1), id: z.string().min(1) }).optional(), thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional() });
+	const sendSchema = configSchema.extend({ text: z.string().trim().min(1).max(50_000) });
 
 	/** Start a chat: with only @pi it is a plain session; with people it is a chat (pi joins if mentioned). */
 	router.post("/chats", async (req, res) => {
 		const user = req.user!;
 		const body = z
-			.object({ text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional() })
+			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional() })
 			.parse(req.body);
 		const others = [...new Set(body.userIds)].filter((id) => id !== user.id && store.userById(id));
 		if (!body.pi && others.length === 0) throw new HttpError(400, "Mention @pi or at least one person");
@@ -315,7 +316,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		if (!statSync(cwd).isDirectory()) throw new HttpError(400, "Not a folder");
 
 		if (others.length === 0) {
-			const meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd });
+			const meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, model: body.model, thinkingLevel: body.thinkingLevel });
 			await deps.promptSession(meta, user, { text: body.text });
 			return void res.json({ session: meta.key });
 		}
@@ -327,7 +328,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		addMembers(chat, [user.id, ...others]);
 		const first = insert(id, { role: "user", content: [{ type: "text", text: body.text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
 		fanOut(chat, "chat_message", first, { author: user.username, text: body.text, except: user.id });
-		if (body.pi) void askPi(chat, user, first.id).catch((error) => console.error("chat: pi failed", error));
+		if (body.pi) void askPi(chat, user, first.id, body).catch((error) => console.error("chat: pi failed", error));
 		res.json({ chat: id });
 	});
 
@@ -383,7 +384,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	router.post("/chats/:id/messages", (req, res) => {
 		const user = req.user!;
 		let chat = membership(String(req.params.id), user);
-		const { text } = sendSchema.parse(req.body);
+		const { text, ...options } = sendSchema.parse(req.body);
 		const names = mentions(text);
 		const newcomers = names.map((n) => store.userByName(n)?.id).filter((id): id is string => Boolean(id));
 		if (newcomers.length) addMembers(chat, newcomers);
@@ -391,7 +392,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		database().prepare("UPDATE members SET last_read = ? WHERE chat_id = ? AND user_id = ?").run(message.id, chat.id, user.id);
 		chat = getChat(chat.id)!;
 		fanOut(chat, "chat_message", message, { author: user.username, text, except: user.id });
-		if (names.includes("pi")) void askPi(chat, user, message.id).catch((error) => console.error("chat: pi failed", error));
+		if (names.includes("pi")) void askPi(chat, user, message.id, options).catch((error) => console.error("chat: pi failed", error));
 		res.json({ message });
 	});
 
