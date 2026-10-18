@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { ChatList } from "@/components/chat-list"
+import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { MentionComposer, parseMessage } from "@/components/mention-composer"
 import { useAuth } from "@/hooks/use-auth"
@@ -16,6 +17,7 @@ export function Home() {
   const nav = useNav()
   const [text, setText] = useState("")
   const [busy, setBusy] = useState(false)
+  const [agent, setAgent] = useState(false)
   const [chatFolder, setChatFolder] = useState("pi-chat")
 
   useEffect(() => {
@@ -35,8 +37,19 @@ export function Home() {
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder="Start a chat: @pi, @someone, #folder…"
+          placeholder="Start a chat: message, @someone, #folder…"
+          controls={<>
+            <AgentToggle checked={agent} onChange={setAgent} disabled={busy} />
+            <ComposerControls disabled={busy} onCamera={(files) => {
+              if (!files.length) return
+              setBusy(true)
+              void api.upload(folder, files).then(({ files: uploaded }) => {
+                setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
+              }, (error) => toast.error(error.message)).finally(() => setBusy(false))
+            }} />
+          </>}
           onSubmit={async (message) => {
+            message.pi ||= agent
             if (!message.pi && message.people.length === 0) return void toast.info("Mention @pi or at least one person to start a chat.")
             if (!message.text) return void toast.info("Write a message too.")
             setBusy(true)
