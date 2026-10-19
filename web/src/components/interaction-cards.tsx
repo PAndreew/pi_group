@@ -19,7 +19,7 @@ function InteractionCard({ card, canWrite, onResolved }: { card: Interaction; ca
   }
   const checked = pending ? selected : card.selected ?? []
   return (
-    <section className="min-w-0 rounded-lg border bg-card p-4" aria-label={card.spec.title}>
+    <section className="min-w-0 max-h-[50dvh] overflow-y-auto overscroll-contain rounded-lg border bg-card p-4 text-card-foreground" aria-label={card.spec.title}>
       <h3 className="font-medium break-words">{card.spec.title}</h3>
       {card.spec.description && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{card.spec.description}</p>}
       <fieldset disabled={!pending || !canWrite || busy} className="mt-3 grid gap-2">
@@ -48,7 +48,7 @@ function InteractionCard({ card, canWrite, onResolved }: { card: Interaction; ca
 }
 
 /** Persisted cards stay available across reloads, including to other session participants. */
-export function InteractionCards({ sessionKey, canWrite = false }: { sessionKey?: string; canWrite?: boolean }) {
+export function useInteractions(sessionKey?: string) {
   const [cards, setCards] = useState<Interaction[]>([])
   useEffect(() => {
     if (!sessionKey) return
@@ -69,5 +69,13 @@ export function InteractionCards({ sessionKey, canWrite = false }: { sessionKey?
     document.addEventListener("visibilitychange", onVisible)
     return () => { alive = false; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible) }
   }, [sessionKey])
-  return <div className="grid gap-3">{cards.filter((c) => c.sessionKey === sessionKey).map((card) => <InteractionCard key={card.id} card={card} canWrite={canWrite} onResolved={(updated) => setCards((current) => current.map((c) => c.id === updated.id ? updated : c))} />)}</div>
+  return {
+    cards: cards.filter((card) => card.sessionKey === sessionKey),
+    onResolved: (updated: Interaction) => setCards((current) => current.map((card) => card.id === updated.id ? updated : card)),
+  }
+}
+
+export function InteractionCards({ cards, canWrite, onResolved }: { cards: Interaction[]; canWrite: boolean; onResolved: (card: Interaction) => void }) {
+  if (!cards.length) return null
+  return <div className="mt-2 grid min-w-0 gap-3">{cards.map((card) => <InteractionCard key={card.id} card={card} canWrite={canWrite} onResolved={onResolved} />)}</div>
 }

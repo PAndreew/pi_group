@@ -20,7 +20,7 @@ import { AuthorAvatar } from "@/components/author-avatar"
 import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
-import { InteractionCards } from "@/components/interaction-cards"
+import { InteractionCards, useInteractions } from "@/components/interaction-cards"
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
@@ -144,12 +144,14 @@ function AgentBubble({
   question,
   onAnswer,
   answered = [],
+  interactions,
 }: {
   run: Run
   onOpen: (index: number | null) => void
   question?: ExtensionDialog
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
+  interactions?: React.ReactNode
 }) {
   return (
     <div className="flex items-start gap-2">
@@ -169,6 +171,7 @@ function AgentBubble({
             <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
           </div>
         ))}
+        {interactions}
         {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
         {run.running && !run.answerStreaming && !question && (
           <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
@@ -187,6 +190,7 @@ function RunView({
   question,
   onAnswer,
   answered,
+  interactions,
 }: {
   run: Run
   onOpen: (index: number | null) => void
@@ -194,6 +198,7 @@ function RunView({
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
   onReply?: (reply: ReplyTarget) => void
+  interactions?: React.ReactNode
 }) {
   const sourceId = `run-${run.key}`
   const userText = run.user ? messageText(run.user.content) : ""
@@ -210,7 +215,7 @@ function RunView({
           )}
         </>
       )}
-      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} />}
+      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} interactions={interactions} />}
       {onReply && answerText && !run.running && <ReplyButton onClick={() => onReply({ author: "Beezy", text: answerText, sourceId, assistant: true })} />}
     </div>
   )
@@ -218,6 +223,7 @@ function RunView({
 
 export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: string; header?: React.ReactNode; onDeleted: (key: string) => void }) {
   const { user } = useAuth()
+  const interactions = useInteractions(sessionKey)
   const { state, connected, deletedBy } = useSessionStream(sessionKey)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [summary, setSummary] = useState<SessionSummary>()
@@ -434,9 +440,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               question={run === lastRun ? question : undefined}
               onAnswer={run === lastRun && question && canWrite ? answer(question) : undefined}
               answered={answered.filter((a) => a.runKey === run.key)}
+              interactions={<InteractionCards cards={interactions.cards.filter((card) => run.steps.some((step) => step.toolCall?.id === card.toolCallId))} canWrite={canWrite} onResolved={interactions.onResolved} />}
             />
           ))}
-          <InteractionCards sessionKey={sessionKey} canWrite={canWrite} />
           {state?.notice?.level === "error" && !running && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />

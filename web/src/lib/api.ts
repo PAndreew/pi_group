@@ -96,6 +96,7 @@ export interface Interaction {
   id: string
   sessionKey: string
   toolCallId: string
+  createdAt: string
   spec: { version: 1; type: "single_choice" | "multi_choice"; title: string; description?: string; options: { id: string; label: string; description?: string }[]; submitLabel?: string }
   status: "pending" | "answered" | "cancelled" | "expired"
   selected?: string[]

@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
-import { InteractionCards } from "@/components/interaction-cards"
+import { InteractionCards, useInteractions } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
 import { ReplyButton, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { replyPrompt, type ReplyTarget } from "@/lib/reply"
@@ -97,6 +97,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const { user } = useAuth()
   const nav = useNav()
   const [chat, setChat] = useState<Chat>()
+  const interactions = useInteractions(chat?.sessionKey)
   const [messages, setMessages] = useState<ChatMessage[]>()
   const stick = useRef(true)
   const [text, setText] = useState("")
@@ -240,13 +241,14 @@ export function ChatView({ chatId }: { chatId: string }) {
             const content = messageText(m.message.content)
             const action = content && m.status !== "working" ? <ReplyButton onClick={() => selectReply(setReply, { author: m.message.role === "assistant" ? "Beezy" : author, text: content, sourceId, assistant: m.message.role === "assistant" })} /> : null
             if (m.message.role === "assistant") {
-              return <div key={m.id} id={sourceId}><PiMessage m={m} onWatch={watch}>{action}</PiMessage></div>
+              const nextReply = messages.slice(i + 1).find((next) => next.message.role === "assistant")
+              const cards = interactions.cards.filter((card) => card.createdAt >= m.createdAt && (!nextReply || card.createdAt < nextReply.createdAt))
+              return <div key={m.id} id={sourceId}><PiMessage m={m} onWatch={watch}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} />{action}</PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
             return <div key={m.id} id={sourceId}><HumanMessage m={m} own={authorId === user?.id} showName={authorId !== previous} /><div className={cn(authorId === user?.id && "text-right")}>{action}</div></div>
           })}
-          <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
         </div>
       </div>
 
