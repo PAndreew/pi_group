@@ -95,5 +95,5 @@ export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled 
 }
 
 export function AgentToggle({ checked, onChange, disabled }: { checked: boolean; onChange?: (value: boolean) => void; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon mr-auto flex min-h-11 shrink-0 items-center gap-2 text-base font-medium"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-yellow-700 dark:bg-yellow-200"}`}><span className={`size-5 rounded-full bg-background transition-transform ${checked ? "translate-x-5" : ""}`} /></span>Agent</button>
+  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon mr-auto flex min-h-11 shrink-0 items-center gap-2 text-base font-medium"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-white"}`}><span className={`size-5 rounded-full bg-background transition-transform ${checked ? "translate-x-5" : ""}`} /></span>Agent</button>
 }

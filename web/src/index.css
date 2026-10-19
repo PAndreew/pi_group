@@ -175,8 +175,8 @@
 .composer-send:active,
 .dark .composer-send { background-color: #d1d5db; color: #000; }
 
-/* Composer controls: dark gold on light surfaces, butter on dark surfaces. */
-.composer-icon { color: #a16207; }
-.dark .composer-icon { color: #fde68a; }
+/* Composer controls: white when idle, theme-aware blue when active. */
+.composer-icon { color: #fff; }
+.dark .composer-icon { color: #fff; }
 .composer-icon:is([data-active="true"], :active, :focus-visible) { color: #1d4ed8; }
 .dark .composer-icon:is([data-active="true"], :active, :focus-visible) { color: #93c5fd; }
