@@ -6,7 +6,7 @@ import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
-import { ReplyButton, ReplyPreview, selectReply } from "@/components/message-reply"
+import { ReplyButton, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
@@ -59,20 +59,28 @@ function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; show
   if (own)
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">
-          {text}
-          <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}</div>
-        </div>
+        <ReplyStack text={text} align="end" className="max-w-[85%]">
+          {(body) => (
+            <div className="rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">
+              {body}
+              <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}</div>
+            </div>
+          )}
+        </ReplyStack>
       </div>
     )
   return (
     <div className="flex items-start gap-2">
       {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8" />}
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
-        {showName && <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">{author?.username}</div>}
-        {text}
-        <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}</div>
-      </div>
+      <ReplyStack text={text} className="max-w-[85%]">
+        {(body) => (
+          <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
+            {showName && <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">{author?.username}</div>}
+            {body}
+            <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}</div>
+          </div>
+        )}
+      </ReplyStack>
     </div>
   )
 }
@@ -235,10 +243,10 @@ export function ChatView({ chatId }: { chatId: string }) {
               return <div key={m.id} id={sourceId}><PiMessage m={m} onWatch={watch}>{action}</PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
-          <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
             return <div key={m.id} id={sourceId}><HumanMessage m={m} own={authorId === user?.id} showName={authorId !== previous} /><div className={cn(authorId === user?.id && "text-right")}>{action}</div></div>
           })}
+          <InteractionCards sessionKey={chat?.sessionKey} canWrite={Boolean(chat?.members.some((m) => m.id === user?.id))} />
         </div>
       </div>
 

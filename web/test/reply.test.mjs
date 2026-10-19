@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { replyPrompt } from '../src/lib/reply.ts'
+import { parseReply, replyPrompt } from '../src/lib/reply.ts'
 
 test('ordinary messages are unchanged', () => assert.equal(replyPrompt('Hello'), 'Hello'))
 test('session replies remain ordinary linear prompt text', () => {
@@ -17,4 +17,9 @@ test('quoted mentions never invoke pi or add participants', () => {
   assert.ok(!prompt.includes('@alice'))
   assert.ok(!prompt.includes('@bob'))
   assert.ok(prompt.endsWith('Thanks'))
+})
+test('sent replies parse back into quote and body', () => {
+  const reply = { author: '@bob', text: 'First\n\n@alice said', sourceId: 'one', assistant: true }
+  assert.deepEqual(parseReply(replyPrompt('Thanks\nagain', reply, true)), { author: '@bob', quote: 'First\n\n@alice said', body: 'Thanks\nagain' })
+  assert.equal(parseReply('Hello'), undefined)
 })

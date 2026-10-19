@@ -24,7 +24,7 @@ import { InteractionCards } from "@/components/interaction-cards"
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
-import { ReplyButton, ReplyPreview, selectReply } from "@/components/message-reply"
+import { ReplyButton, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
@@ -58,17 +58,21 @@ function UserBubble({ message }: { message: AgentMessage }) {
   const images = Array.isArray(message.content) ? message.content.filter((c: any) => c?.type === "image") : []
   return (
     <div className="flex items-start justify-end gap-2">
-      <div className="max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
-        <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
-        <div className="whitespace-pre-wrap break-words">{text}</div>
-        {images.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {images.map((img: any, i: number) => (
-              <img key={i} src={`data:${img.mimeType};base64,${img.data}`} alt="" className="max-h-28 rounded" />
-            ))}
+      <ReplyStack text={text} align="end" className="max-w-[88%]">
+        {(body) => (
+          <div className="rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+            <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
+            <div className="whitespace-pre-wrap break-words">{body}</div>
+            {images.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {images.map((img: any, i: number) => (
+                  <img key={i} src={`data:${img.mimeType};base64,${img.data}`} alt="" className="max-h-28 rounded" />
+                ))}
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </ReplyStack>
       <AuthorAvatar id={message.author?.id ?? "unknown"} name={message.author?.username ?? "?"} />
     </div>
   )
@@ -522,12 +526,12 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
                 </div>
+                </div>
               </div>
               <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()} onModel={() => setModelOpen(true)} onInsert={setText} />
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
             </>
           ) : (
-                </div>
             <p className="flex items-center justify-center gap-1.5 py-2 text-sm text-muted-foreground">
               <Eye className="size-4" /> You have view-only access.
             </p>
