@@ -502,7 +502,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     e.target.value = ""
                   }}
                 />
-                <div className="relative mb-9 min-w-0 flex-1 rounded-md border">
+                <div data-composer-box className="relative mb-9 min-w-0 flex-1 rounded-md border">
                 <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
                 <PathDropup value={text} folder={summary?.path ?? ""} onChange={setText} />
                 <Textarea
@@ -522,7 +522,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
                 <AgentToggle checked disabled />
                 <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
-                <Button className="composer-icon size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
+                <Button className="composer-send size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
                   {sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
                 </Button>
                 </div>

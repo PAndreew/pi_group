@@ -170,6 +170,11 @@
 
 .scrollbar-thin { scrollbar-width: thin; }
 
+.composer-send,
+.composer-send:hover,
+.composer-send:active,
+.dark .composer-send { background-color: #d1d5db; color: #000; }
+
 /* Composer controls: dark gold on light surfaces, butter on dark surfaces. */
 .composer-icon { color: #a16207; }
 .dark .composer-icon { color: #fde68a; }

@@ -174,7 +174,7 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <div className="relative mb-9 rounded-md border focus-within:ring-1 focus-within:ring-ring">
+    <div data-composer-box className="relative mb-9 rounded-md border focus-within:ring-1 focus-within:ring-ring">
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
@@ -253,7 +253,7 @@ export function MentionComposer({
       <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
       {controls}
       {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-      <Button className="composer-icon ml-auto size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
+      <Button className="composer-send ml-auto size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
         {busy ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
       </Button>
       </div>
