@@ -5,6 +5,7 @@
   "description": "Mobile-first, multi-user web UI for agent harnesses (pi coding agent, pi-durable).",
   "license": "MIT",
   "scripts": {
+    "deploy": "bash deploy/deploy.sh",
     "setup": "npm ci --prefix server && npm ci --prefix web",
     "build": "npm run build --prefix web && npm run build --prefix server",
     "start": "npm start --prefix server",
