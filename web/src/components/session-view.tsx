@@ -514,7 +514,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   rows={1}
                 />
                 {running && (
-                  <Button className="shrink-0" variant="destructive" size="icon-sm" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
+                  <Button className="size-11 shrink-0 [&_svg]:size-6" variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
                     <CircleStop />
                   </Button>
                 )}
@@ -522,7 +522,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 <div className="flex items-center gap-1 px-2 pb-2">
                 <AgentToggle checked disabled />
                 <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
-                <Button className="shrink-0" size="icon-sm" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
+                <Button className="size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
                   {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
                 </Button>
                 </div>

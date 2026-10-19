@@ -47,7 +47,7 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
     try { await action() } catch (error) { toast.error((error as Error).message) } finally { setBusy(false) }
   }
   return <>
-    <select aria-label="Current session model" title="Current session model" className="h-9 min-w-0 max-w-40 rounded bg-transparent text-xs" disabled={disabled || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
+    <select aria-label="Current session model" title="Current session model" className="h-11 min-w-0 max-w-40 flex-1 rounded bg-transparent text-xs" disabled={disabled || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
       const [provider, id] = JSON.parse(e.target.value)
       if (sessionKey) void change(() => api.setModel(sessionKey, provider, id))
       else {
@@ -58,8 +58,8 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
       {!model && <option value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""}>{state?.model?.id ?? "Model"}</option>}
       {models.map((m) => <option key={`${m.provider}/${m.id}`} value={JSON.stringify([m.provider, m.id])}>{m.name}</option>)}
     </select>
-    <div className="relative">
-      <button type="button" className="flex h-9 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} disabled={disabled || busy || levels.length < 2} onClick={() => setOpen(!open)}><Brain className="size-5" /><span className="text-xs">{short[level] ?? level}</span></button>
+    <div className="relative shrink-0">
+      <button type="button" className="flex h-11 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} disabled={disabled || busy || levels.length < 2} onClick={() => setOpen(!open)}><Brain className="size-6" /><span className="text-xs">{short[level] ?? level}</span></button>
       {open && <div className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded border bg-popover p-3 text-popover-foreground shadow" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false) }}>
         <div className="mb-2 flex justify-between text-xs"><span>Reasoning: {level}</span><button type="button" aria-label="Close reasoning" onClick={() => setOpen(false)}>×</button></div>
         <input aria-label="Reasoning level" aria-valuetext={level} type="range" min={0} max={levels.length - 1} step={1} value={Math.max(0, levels.indexOf(level))} disabled={busy} className="w-full" onChange={(e) => { const thinkingLevel = levels[Number(e.target.value)]; if (sessionKey) void change(() => api.setThinking(sessionKey, thinkingLevel)); else onDraftChange?.({ ...draft, thinkingLevel }) }} />
@@ -67,10 +67,10 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
       </div>}
     </div>
     <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onCamera(Array.from(e.target.files ?? [])); e.target.value = "" }} />
-    <button type="button" disabled={disabled} className="grid size-9 shrink-0 place-items-center rounded hover:bg-accent" aria-label="Take photo" onClick={() => camera.current?.click()}><Camera className="size-5" /></button>
+    <button type="button" disabled={disabled} className="grid size-11 shrink-0 place-items-center rounded hover:bg-accent" aria-label="Take photo" onClick={() => camera.current?.click()}><Camera className="size-6" /></button>
   </>
 }
 
 export function AgentToggle({ checked, onChange, disabled }: { checked: boolean; onChange?: (value: boolean) => void; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} className="mr-auto flex shrink-0 items-center gap-1.5 text-xs"><span className={`inline-flex h-5 w-9 items-center rounded-full p-0.5 ${checked ? "bg-primary" : "bg-muted-foreground"}`}><span className={`size-4 rounded-full bg-background transition-transform ${checked ? "translate-x-4" : ""}`} /></span>Agent</button>
+  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} className="mr-auto flex min-h-11 shrink-0 items-center gap-1.5 text-xs"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 ${checked ? "bg-primary" : "bg-muted-foreground"}`}><span className={`size-5 rounded-full bg-background transition-transform ${checked ? "translate-x-5" : ""}`} /></span>Agent</button>
 }

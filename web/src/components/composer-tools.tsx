@@ -36,7 +36,7 @@ export function ComposerTools({
   const [panel, setPanel] = useState<Panel>()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
   const icon = (name: Panel | "attach" | "model", label: string, node: React.ReactNode, onClick: () => void) => (
-    <Button key={name} variant="ghost" size="icon" className="[&_svg:not([class*='size-'])]:size-5" onClick={onClick} aria-label={label} title={label}>
+    <Button key={name} variant="ghost" size="icon" className="size-11 [&_svg]:size-6" onClick={onClick} aria-label={label} title={label}>
       {node}
     </Button>
   )
@@ -48,7 +48,7 @@ export function ComposerTools({
         {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot />, onModel ?? nav.openDefaults)}
         {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal />, () => setPanel("terminal"))}
         {icon("tools", "pi tools, commands and skills", <Hammer />, () => setPanel("tools"))}
-        {icon("mcp", "MCP servers", <McpIcon className="size-5" />, () => setPanel("mcp"))}
+        {icon("mcp", "MCP servers", <McpIcon className="size-6" />, () => setPanel("mcp"))}
         {icon("monitor", "Resource monitor", <Gauge />, () => setPanel("monitor"))}
         {icon("explorer", "Folders and files", <FolderOpen />, () => setPanel("explorer"))}
       </div>

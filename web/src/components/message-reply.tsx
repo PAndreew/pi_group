@@ -30,14 +30,14 @@ export function ReplyPreview({ reply, onCancel }: { reply: ReplyTarget; onCancel
 export function ReplyStack({ text, align = "start", className, children }: { text: string; align?: "start" | "end"; className?: string; children: (body: string) => React.ReactNode }) {
   const reply = parseReply(text)
   return (
-    <div className={cn("flex min-w-0 flex-col", align === "end" ? "items-end" : "items-start", className)}>
+    <div className={cn("relative isolate flex min-w-0 flex-col",  align === "end" ? "items-end" : "items-start", className)}>
       {reply && (
-        <div className="mx-2 -mb-3 max-w-full rounded-xl border border-border/50 bg-muted/40 px-3 pt-1.5 pb-4 text-xs text-muted-foreground">
+        <div className={cn("relative z-0 -mb-5 max-w-[calc(100%-0.75rem)] rounded-2xl border border-border/60 bg-muted px-3 pt-2 pb-7 text-xs text-muted-foreground opacity-65", align === "end" ? "mr-3" : "ml-3")}>
           <span className="block font-medium">{reply.author}</span>
           <span className="line-clamp-3 whitespace-pre-wrap break-words">{reply.quote}</span>
         </div>
       )}
-      <div className="relative max-w-full">{children(reply ? reply.body : text)}</div>
+      <div className="relative z-10 max-w-full">{children(reply ? reply.body : text)}</div>
     </div>
   )
 }
