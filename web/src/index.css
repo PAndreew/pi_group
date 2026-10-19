@@ -169,3 +169,9 @@
 .dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
 
 .scrollbar-thin { scrollbar-width: thin; }
+
+/* Composer controls: dark gold on light surfaces, butter on dark surfaces. */
+.composer-icon { color: #a16207; }
+.dark .composer-icon { color: #fde68a; }
+.composer-icon:is([data-active="true"], :active, :focus-visible) { color: #1d4ed8; }
+.dark .composer-icon:is([data-active="true"], :active, :focus-visible) { color: #93c5fd; }

@@ -36,7 +36,7 @@ export function ComposerTools({
   const [panel, setPanel] = useState<Panel>()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
   const icon = (name: Panel | "attach" | "model", label: string, node: React.ReactNode, onClick: () => void) => (
-    <Button key={name} variant="ghost" size="icon" className="size-11 [&_svg]:size-6" onClick={onClick} aria-label={label} title={label}>
+    <Button key={name} variant="ghost" size="icon" className="composer-icon size-11 [&_svg]:size-6" data-active={panel === name} onClick={onClick} aria-label={label} title={label}>
       {node}
     </Button>
   )

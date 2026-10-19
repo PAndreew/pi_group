@@ -33,6 +33,11 @@ try {
   await model.selectOption(JSON.stringify(['test', 'two']))
   assert.equal(await model.inputValue(), JSON.stringify(['test', 'two']))
   await page.getByRole('button', { name: /^Reasoning:/ }).click()
+  const popup = await page.getByRole('slider', { name: 'Reasoning level', exact: true }).locator('..').boundingBox()
+  const inputBox = await page.locator('textarea').boundingBox()
+  assert.ok(popup.x >= 0 && popup.x + popup.width <= 390, 'reasoning popup stays inside viewport')
+  assert.ok(Math.abs(popup.x + popup.width / 2 - (inputBox.x + inputBox.width / 2)) < 2, 'reasoning popup centered above input')
+  assert.ok(popup.y + popup.height <= inputBox.y, 'reasoning popup above input')
   await page.getByRole('slider', { name: 'Reasoning level', exact: true }).fill('3')
   await page.getByRole('button', { name: 'Reasoning: max', exact: true }).waitFor()
   const center = await model.evaluate(el => {
