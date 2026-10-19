@@ -1,10 +1,13 @@
 import { Brain, Folder, Loader2, Search } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { PiAvatar } from "@/components/mention-composer"
+import { SwipeDelete } from "@/components/swipe-delete"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
-import { api, type ChatListItem } from "@/lib/api"
+import { api, type ChatListItem, type SessionSummary } from "@/lib/api"
 import { useNav } from "@/lib/nav"
 import { subscribeUserEvents } from "@/lib/user-stream"
 import { cn, timeAgo } from "@/lib/utils"
@@ -28,6 +31,8 @@ export function ChatList({ selected, className }: { selected?: string; className
   const nav = useNav()
   const [items, setItems] = useState<ChatListItem[]>()
   const [query, setQuery] = useState("")
+  const [swiped, setSwiped] = useState<string>()
+  const [deleting, setDeleting] = useState<SessionSummary>()
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
@@ -61,7 +66,8 @@ export function ChatList({ selected, className }: { selected?: string; className
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : "No chats yet. Mention @pi or someone below to start one."}</p>}
-        {visible?.map((item) => (
+        {visible?.map((item) => {
+          const row = (
           <button
             key={item.id}
             type="button"
@@ -90,8 +96,30 @@ export function ChatList({ selected, className }: { selected?: string; className
               </span>
             </span>
           </button>
-        ))}
+          )
+          if (item.kind !== "session" || !item.canDelete) return row
+          return (
+            <SwipeDelete
+              key={item.id}
+              label={`Delete ${item.title}`}
+              open={swiped === item.id}
+              onOpenChange={(open) => setSwiped(open ? item.id : undefined)}
+              onDelete={() => api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message))}
+            >
+              {row}
+            </SwipeDelete>
+          )
+        })}
       </div>
+      <DeleteSessionDialog
+        session={deleting}
+        onOpenChange={(open) => {
+          if (open) return
+          setDeleting(undefined)
+          setSwiped(undefined)
+        }}
+        onDeleted={(key) => setItems((current) => current?.filter((i) => i.id !== key))}
+      />
     </div>
   )
 }

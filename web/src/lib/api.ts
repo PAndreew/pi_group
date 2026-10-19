@@ -186,7 +186,7 @@ export interface Chat {
 /** The home screen list: chats with people, and sessions shown as pi-only chats. */
 export type ChatListItem =
   | { kind: "chat"; id: string; title: string; folder: string; pi: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } }
-  | { kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean }
+  | { kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean }
 
 export class ApiError extends Error {
   readonly status: number

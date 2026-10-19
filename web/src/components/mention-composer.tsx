@@ -29,6 +29,12 @@ const FOLDER = /(^|\s)#(\S+)/g
 let directory: Promise<Person[]> | undefined
 const people = () => (directory ??= api.directory().then((d) => d.users, () => []))
 
+/** `raw` with its #folder mention (if any) replaced by `folder`, placed first. */
+export function withFolder(raw: string, folder: string): string {
+  const rest = raw.replace(FOLDER, (_all, lead) => lead).replace(/^[ 	]+/, "")
+  return `#${folder.replaceAll(" ", NBSP)} ${rest}`
+}
+
 export function parseMessage(raw: string, everyone: Person[]): ParsedMessage {
   const names = [...raw.matchAll(MENTION)].map((m) => m[2].toLowerCase())
   const mentioned = everyone.filter((p) => names.includes(p.username.toLowerCase()))

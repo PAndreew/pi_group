@@ -10,7 +10,7 @@ import { HttpError, resolveSafe, toRel } from "./files.js";
 import { contentText } from "./harness/live-base.js";
 import type { AgentMessage, PromptInput } from "./harness/types.js";
 import { pushToUser } from "./push.js";
-import { involved, type RunOutcome } from "./sessions.js";
+import { accessOf, involved, type RunOutcome } from "./sessions.js";
 import { type SessionMeta, store, type User } from "./store.js";
 
 /*
@@ -366,7 +366,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			.filter((meta) => !linked.has(meta.key) && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
-				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory) };
+				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
 			});
 		const items = [...chats, ...sessions].sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
 		res.json({ chats: items });
