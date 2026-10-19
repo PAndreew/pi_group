@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
-import { contentText } from "./harness/live-base.js";
+import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, PromptInput } from "./harness/types.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type RunOutcome } from "./sessions.js";
@@ -30,6 +30,9 @@ export interface ChatMessage {
 	status?: PiStatus;
 	sessionKey?: string;
 	createdAt: string;
+	editedAt?: string;
+	/** Emoji reactions on people's messages: emoji → ids of the users who reacted. */
+	reactions?: Record<string, string[]>;
 }
 
 export interface Chat {
@@ -69,6 +72,9 @@ function database() {
 		db = new DatabaseSync(path.join(config.dataDir, "chats.sqlite"));
 		db.exec("PRAGMA journal_mode = WAL");
 		db.exec(SCHEMA);
+		const columns = (db.prepare("PRAGMA table_info(messages)").all() as Row[]).map((c) => String(c.name));
+		if (!columns.includes("edited_at")) db.exec("ALTER TABLE messages ADD COLUMN edited_at TEXT");
+		if (!columns.includes("reactions")) db.exec("ALTER TABLE messages ADD COLUMN reactions TEXT");
 	}
 	return db;
 }
@@ -98,7 +104,17 @@ function toChat(row: Row): Chat {
 }
 
 function toMessage(row: Row): ChatMessage {
-	return { id: Number(row.id), chatId: String(row.chat_id), message: JSON.parse(String(row.message)), status: str(row.status) as PiStatus | undefined, sessionKey: str(row.session_key), createdAt: String(row.created_at) };
+	const reactions = row.reactions ? (JSON.parse(String(row.reactions)) as Record<string, string[]>) : undefined;
+	return {
+		id: Number(row.id),
+		chatId: String(row.chat_id),
+		message: JSON.parse(String(row.message)),
+		status: str(row.status) as PiStatus | undefined,
+		sessionKey: str(row.session_key),
+		createdAt: String(row.created_at),
+		editedAt: str(row.edited_at),
+		reactions: reactions && Object.keys(reactions).length ? reactions : undefined,
+	};
 }
 
 export function getChat(id: string) {
@@ -182,6 +198,8 @@ export interface ChatDeps {
 	setQuiet: (quiet: (key: string) => boolean) => void;
 	/** Summary of a session for the chat list. */
 	sessionSummary: (meta: SessionMeta, user: User) => { running: boolean; live: boolean; name?: string; firstMessage?: string; updatedAt: string; path: string; harness: string };
+	/** Rewrite one message of a session that is not running; `pick` returns undefined when there is nothing to change. */
+	editSession: (meta: SessionMeta, pick: (messages: AgentMessage[]) => { index: number; text: string; expect: string } | undefined) => Promise<boolean>;
 }
 
 const MENTION = /(^|\s)@([\w.-]+)/g;
@@ -393,6 +411,80 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		chat = getChat(chat.id)!;
 		fanOut(chat, "chat_message", message, { author: user.username, text, except: user.id });
 		if (names.includes("pi")) void askPi(chat, user, message.id, options).catch((error) => console.error("chat: pi failed", error));
+		res.json({ message });
+	});
+
+	const chatMessage = (chat: Chat, id: unknown) => {
+		const row = database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id = ?").get(chat.id, Number(id)) as Row | undefined;
+		if (!row) throw new HttpError(404, "Message not found");
+		return toMessage(row);
+	};
+
+	/**
+	 * Edit a message while pi is not working: people edit their own, any member edits pi's replies.
+	 * What pi has already seen is corrected in its session too, so its next turn reads the new text.
+	 */
+	router.post("/chats/:id/messages/:messageId/edit", async (req, res) => {
+		const user = req.user!;
+		const chat = membership(String(req.params.id), user);
+		const message = chatMessage(chat, req.params.messageId);
+		const { text } = z.object({ text: z.string().trim().min(1).max(50_000) }).parse(req.body);
+		const assistant = message.message.role === "assistant";
+		if (!assistant && (message.message.author as { id?: string } | undefined)?.id !== user.id) throw new HttpError(403, "You can only edit your own messages");
+		if (turns.has(chat.id) || database().prepare("SELECT 1 FROM messages WHERE chat_id = ? AND status = 'working'").get(chat.id)) throw new HttpError(409, "Wait until pi has finished before editing");
+		if (assistant && message.status !== "done") throw new HttpError(400, "Only finished replies can be edited");
+		const before = textOf(message.message);
+		const content = replaceText(message.message.content, text, before);
+		if (content === undefined) throw new HttpError(409, "The message changed meanwhile; reload and try again");
+		const meta = chat.sessionKey ? store.session(chat.sessionKey) : undefined;
+		if (meta && (assistant || message.id <= chat.piCursor)) {
+			// pi got people's words as "author: text" lines of a transcript, and its reply as is.
+			// The same words can occur more than once, so find the occurrence matching this message's place.
+			const name = authorName(message.message);
+			const needle = assistant ? before : `${name}: ${before.trim()}`;
+			const nth = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id < ?").all(chat.id, message.id) as Row[])
+				.map(toMessage)
+				.filter((m) => m.message.role === message.message.role && authorName(m.message) === name && textOf(m.message).trim() === before.trim()).length;
+			await deps.editSession(meta, (messages) => {
+				let seen = 0;
+				for (const [index, m] of messages.entries()) {
+					if (m.role !== message.message.role) continue;
+					const expect = textOf(m);
+					if (assistant) {
+						if (expect === needle && seen++ === nth) return { index, expect, text };
+						continue;
+					}
+					for (let at = expect.indexOf(needle); at >= 0; at = expect.indexOf(needle, at + needle.length)) {
+						if (seen++ === nth) return { index, expect, text: `${expect.slice(0, at)}${name}: ${text}${expect.slice(at + needle.length)}` };
+					}
+				}
+				return undefined;
+			}).catch((error) => {
+				// Harnesses that cannot rewrite history (400) keep the old text; the chat still changes.
+				if (!(error instanceof HttpError && error.status === 400)) throw error;
+			});
+		}
+		message.message = { ...message.message, content };
+		message.editedAt = now();
+		database().prepare("UPDATE messages SET message = ?, edited_at = ? WHERE id = ?").run(JSON.stringify(message.message), message.editedAt, message.id);
+		fanOut(chat, "chat_update", message);
+		res.json({ message });
+	});
+
+	/** Toggle the caller's emoji reaction on someone's message (pi's replies take none). */
+	router.post("/chats/:id/messages/:messageId/reactions", (req, res) => {
+		const user = req.user!;
+		const chat = membership(String(req.params.id), user);
+		const message = chatMessage(chat, req.params.messageId);
+		if (message.message.role !== "user") throw new HttpError(400, "Only people's messages take reactions");
+		const { emoji } = z.object({ emoji: z.string().regex(/^\p{Extended_Pictographic}[\p{Extended_Pictographic}\p{Emoji_Component}\u200d\ufe0f]*$/u).max(16) }).parse(req.body);
+		const reactions = { ...message.reactions };
+		const users = reactions[emoji] ?? [];
+		reactions[emoji] = users.includes(user.id) ? users.filter((id) => id !== user.id) : [...users, user.id];
+		if (!reactions[emoji].length) delete reactions[emoji];
+		message.reactions = Object.keys(reactions).length ? reactions : undefined;
+		database().prepare("UPDATE messages SET reactions = ? WHERE id = ?").run(message.reactions ? JSON.stringify(message.reactions) : null, message.id);
+		fanOut(chat, "chat_update", message);
 		res.json({ message });
 	});
 

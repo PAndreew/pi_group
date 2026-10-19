@@ -9,10 +9,10 @@ import { mcpReport, piResources } from "./inventory.js";
 import { mountInteractions } from "./interactions.js";
 import { mountMemory } from "./memory.js";
 import { pushToUser } from "./push.js";
-import { attributeMessages, registerPrompt } from "./authorship.js";
+import { attributeMessages, registerPrompt, rekeyAuthors } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
-import { contentText } from "./harness/live-base.js";
+import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, HarnessAdapter, LiveSession, PromptInput, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
 import { type Access, type SessionMeta, save, saveNow, store, type User } from "./store.js";
 
@@ -288,6 +288,34 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 
+	/**
+	 * Rewrite one message of a session whose agent is not running. An idle process is stopped
+	 * first (pi rereads the edited history when the session continues); viewers get the new history.
+	 * `pick` chooses the message from the stored history and its new text, or returns undefined to skip.
+	 */
+	const editSession = async (meta: SessionMeta, pick: (messages: AgentMessage[]) => { index: number; text: string; expect: string } | undefined) => {
+		const adapter = adapterOf(meta.harness);
+		if (!adapter.editMessage) throw new HttpError(400, `Messages of ${adapter.label} sessions cannot be edited`);
+		const live = adapter.live(meta.id);
+		if (live?.state.running) throw new HttpError(409, "Wait until the agent has finished before editing");
+		const stored = await adapter.readSession(meta.id, meta.cwd);
+		const target = stored && pick(stored.messages);
+		if (!stored || !target) return false;
+		const message = stored.messages[target.index];
+		const content = replaceText(message.content, target.text, target.expect);
+		if (content === undefined) throw new HttpError(409, "The message changed meanwhile; reload and try again");
+		await live?.close();
+		await adapter.editMessage(meta.id, meta.cwd, target.index, content);
+		const messages = stored.messages.map((m, i) => (i === target.index ? { ...m, content } : m));
+		const current = store.session(meta.key)!;
+		if (current.authorship) rekeyAuthors(current.authorship, stored.messages, messages);
+		if (message.role === "user" && stored.messages.findIndex((m) => m.role === "user") === target.index) current.firstMessage = firstLine(target.text);
+		saveNow();
+		const state: SessionState = { messages, partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: false, name: current.name ?? stored.name };
+		hub.broadcast(meta.key, { type: "state", state: hub.state(meta.key, state) });
+		return true;
+	};
+
 	const summary = (meta: SessionMeta, user: User, listing?: SessionListing) => {
 		const live = byId.get(meta.harness)?.live(meta.id);
 		return {
@@ -484,6 +512,29 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ ok: true });
 	});
 
+	/**
+	 * Edit a prompt (only its author) or an answer (anyone who can write) while the agent is not running.
+	 * The message is found by its position, or by its timestamp if the viewer's list differs from the file.
+	 */
+	router.post("/sessions/:key/messages/edit", async (req, res) => {
+		const { meta } = writable(req);
+		const body = z.object({ index: z.number().int().min(0), timestamp: z.number().optional(), expect: z.string(), text: z.string().trim().min(1).max(200_000) }).parse(req.body);
+		const user = req.user!;
+		await editSession(meta, (messages) => {
+			const fits = (m: AgentMessage | undefined) => (m?.role === "user" || m?.role === "assistant") && replaceText(m.content, body.text, body.expect) !== undefined;
+			let index = fits(messages[body.index]) ? body.index : -1;
+			if (index < 0 && body.timestamp !== undefined) index = messages.findIndex((m) => m.timestamp === body.timestamp && fits(m));
+			if (index < 0) throw new HttpError(409, "The message changed meanwhile; reload and try again");
+			if (messages[index].role === "user") {
+				const ledger = store.session(meta.key)?.authorship;
+				const author = ledger && attributeMessages(ledger, messages)[index].author;
+				if ((author as { id?: string } | undefined)?.id !== user.id) throw new HttpError(403, "You can only edit your own messages");
+			}
+			return { index, text: body.text, expect: body.expect };
+		});
+		res.json({ ok: true });
+	});
+
 	router.post("/sessions/:key/abort", async (req, res) => {
 		const { meta, adapter } = writable(req);
 		await adapter.live(meta.id)?.abort();
@@ -584,6 +635,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		onRun: (listener: Parameters<Hub["onRun"]>[0]) => void hub.onRun(listener),
 		setQuiet: (quiet: (key: string) => boolean) => void (hub.quiet = quiet),
 		sessionSummary: (meta: SessionMeta, user: User) => summary(meta, user),
+		editSession,
 		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
 	};
 	mountChats(router, chatDeps);

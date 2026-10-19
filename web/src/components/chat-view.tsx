@@ -6,8 +6,9 @@ import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
-import { ReplyButton, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
-import { replyPrompt, type ReplyTarget } from "@/lib/reply"
+import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
+import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
+import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
@@ -19,15 +20,16 @@ import { cn } from "@/lib/utils"
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
-function PiMessage({ m, folder, onWatch, children }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode }) {
+function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode; actions?: React.ReactNode }) {
   const text = messageText(m.message.content)
   return (
     <div className="flex items-start gap-2">
       <PiAvatar />
-      <div className="grid min-w-0 max-w-[85%] gap-1 rounded-2xl rounded-tl-sm border bg-card px-3 py-2">
+      <div className="min-w-0 max-w-[85%]">
+      <div className="grid min-w-0 gap-1 rounded-2xl rounded-tl-sm border bg-card px-3 py-2">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">Beezy</span>
-          <span>{time(m.createdAt)}</span>
+          <span>{time(m.createdAt)}{m.editedAt && " · edited"}</span>
           {onWatch && (
             <button type="button" className="ml-auto flex items-center gap-1 hover:text-foreground" onClick={onWatch}>
               {m.status === "working" ? "watch" : "session"} <ExternalLink className="size-3" />
@@ -49,6 +51,8 @@ function PiMessage({ m, folder, onWatch, children }: { m: ChatMessage; folder?: 
         )}
         {children}
       </div>
+      {actions}
+      </div>
     </div>
   )
 }
@@ -63,7 +67,7 @@ function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; show
           {(body) => (
             <div className="rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">
               {body}
-              <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}</div>
+              <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
             </div>
           )}
         </ReplyStack>
@@ -77,7 +81,7 @@ function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; show
           <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
             {showName && <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">{author?.username}</div>}
             {body}
-            <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
           </div>
         )}
       </ReplyStack>
@@ -102,6 +106,8 @@ export function ChatView({ chatId }: { chatId: string }) {
   const stick = useRef(true)
   const [text, setText] = useState("")
   const [reply, setReply] = useState<ReplyTarget>()
+  /** The message whose text the composer holds for editing; `text` is its full text, reply quote included. */
+  const [editing, setEditing] = useState<{ id: number; text: string; assistant: boolean }>()
   const [agent, setAgent] = useState(false)
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [sending, setSending] = useState(false)
@@ -116,6 +122,7 @@ export function ChatView({ chatId }: { chatId: string }) {
     stick.current = true
     setChat(undefined)
     setMessages(undefined)
+    setEditing(undefined)
     let alive = true
     const merge = (incoming: ChatMessage[]) => setMessages((current) => mergeMessages(current, incoming))
     const refreshHeader = () => api.chat(chatId).then((r) => alive && setChat(r.chat), () => {})
@@ -189,6 +196,35 @@ export function ChatView({ chatId }: { chatId: string }) {
     }
   }
 
+  const startEdit = (m: ChatMessage, content: string) => {
+    const assistant = m.message.role === "assistant"
+    setReply(undefined)
+    setEditing({ id: m.id, text: content, assistant })
+    setText(assistant ? content : (parseReply(content)?.body ?? content))
+    focusComposer()
+  }
+  const cancelEdit = () => {
+    setEditing(undefined)
+    setText("")
+  }
+  const saveEdit = async (raw: string) => {
+    if (!editing) return
+    setSending(true)
+    try {
+      const { message } = await api.editChat(chatId, editing.id, editing.assistant ? raw : replaceReplyBody(editing.text, raw))
+      setMessages((current) => mergeMessages(current, [message]))
+      cancelEdit()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSending(false)
+    }
+  }
+  const react = (m: ChatMessage, emoji: string) =>
+    api.reactChat(chatId, m.id, emoji).then(({ message }) => setMessages((current) => mergeMessages(current, [message])), (error) => toast.error(error.message))
+  const piWorking = Boolean(messages?.some((m) => m.status === "working"))
+  const nameOf = (id: string) => (id === user?.id ? "you" : (chat?.members.find((member) => member.id === id)?.username ?? "someone"))
+
   /** Files go to the chat's folder; the message gets their paths so pi (and people) can find them. */
   const attach = async (files: File[]) => {
     if (!files.length || !chat) return
@@ -239,20 +275,44 @@ export function ChatView({ chatId }: { chatId: string }) {
             const sourceId = `chat-${chatId}-${m.id}`
             const author = (m.message.author as { username?: string } | undefined)?.username ?? "Unknown author"
             const content = messageText(m.message.content)
-            const action = content && m.status !== "working" ? <ReplyButton onClick={() => selectReply(setReply, { author: m.message.role === "assistant" ? "Beezy" : author, text: content, sourceId, assistant: m.message.role === "assistant" })} /> : null
-            if (m.message.role === "assistant") {
+            const assistant = m.message.role === "assistant"
+            const onReply = () => selectReply(setReply, { author: assistant ? "Beezy" : author, text: content, sourceId, assistant })
+            if (assistant) {
               const nextReply = messages.slice(i + 1).find((next) => next.message.role === "assistant")
               const cards = interactions.cards.filter((card) => card.createdAt >= m.createdAt && (!nextReply || card.createdAt < nextReply.createdAt))
-              return <div key={m.id} id={sourceId}><PiMessage m={m} folder={chat?.folder} onWatch={watch}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} />{action}</PiMessage></div>
+              const actions = content && m.status !== "working" ? (
+                <MessageActions copy={content} onReply={onReply} onEdit={() => startEdit(m, content)} editBlocked={piWorking ? "Wait until Beezy has finished" : m.status !== "done" ? "Only finished replies can be edited" : undefined} />
+              ) : null
+              return <div key={m.id} id={sourceId}><PiMessage m={m} folder={chat?.folder} onWatch={watch} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
-            return <div key={m.id} id={sourceId}><HumanMessage m={m} own={authorId === user?.id} showName={authorId !== previous} /><div className={cn(authorId === user?.id && "text-right")}>{action}</div></div>
+            const own = authorId === user?.id
+            const align = own ? "end" : "start"
+            return (
+              <div key={m.id} id={sourceId}>
+                <HumanMessage m={m} own={own} showName={authorId !== previous} />
+                <div className={cn(!own && "pl-10")}>
+                  <Reactions reactions={m.reactions} selfId={user?.id} names={nameOf} align={align} onReact={(emoji) => void react(m, emoji)} />
+                  {content && (
+                    <MessageActions
+                      align={align}
+                      copy={parseReply(content)?.body ?? content}
+                      onReply={onReply}
+                      onEdit={() => startEdit(m, content)}
+                      editBlocked={!own ? "Only the author can edit this message" : piWorking ? "Wait until Beezy has finished" : undefined}
+                      onReact={(emoji) => void react(m, emoji)}
+                    />
+                  )}
+                </div>
+              </div>
+            )
           })}
         </div>
       </div>
 
       <div data-chat-composer className={cn("mx-auto grid w-full max-w-3xl shrink-0 gap-1 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3", !chat && "pointer-events-none opacity-60")}>
+        {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}
         {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
         <input
           ref={fileInput}
@@ -272,10 +332,10 @@ export function ChatView({ chatId }: { chatId: string }) {
           busy={sending || uploading}
           selfId={user?.id}
           hash="paths"
-          placeholder="Message… (# for files)"
+          placeholder={editing ? "Edit message…" : "Message… (# for files)"}
           agent={<AgentToggle checked={agent} onChange={setAgent} />}
           controls={<ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading} agentEnabled={agent} />}
-          onSubmit={(message) => send(agent && !message.pi ? `@pi ${message.raw}` : message.raw)}
+          onSubmit={(message) => (editing ? saveEdit(message.raw) : send(agent && !message.pi ? `@pi ${message.raw}` : message.raw))}
         />
         {chat && (
           <ComposerTools

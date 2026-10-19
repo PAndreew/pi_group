@@ -19,7 +19,15 @@ export function useAppViewport() {
     const settle = () => {
       update()
       timers.forEach(clearTimeout)
-      timers = [100, 300, 700].map(delay => setTimeout(update, delay))
+      timers = [100, 300, 700, 1200].map(delay => setTimeout(update, delay))
+    }
+    /** Leaving the app with the keyboard up keeps the shrunken viewport on return (iOS fires no
+     * resize then): drop focus on the way out so the keyboard closes, and re-measure on the way back. */
+    const visibility = () => {
+      if (document.visibilityState === "hidden") {
+        const active = document.activeElement
+        if (active instanceof HTMLElement && active.matches("textarea, input")) active.blur()
+      } else settle()
     }
     settle()
     viewport?.addEventListener("resize", settle)
@@ -28,6 +36,8 @@ export function useAppViewport() {
     window.addEventListener("focusin", settle)
     window.addEventListener("focusout", settle)
     window.addEventListener("pageshow", settle)
+    window.addEventListener("focus", settle)
+    document.addEventListener("visibilitychange", visibility)
     return () => {
       cancelAnimationFrame(frame)
       timers.forEach(clearTimeout)
@@ -37,6 +47,8 @@ export function useAppViewport() {
       window.removeEventListener("focusin", settle)
       window.removeEventListener("focusout", settle)
       window.removeEventListener("pageshow", settle)
+      window.removeEventListener("focus", settle)
+      document.removeEventListener("visibilitychange", visibility)
       root.style.removeProperty("--app-height")
       root.style.removeProperty("--app-top")
     }

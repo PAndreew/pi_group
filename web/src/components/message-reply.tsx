@@ -1,14 +1,14 @@
-import { Reply, X } from "lucide-react"
+import { X } from "lucide-react"
 import { parseReply, type ReplyTarget } from "@/lib/reply"
 import { cn } from "@/lib/utils"
 
-export function ReplyButton({ onClick }: { onClick: () => void }) {
-  return <button type="button" onClick={onClick} aria-label="Reply to message" className="inline-flex min-h-9 items-center gap-1 rounded px-2 text-xs opacity-80 hover:opacity-100 focus-visible:outline-2"><Reply className="size-3.5" /> Reply</button>
+export function focusComposer() {
+  requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-chat-composer] textarea")?.focus({ preventScroll: true }))
 }
 
 export function selectReply(setReply: (reply: ReplyTarget) => void, reply: ReplyTarget) {
   setReply(reply)
-  requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-chat-composer] textarea")?.focus({ preventScroll: true }))
+  focusComposer()
 }
 
 export function ReplyPreview({ reply, onCancel }: { reply: ReplyTarget; onCancel: () => void }) {

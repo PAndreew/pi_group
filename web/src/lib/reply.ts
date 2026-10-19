@@ -24,3 +24,9 @@ export function parseReply(text: string): ParsedReply | undefined {
   const quote = match[2].replace(/\n$/, "").split("\n").map((line) => line.replace(/^> ?/, "")).join("\n")
   return { author: unescape(match[1]), quote: unescape(quote), body: match[3] }
 }
+
+/** `text` with its new part replaced by `body`, keeping the quote of a reply. */
+export function replaceReplyBody(text: string, body: string): string {
+  const reply = parseReply(text)
+  return reply ? text.slice(0, text.length - reply.body.length) + body : body
+}

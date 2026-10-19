@@ -53,6 +53,9 @@ function fakeHarness() {
 		open: async (id: string) => sessions.get(id),
 		listSessions: async () => [],
 		readSession: async (id: string) => ({ messages: sessions.get(id)?.state.messages ?? [] }),
+		editMessage: async (id: string, _cwd: string, index: number, content: unknown) => {
+			sessions.get(id).state.messages[index] = { ...sessions.get(id).state.messages[index], content };
+		},
 	} as unknown as HarnessAdapter;
 	return { adapter, prompts };
 }
@@ -160,6 +163,27 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.match(prompts[2].text, /ordinary note while working/);
 		assert.match(prompts[2].text, /queued request one/);
 		assert.equal(prompts[3].text, "anna: @pi queued request two");
+
+		// Edits: people fix their own words, anyone fixes pi's; pi's session reads the new text from then on.
+		const first = queued[0];
+		assert.equal((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/edit`, { text: "hijacked" })).status, 403);
+		const edited = await call("anna", "POST", `/chats/${chatId}/messages/${first.id}/edit`, { text: "hello bob, the deploy failed twice" });
+		assert.equal(edited.status, 200);
+		assert.equal(edited.body.message.message.content[0].text, "hello bob, the deploy failed twice");
+		assert.ok(edited.body.message.editedAt);
+		const piSession = adapter.live(meta.id)!.state.messages as any[];
+		assert.match(piSession[0].content[0].text, /anna: hello bob, the deploy failed twice\n\nbob: @pi can you look/);
+		const answer = queued.find((m: any) => m.status === "done");
+		assert.equal((await call("anna", "POST", `/chats/${chatId}/messages/${answer.id}/edit`, { text: "logs are clean" })).status, 200);
+		assert.equal(piSession[1].content[0].text, "logs are clean");
+
+		// Reactions: only on people's messages, toggled per person.
+		assert.equal((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "👍" })).body.message.reactions["👍"][0], bob.id);
+		assert.deepEqual((await call("anna", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "❤️" })).body.message.reactions, { "👍": [bob.id], "❤️": [anna.id] });
+		assert.deepEqual((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "👍" })).body.message.reactions, { "❤️": [anna.id] });
+		assert.equal((await call("bob", "POST", `/chats/${chatId}/messages/${answer.id}/reactions`, { emoji: "👍" })).status, 400);
+		assert.notEqual((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "lol" })).status, 200, "only emoji are reactions");
+		assert.deepEqual((await call("bob", "GET", `/chats/${chatId}`)).body.messages[0].reactions, { "❤️": [anna.id] });
 
 		// Only @pi: a plain session, in the chosen folder.
 		const solo = await call("anna", "POST", "/chats", { text: "summarise the API", pi: true, folder: "projects/api-server" });

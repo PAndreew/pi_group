@@ -54,3 +54,12 @@ export function attributeMessages(ledger: Authorship, messages: AgentMessage[]) 
 		return { ...message, author: ledger.authors[key] };
 	});
 }
+
+/** Keep authors attached after `before` was rewritten as `after` (same messages, edited content). */
+export function rekeyAuthors(ledger: Authorship, before: AgentMessage[], after: AgentMessage[]) {
+	const oldKeys = messageKeys(before);
+	const newKeys = messageKeys(after);
+	const moved = Object.fromEntries(oldKeys.flatMap((key, i) => (ledger.authors[key] ? [[newKeys[i], ledger.authors[key]]] : [])));
+	for (const key of oldKeys) delete ledger.authors[key];
+	Object.assign(ledger.authors, moved);
+}

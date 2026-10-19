@@ -146,6 +146,8 @@ export interface HarnessAdapter {
 	/** Attach to a session, starting its runtime if needed. */
 	open(id: string, cwd: string): Promise<LiveSession>;
 	create(cwd: string, options: CreateOptions): Promise<LiveSession>;
+	/** Replace the content of the `index`th message of `readSession` in a session that is not live. Absent when the harness cannot rewrite history. */
+	editMessage?(id: string, cwd: string, index: number, content: unknown): Promise<void>;
 	/** Stop and remove a session. Resolves false when the harness cannot erase it; the app then hides it. */
 	deleteSession(id: string, cwd: string): Promise<boolean>;
 	/** Tools and commands of a session, for the tools overview; never starts a process. */

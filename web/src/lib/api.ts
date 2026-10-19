@@ -171,6 +171,9 @@ export interface ChatMessage {
   status?: PiStatus
   sessionKey?: string
   createdAt: string
+  editedAt?: string
+  /** Emoji → ids of the people who reacted. */
+  reactions?: Record<string, string[]>
 }
 
 export interface Chat {
@@ -261,6 +264,8 @@ export const api = {
   chatSince: (id: string, after: number, check: number[]) =>
     request<{ messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}/messages?${q({ after: String(after), check: check.join(",") })}`),
   sendChat: (id: string, text: string, config?: { model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages`, { text, ...config }),
+  editChat: (id: string, messageId: number, text: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages/${messageId}/edit`, { text }),
+  reactChat: (id: string, messageId: number, emoji: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages/${messageId}/reactions`, { emoji }),
   readChat: (id: string, upTo: number) => request("POST", `/api/chats/${enc(id)}/read`, { upTo }),
   searchFolders: (query: string) => request<{ folders: string[]; chatFolder: string }>("GET", `/api/folders/search?${q({ q: query })}`),
   searchPaths: (query: string) => request<{ entries: { path: string; type: "dir" | "file" }[] }>("GET", `/api/folders/search?${q({ q: query, files: "1" })}`),
@@ -280,6 +285,8 @@ export const api = {
     `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ ...(target.key ? { key: target.key } : { path: target.path ?? "" }), cols: String(cols), rows: String(rows) })}`,
   prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
+  /** Edit a message of a session whose agent is not running; `expect` is its current text. */
+  editMessage: (key: string, edit: { index: number; timestamp?: number; expect: string; text: string }) => request("POST", `/api/sessions/${enc(key)}/messages/edit`, edit),
   abort: (key: string) => request("POST", `/api/sessions/${enc(key)}/abort`),
   setModel: (key: string, provider: string, id: string) => request("POST", `/api/sessions/${enc(key)}/model`, { provider, id }),
   setThinking: (key: string, level: string) => request("POST", `/api/sessions/${enc(key)}/thinking`, { level }),

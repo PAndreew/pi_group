@@ -410,6 +410,11 @@ function firstText(content: unknown): string | undefined {
 
 /** Turn session-file entries on the active branch into displayable messages. */
 function entriesToMessages(entries: RpcRecord[]): AgentMessage[] {
+	return displayed(entries).map((d) => d.message);
+}
+
+/** Displayable messages of the active branch, each with the file entry it came from. */
+function displayed(entries: RpcRecord[]): { entry: RpcRecord; message: AgentMessage }[] {
 	const byId = new Map(entries.filter((e) => e.id).map((e) => [e.id, e]));
 	const leaf = [...entries].reverse().find((e) => e.id);
 	const chain: RpcRecord[] = [];
@@ -419,12 +424,12 @@ function entriesToMessages(entries: RpcRecord[]): AgentMessage[] {
 	}
 	chain.reverse();
 	const ts = (e: RpcRecord) => Date.parse(e.timestamp) || undefined;
-	const messages: AgentMessage[] = [];
+	const messages: { entry: RpcRecord; message: AgentMessage }[] = [];
 	for (const e of chain) {
-		if (e.type === "message" && e.message?.role !== "system") messages.push(e.message);
-		else if (e.type === "compaction") messages.push({ role: "compactionSummary", summary: e.summary, tokensBefore: e.tokensBefore, timestamp: ts(e) });
-		else if (e.type === "branch_summary") messages.push({ role: "branchSummary", summary: e.summary, timestamp: ts(e) });
-		else if (e.type === "custom_message" && e.display) messages.push({ role: "custom", customType: e.customType, content: e.content, timestamp: ts(e) });
+		if (e.type === "message" && e.message?.role !== "system") messages.push({ entry: e, message: e.message });
+		else if (e.type === "compaction") messages.push({ entry: e, message: { role: "compactionSummary", summary: e.summary, tokensBefore: e.tokensBefore, timestamp: ts(e) } });
+		else if (e.type === "branch_summary") messages.push({ entry: e, message: { role: "branchSummary", summary: e.summary, timestamp: ts(e) } });
+		else if (e.type === "custom_message" && e.display) messages.push({ entry: e, message: { role: "custom", customType: e.customType, content: e.content, timestamp: ts(e) } });
 	}
 	return messages;
 }
@@ -549,6 +554,28 @@ export class PiRpcAdapter implements HarnessAdapter {
 		const records = await readJsonl(file);
 		const name = records.filter((r) => r.type === "session_info").at(-1)?.name;
 		return { messages: entriesToMessages(records), name };
+	}
+
+	/** Rewrite the message's line in pi's session file; pi reads the file again when the session is next opened. */
+	async editMessage(id: string, cwd: string, index: number, content: unknown) {
+		if (this.live(id)) throw new Error("Stop the session before editing it");
+		const file = await this.fileOf(id, cwd);
+		if (!file) throw new Error("Session file not found");
+		const entry = displayed(await readJsonl(file))[index]?.entry;
+		if (entry?.type !== "message") throw new Error("Message not found");
+		const lines = (await fs.readFile(file, "utf8")).split("\n").map((line) => {
+			if (!line.includes(entry.id)) return line;
+			try {
+				const record = JSON.parse(line);
+				return record.id === entry.id ? JSON.stringify({ ...record, message: { ...record.message, content } }) : line;
+			} catch {
+				return line;
+			}
+		});
+		const temp = `${file}.${randomUUID()}.tmp`;
+		await fs.writeFile(temp, lines.join("\n"));
+		await fs.rename(temp, file);
+		this.files.delete(file);
 	}
 
 	live(id: string) {

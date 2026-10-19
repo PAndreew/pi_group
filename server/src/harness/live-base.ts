@@ -170,3 +170,20 @@ export function contentText(content: unknown): string {
 		.map((c) => (c && typeof c === "object" && (c as { type?: string }).type === "text" ? String((c as { text?: string }).text ?? "") : ""))
 		.join("");
 }
+
+/**
+ * `content` with its text replaced, or undefined when it no longer reads `expect`. An answer's
+ * last text block is edited on its own (keeping reasoning and tool calls); otherwise all text
+ * collapses into the first text block.
+ */
+export function replaceText(content: unknown, text: string, expect: string): unknown {
+	if (typeof content === "string") return content === expect ? text : undefined;
+	if (!Array.isArray(content)) return undefined;
+	const isText = (c: unknown) => Boolean(c && typeof c === "object" && (c as { type?: string }).type === "text");
+	const last = content.findLastIndex((c) => isText(c) && String((c as { text?: string }).text ?? "").trim());
+	if (last >= 0 && (content[last] as { text?: string }).text === expect) return content.map((c, i) => (i === last ? { ...c, text } : c));
+	if (contentText(content) !== expect) return undefined;
+	const first = content.findIndex(isText);
+	if (first < 0) return [...content, { type: "text", text }];
+	return content.flatMap((c, i) => (i === first ? [{ ...c, text }] : isText(c) ? [] : [c]));
+}

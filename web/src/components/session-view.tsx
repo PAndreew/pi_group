@@ -23,8 +23,9 @@ import { InteractionCards, useInteractions } from "@/components/interaction-card
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
-import { ReplyButton, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
-import { replyPrompt, type ReplyTarget } from "@/lib/reply"
+import { EditPreview, MessageActions } from "@/components/message-actions"
+import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
+import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
@@ -78,6 +79,8 @@ function UserBubble({ message }: { message: AgentMessage }) {
 }
 
 type DialogAnswer = { value?: string; confirmed?: boolean; cancelled?: boolean }
+/** A message to edit and its current text: a whole prompt, or the answer's text. */
+type EditTarget = { message: AgentMessage; text: string; prompt: boolean }
 /** A question the agent asked in a run and how it was answered (kept for this page view). */
 type Answered = { runKey: string; dialog: ExtensionDialog; answer: DialogAnswer }
 
@@ -188,6 +191,9 @@ function AgentBubble({
 function RunView({
   run,
   onReply,
+  onEdit,
+  editBlocked,
+  selfId,
   onOpen,
   question,
   onAnswer,
@@ -202,25 +208,48 @@ function RunView({
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
   onReply?: (reply: ReplyTarget) => void
+  /** Absent without write access. */
+  onEdit?: (target: EditTarget) => void
+  editBlocked?: string
+  selfId?: string
   interactions?: React.ReactNode
 }) {
   const sourceId = `run-${run.key}`
   const userText = run.user ? messageText(run.user.content) : ""
   const answerText = run.answer
+  const answerMessage = run.steps.at(-1)?.message
+  const user = run.user
   return (
     <div className="space-y-2" id={sourceId}>
-      {run.user && (
-        <>
-          <UserBubble message={run.user} />
-          {onReply && userText && (
-            <div className="text-right">
-              <ReplyButton onClick={() => onReply({ author: run.user?.author?.username ?? "Unknown author", text: userText, sourceId })} />
-            </div>
+      {user && (
+        <div>
+          <UserBubble message={user} />
+          {userText && (
+            <MessageActions
+              align="end"
+              className="pr-10"
+              copy={parseReply(userText)?.body ?? userText}
+              onReply={onReply && (() => onReply({ author: user.author?.username ?? "Unknown author", text: userText, sourceId }))}
+              onEdit={onEdit && (() => onEdit({ message: user, text: userText, prompt: true }))}
+              editBlocked={onEdit && (user.author?.id !== selfId ? "Only the author can edit this message" : editBlocked)}
+            />
           )}
-        </>
+        </div>
       )}
-      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} interactions={interactions} folder={folder} />}
-      {onReply && answerText && !run.running && <ReplyButton onClick={() => onReply({ author: "Beezy", text: answerText, sourceId, assistant: true })} />}
+      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && (
+        <div>
+          <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} interactions={interactions} folder={folder} />
+          {answerText && !run.running && (
+            <MessageActions
+              className="pl-10"
+              copy={answerText}
+              onReply={onReply && (() => onReply({ author: "Beezy", text: answerText, sourceId, assistant: true }))}
+              onEdit={onEdit && answerMessage && (() => onEdit({ message: answerMessage, text: answerText, prompt: false }))}
+              editBlocked={onEdit && editBlocked}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -237,6 +266,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
   const [reply, setReply] = useState<ReplyTarget>()
+  const [editing, setEditing] = useState<EditTarget>()
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
@@ -257,6 +287,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
     setSummary(undefined)
     setOpen(null)
     setAuthorFilter("all")
+    setEditing(undefined)
     stick.current = true
     refresh()
   }, [refresh])
@@ -315,7 +346,38 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const running = Boolean(state?.running)
   const title = state?.name || summary?.name || summary?.firstMessage || "New session"
 
+  const startEdit = (target: EditTarget) => {
+    setReply(undefined)
+    setEditing(target)
+    setText(target.prompt ? (parseReply(target.text)?.body ?? target.text) : target.text)
+    focusComposer()
+  }
+  const cancelEdit = () => {
+    setEditing(undefined)
+    setText("")
+  }
+  const saveEdit = async (target: EditTarget) => {
+    const body = text.trim()
+    if (!body || !state) return
+    setSending(true)
+    try {
+      await api.editMessage(sessionKey, {
+        index: state.messages.indexOf(target.message),
+        timestamp: target.message.timestamp,
+        expect: target.text,
+        text: target.prompt ? replaceReplyBody(target.text, body) : body,
+      })
+      cancelEdit()
+      refresh()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSending(false)
+    }
+  }
+
   const send = async () => {
+    if (editing) return saveEdit(editing)
     const body = text.trim()
     if ((!body && files.length === 0) || !summary) return
     setSending(true)
@@ -441,6 +503,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               run={run}
               folder={summary?.path}
               onReply={canWrite ? (target) => selectReply(setReply, target) : undefined}
+              onEdit={canWrite ? startEdit : undefined}
+              editBlocked={running ? "Wait until the agent has finished" : undefined}
+              selfId={user?.id}
               onOpen={(step) => setOpen({ run: index, step })}
               question={run === lastRun ? question : undefined}
               onAnswer={run === lastRun && question && canWrite ? answer(question) : undefined}
@@ -459,6 +524,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
 
       <div data-chat-composer className="shrink-0 border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
         <div className="mx-auto max-w-3xl space-y-2">
+          {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}
           {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
           {queue.length > 0 && (
             <div className="flex flex-wrap gap-1">
@@ -518,7 +584,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   agent={<AgentToggle checked disabled />}
                   controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />}
                   onSend={send}
-                  canSend={Boolean(text.trim()) || files.length > 0}
+                  canSend={Boolean(text.trim()) || (!editing && files.length > 0)}
                   sending={sending}
                   onStop={running ? () => act(() => api.abort(sessionKey)) : undefined}
                 >
@@ -528,7 +594,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder={running ? (mode === "steer" ? "Steer the agent…" : "Queue a follow-up…") : "Message the agent…"}
+                  placeholder={editing ? "Edit message…" : running ? (mode === "steer" ? "Steer the agent…" : "Queue a follow-up…") : "Message the agent…"}
                   className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
                   rows={1}
                 />
