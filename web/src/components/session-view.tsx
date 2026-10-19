@@ -145,6 +145,7 @@ function AgentBubble({
   onAnswer,
   answered = [],
   interactions,
+  folder,
 }: {
   run: Run
   onOpen: (index: number | null) => void
@@ -152,6 +153,8 @@ function AgentBubble({
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
   interactions?: React.ReactNode
+  /** The session folder, for links to files the agent wrote. */
+  folder?: string
 }) {
   return (
     <div className="flex items-start gap-2">
@@ -161,7 +164,7 @@ function AgentBubble({
         <StepStrip steps={run.steps} onOpen={onOpen} onAll={() => onOpen(null)} />
         {run.answer && (
           <div>
-            <Markdown text={run.answer} />
+            <Markdown text={run.answer} base={folder} />
             {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary-foreground/60 align-middle" />}
           </div>
         )}
@@ -191,8 +194,10 @@ function RunView({
   onAnswer,
   answered,
   interactions,
+  folder,
 }: {
   run: Run
+  folder?: string
   onOpen: (index: number | null) => void
   question?: ExtensionDialog
   onAnswer?: (answer: DialogAnswer) => void
@@ -215,7 +220,7 @@ function RunView({
           )}
         </>
       )}
-      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} interactions={interactions} />}
+      {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} interactions={interactions} folder={folder} />}
       {onReply && answerText && !run.running && <ReplyButton onClick={() => onReply({ author: "Beezy", text: answerText, sourceId, assistant: true })} />}
     </div>
   )
@@ -435,6 +440,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
             <RunView
               key={run.key}
               run={run}
+              folder={summary?.path}
               onReply={canWrite ? (target) => selectReply(setReply, target) : undefined}
               onOpen={(step) => setOpen({ run: index, step })}
               question={run === lastRun ? question : undefined}
@@ -519,15 +525,15 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
                   rows={1}
                 />
+                {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
+                <div className="flex items-center gap-1 px-2 pb-2">
+                <AgentToggle checked disabled push={!running} />
+                <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
                 {running && (
-                  <Button className="composer-icon size-11 shrink-0 [&_svg]:size-6" variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
+                  <Button className="composer-icon ml-auto size-11 shrink-0 [&_svg]:size-6" variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
                     <CircleStop className="size-6" />
                   </Button>
                 )}
-                {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-                <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
-                <AgentToggle checked disabled />
-                <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
                 <Button className="composer-send size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
                   {sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
                 </Button>

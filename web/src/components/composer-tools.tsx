@@ -36,7 +36,7 @@ export function ComposerTools({
   const [panel, setPanel] = useState<Panel>()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
   const icon = (name: Panel | "attach" | "model", label: string, node: React.ReactNode, onClick: () => void) => (
-    <Button key={name} variant="ghost" size="icon" className="composer-icon size-11 [&_svg]:size-6" data-active={panel === name} onClick={onClick} aria-label={label} title={label}>
+    <Button key={name} variant="ghost" size="icon" className="composer-icon size-10 [&_svg]:size-[22px]" data-active={panel === name} onClick={onClick} aria-label={label} title={label}>
       {node}
     </Button>
   )
@@ -44,13 +44,13 @@ export function ComposerTools({
   return (
     <>
       <div className="flex items-center justify-center gap-0.5">
-        {onAttach && icon("attach", "Attach files", <Paperclip className="size-6" />, onAttach)}
-        {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot className="size-6" />, onModel ?? nav.openDefaults)}
-        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal className="size-6" />, () => setPanel("terminal"))}
-        {icon("tools", "pi tools, commands and skills", <Hammer className="size-6" />, () => setPanel("tools"))}
-        {icon("mcp", "MCP servers", <McpIcon className="size-6" />, () => setPanel("mcp"))}
-        {icon("monitor", "Resource monitor", <Gauge className="size-6" />, () => setPanel("monitor"))}
-        {icon("explorer", "Folders and files", <FolderOpen className="size-6" />, () => setPanel("explorer"))}
+        {onAttach && icon("attach", "Attach files", <Paperclip className="size-[22px]" />, onAttach)}
+        {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot className="size-[22px]" />, onModel ?? nav.openDefaults)}
+        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal className="size-[22px]" />, () => setPanel("terminal"))}
+        {icon("tools", "pi tools, commands and skills", <Hammer className="size-[22px]" />, () => setPanel("tools"))}
+        {icon("mcp", "MCP servers", <McpIcon className="size-[22px]" />, () => setPanel("mcp"))}
+        {icon("monitor", "Resource monitor", <Gauge className="size-[22px]" />, () => setPanel("monitor"))}
+        {icon("explorer", "Folders and files", <FolderOpen className="size-[22px]" />, () => setPanel("explorer"))}
       </div>
       <ToolsDialog
         sessionKey={sessionKey}

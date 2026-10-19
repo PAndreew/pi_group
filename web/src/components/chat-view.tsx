@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils"
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
-function PiMessage({ m, onWatch, children }: { m: ChatMessage; onWatch?: () => void; children?: React.ReactNode }) {
+function PiMessage({ m, folder, onWatch, children }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode }) {
   const text = messageText(m.message.content)
   return (
     <div className="flex items-start gap-2">
@@ -45,7 +45,7 @@ function PiMessage({ m, onWatch, children }: { m: ChatMessage; onWatch?: () => v
         ) : m.status === "aborted" ? (
           <span className="text-sm text-muted-foreground">Stopped.</span>
         ) : (
-          <Markdown text={text} className="text-sm" />
+          <Markdown text={text} className="text-sm" base={folder} />
         )}
         {children}
       </div>
@@ -243,7 +243,7 @@ export function ChatView({ chatId }: { chatId: string }) {
             if (m.message.role === "assistant") {
               const nextReply = messages.slice(i + 1).find((next) => next.message.role === "assistant")
               const cards = interactions.cards.filter((card) => card.createdAt >= m.createdAt && (!nextReply || card.createdAt < nextReply.createdAt))
-              return <div key={m.id} id={sourceId}><PiMessage m={m} onWatch={watch}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} />{action}</PiMessage></div>
+              return <div key={m.id} id={sourceId}><PiMessage m={m} folder={chat?.folder} onWatch={watch}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} />{action}</PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
