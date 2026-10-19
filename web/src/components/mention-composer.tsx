@@ -1,7 +1,7 @@
-import { ArrowUp, File, Folder, Loader2, X } from "lucide-react"
+import { File, Folder, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
-import { Button } from "@/components/ui/button"
+import { ComposerBox } from "@/components/composer-box"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { cn, relativePath } from "@/lib/utils"
@@ -69,6 +69,7 @@ export function MentionComposer({
   hash = "folder",
   folder = "",
   sessionKey,
+  agent,
   controls,
 }: {
   value: string
@@ -84,6 +85,7 @@ export function MentionComposer({
   hash?: "folder" | "paths" | "off"
   folder?: string
   sessionKey?: string
+  agent?: React.ReactNode
   controls?: React.ReactNode
 }) {
   const input = useRef<HTMLTextAreaElement>(null)
@@ -174,7 +176,7 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <div data-composer-box className="relative mb-9 rounded-md border focus-within:ring-1 focus-within:ring-ring">
+    <ComposerBox agent={agent} controls={controls} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
@@ -250,14 +252,7 @@ export function MentionComposer({
           }
         }}
       />
-      <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
-      {controls}
-      {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-      <Button className="composer-send ml-auto size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
-        {busy ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
-      </Button>
-      </div>
-    </div>
+    </ComposerBox>
   )
 }
 

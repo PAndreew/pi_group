@@ -273,7 +273,8 @@ export function ChatView({ chatId }: { chatId: string }) {
           selfId={user?.id}
           hash="paths"
           placeholder="Message… (# for files)"
-          controls={<><AgentToggle checked={agent} onChange={setAgent} /><ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading} agentEnabled={agent} /></>}
+          agent={<AgentToggle checked={agent} onChange={setAgent} />}
+          controls={<ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading} agentEnabled={agent} />}
           onSubmit={(message) => send(agent && !message.pi ? `@pi ${message.raw}` : message.raw)}
         />
         {chat && (

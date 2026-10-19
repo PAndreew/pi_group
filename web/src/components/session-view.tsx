@@ -1,6 +1,4 @@
 import {
-  ArrowUp,
-  CircleStop,
   Eye,
   Loader2,
   MoreVertical,
@@ -17,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { PiAvatar } from "@/components/mention-composer"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { ComposerBox } from "@/components/composer-box"
 import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
@@ -514,7 +513,15 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     e.target.value = ""
                   }}
                 />
-                <div data-composer-box className="relative mb-9 min-w-0 flex-1 rounded-md border">
+                <div className="min-w-0 flex-1">
+                <ComposerBox
+                  agent={<AgentToggle checked disabled />}
+                  controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />}
+                  onSend={send}
+                  canSend={Boolean(text.trim()) || files.length > 0}
+                  sending={sending}
+                  onStop={running ? () => act(() => api.abort(sessionKey)) : undefined}
+                >
                 <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
                 <PathDropup value={text} folder={summary?.path ?? ""} onChange={setText} />
                 <Textarea
@@ -525,19 +532,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
                   rows={1}
                 />
-                {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-                <div className="flex items-center gap-1 px-2 pb-2">
-                <AgentToggle checked disabled push={!running} />
-                <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
-                {running && (
-                  <Button className="composer-icon ml-auto size-11 shrink-0 [&_svg]:size-6" variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
-                    <CircleStop className="size-6" />
-                  </Button>
-                )}
-                <Button className="composer-send size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
-                  {sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
-                </Button>
-                </div>
+                </ComposerBox>
                 </div>
               </div>
               <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()} onModel={() => setModelOpen(true)} onInsert={setText} />

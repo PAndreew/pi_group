@@ -39,8 +39,8 @@ export function Home() {
           busy={busy}
           selfId={user?.id}
           placeholder="Start a chat: message, @someone, #folder…"
-          controls={<>
-            <AgentToggle checked={agent} onChange={setAgent} disabled={busy} />
+          agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
+          controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => {
               if (!files.length) return
               setBusy(true)
@@ -48,7 +48,7 @@ export function Home() {
                 setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
               }, (error) => toast.error(error.message)).finally(() => setBusy(false))
             }} />
-          </>}
+          }
           onSubmit={async (message) => {
             message.pi ||= agent
             if (!message.pi && message.people.length === 0) return void toast.info("Mention @pi or at least one person to start a chat.")
