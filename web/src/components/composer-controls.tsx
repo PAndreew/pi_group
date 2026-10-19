@@ -10,7 +10,7 @@ const short: Record<string, string> = { off: "0", minimal: "MIN", low: "L", medi
 export interface ComposerConfig { model?: { provider: string; id: string }; thinkingLevel?: string }
 
 /** Quick switches affect only the linked session, never creation defaults. */
-export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraftChange }: { sessionKey?: string; draft?: ComposerConfig; onDraftChange?: (config: ComposerConfig) => void; onCamera: (files: File[]) => void; disabled?: boolean }) {
+export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled = true, draft, onDraftChange }: { agentEnabled?: boolean; sessionKey?: string; draft?: ComposerConfig; onDraftChange?: (config: ComposerConfig) => void; onCamera: (files: File[]) => void; disabled?: boolean }) {
   const { user } = useAuth()
   const { state: liveState } = useSessionStream(sessionKey)
   const state = sessionKey ? liveState : draft
@@ -19,7 +19,7 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
     if (sessionKey) return
     void api.harnesses().then(({ harnesses }) => {
       setHarness(harnesses.find((h) => h.ok && h.id === user?.sessionDefaults?.harness)?.id ?? harnesses.find((h) => h.ok)?.id)
-    }, () => {})
+    }, (error) => toast.error(`Cannot load providers: ${error.message}`))
   }, [sessionKey, user?.sessionDefaults?.harness])
   const [models, setModels] = useState<ModelInfo[]>([])
   const [open, setOpen] = useState(false)
@@ -29,7 +29,7 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
     setModels([])
     if (!sessionKey && !harness) return
     let alive = true
-    void (sessionKey ? api.session(sessionKey).then(({ session }) => api.models(session.harness)) : api.models(harness!)).then(({ models }) => { if (alive) setModels(models) }, () => {})
+    void (sessionKey ? api.session(sessionKey).then(({ session }) => api.models(session.harness)) : api.models(harness!)).then(({ models }) => { if (alive) setModels(models) }, (error) => { if (alive) toast.error(`Cannot load models: ${error.message}`) })
     return () => { alive = false }
   }, [sessionKey, harness])
   useEffect(() => {
@@ -47,8 +47,8 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
     try { await action() } catch (error) { toast.error((error as Error).message) } finally { setBusy(false) }
   }
   return <>
-    <div className="order-last flex w-full min-w-0 justify-center">
-    <select aria-label="Current session model" title="Current session model" className="h-9 min-w-0 max-w-full rounded bg-transparent text-sm text-center" disabled={disabled || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
+    <div className="order-last flex basis-full min-w-0 justify-center">
+    <select aria-label="Current session model" title="Current session model" className="h-9 min-w-0 max-w-full rounded bg-transparent text-xs text-center [text-align-last:center]" disabled={disabled || !agentEnabled || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
       const [provider, id] = JSON.parse(e.target.value)
       if (sessionKey) void change(() => api.setModel(sessionKey, provider, id))
       else {
@@ -61,7 +61,7 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
     </select>
     </div>
     <div className="relative shrink-0">
-      <button type="button" className="flex h-11 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} disabled={disabled || busy || levels.length < 2} onClick={() => setOpen(!open)}><Brain className="size-6" /><span className="text-xs">{short[level] ?? level}</span></button>
+      <button type="button" className="flex h-11 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} disabled={disabled || !agentEnabled || busy || levels.length < 2} onClick={() => setOpen(!open)}><Brain className="size-6" /><span className="text-xs">{short[level] ?? level}</span></button>
       {open && <div className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded border bg-popover p-3 text-popover-foreground shadow" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false) }}>
         <div className="mb-2 flex justify-between text-xs"><span>Reasoning: {level}</span><button type="button" aria-label="Close reasoning" onClick={() => setOpen(false)}>×</button></div>
         <input aria-label="Reasoning level" aria-valuetext={level} type="range" min={0} max={levels.length - 1} step={1} value={Math.max(0, levels.indexOf(level))} disabled={busy} className="w-full" onChange={(e) => { const thinkingLevel = levels[Number(e.target.value)]; if (sessionKey) void change(() => api.setThinking(sessionKey, thinkingLevel)); else onDraftChange?.({ ...draft, thinkingLevel }) }} />

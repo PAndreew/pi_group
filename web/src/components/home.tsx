@@ -41,7 +41,7 @@ export function Home() {
           placeholder="Start a chat: message, @someone, #folder…"
           controls={<>
             <AgentToggle checked={agent} onChange={setAgent} disabled={busy} />
-            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || !agent} onCamera={(files) => {
+            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => {
               if (!files.length) return
               setBusy(true)
               void api.upload(folder, files).then(({ files: uploaded }) => {
