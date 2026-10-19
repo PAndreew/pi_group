@@ -47,7 +47,8 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
     try { await action() } catch (error) { toast.error((error as Error).message) } finally { setBusy(false) }
   }
   return <>
-    <select aria-label="Current session model" title="Current session model" className="h-11 min-w-0 max-w-40 flex-1 rounded bg-transparent text-xs" disabled={disabled || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
+    <div className="order-last flex w-full min-w-0 justify-center">
+    <select aria-label="Current session model" title="Current session model" className="h-9 min-w-0 max-w-full rounded bg-transparent text-sm text-center" disabled={disabled || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
       const [provider, id] = JSON.parse(e.target.value)
       if (sessionKey) void change(() => api.setModel(sessionKey, provider, id))
       else {
@@ -58,6 +59,7 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
       {!model && <option value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""}>{state?.model?.id ?? "Model"}</option>}
       {models.map((m) => <option key={`${m.provider}/${m.id}`} value={JSON.stringify([m.provider, m.id])}>{m.name}</option>)}
     </select>
+    </div>
     <div className="relative shrink-0">
       <button type="button" className="flex h-11 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} disabled={disabled || busy || levels.length < 2} onClick={() => setOpen(!open)}><Brain className="size-6" /><span className="text-xs">{short[level] ?? level}</span></button>
       {open && <div className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded border bg-popover p-3 text-popover-foreground shadow" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false) }}>
@@ -72,5 +74,5 @@ export function ComposerControls({ sessionKey, onCamera, disabled, draft, onDraf
 }
 
 export function AgentToggle({ checked, onChange, disabled }: { checked: boolean; onChange?: (value: boolean) => void; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} className="mr-auto flex min-h-11 shrink-0 items-center gap-1.5 text-xs"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 ${checked ? "bg-primary" : "bg-muted-foreground"}`}><span className={`size-5 rounded-full bg-background transition-transform ${checked ? "translate-x-5" : ""}`} /></span>Agent</button>
+  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} className="mr-auto flex min-h-11 shrink-0 items-center gap-2 text-base font-medium"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 ${checked ? "bg-primary" : "bg-muted-foreground"}`}><span className={`size-5 rounded-full bg-background transition-transform ${checked ? "translate-x-5" : ""}`} /></span>Agent</button>
 }

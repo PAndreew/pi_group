@@ -250,11 +250,11 @@ export function MentionComposer({
           }
         }}
       />
-      <div className="flex items-center gap-1 px-2 pb-2">
+      <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
       {controls}
       {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
       <Button className="ml-auto size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={() => void submit()} disabled={busy || !value.trim()} aria-label="Send">
-        {busy ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+        {busy ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
       </Button>
       </div>
     </div>

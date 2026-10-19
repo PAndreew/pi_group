@@ -515,15 +515,15 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 />
                 {running && (
                   <Button className="size-11 shrink-0 [&_svg]:size-6" variant="destructive" size="icon" onClick={() => act(() => api.abort(sessionKey))} aria-label="Stop the agent">
-                    <CircleStop />
+                    <CircleStop className="size-6" />
                   </Button>
                 )}
                 {/* Centred on the one-line box (48px box, 32px button: 8px each side); stays put as the text grows. */}
-                <div className="flex items-center gap-1 px-2 pb-2">
+                <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
                 <AgentToggle checked disabled />
                 <ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />
                 <Button className="size-11 shrink-0 [&_svg]:size-6" size="icon" onClick={send} disabled={sending || (!text.trim() && files.length === 0)} aria-label="Send">
-                  {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+                  {sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-6" />}
                 </Button>
                 </div>
                 </div>

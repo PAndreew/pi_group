@@ -44,13 +44,13 @@ export function ComposerTools({
   return (
     <>
       <div className="flex items-center justify-center gap-0.5">
-        {onAttach && icon("attach", "Attach files", <Paperclip />, onAttach)}
-        {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot />, onModel ?? nav.openDefaults)}
-        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal />, () => setPanel("terminal"))}
-        {icon("tools", "pi tools, commands and skills", <Hammer />, () => setPanel("tools"))}
+        {onAttach && icon("attach", "Attach files", <Paperclip className="size-6" />, onAttach)}
+        {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot className="size-6" />, onModel ?? nav.openDefaults)}
+        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal className="size-6" />, () => setPanel("terminal"))}
+        {icon("tools", "pi tools, commands and skills", <Hammer className="size-6" />, () => setPanel("tools"))}
         {icon("mcp", "MCP servers", <McpIcon className="size-6" />, () => setPanel("mcp"))}
-        {icon("monitor", "Resource monitor", <Gauge />, () => setPanel("monitor"))}
-        {icon("explorer", "Folders and files", <FolderOpen />, () => setPanel("explorer"))}
+        {icon("monitor", "Resource monitor", <Gauge className="size-6" />, () => setPanel("monitor"))}
+        {icon("explorer", "Folders and files", <FolderOpen className="size-6" />, () => setPanel("explorer"))}
       </div>
       <ToolsDialog
         sessionKey={sessionKey}
