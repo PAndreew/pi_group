@@ -1,3 +1,4 @@
+import { toast } from "sonner"
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { unsubscribePush } from "@/hooks/use-run-notifications"
 import { ApiError, api, type User, type SessionDefaults } from "@/lib/api"
@@ -13,6 +14,8 @@ interface AuthValue {
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
+// React StrictMode replays mount effects; a notification must switch only once.
+let notificationSwitch: Promise<unknown> | undefined
 
 /** The signed-in user from last time, so a reopened app renders at once while /me revalidates. */
 const USER_KEY = "pi-group:user"
@@ -34,13 +37,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user])
 
   useEffect(() => {
+    let redirecting = false
     api
       .me()
-      .then(({ user, tenantId }) => {
+      .then(async ({ user, tenantId }) => {
+        const target = new URLSearchParams(window.location.search).get("tenant")
         if (tenantId && tenantId !== activeTenant()) {
           setActiveTenant(tenantId)
-          window.location.replace(window.location.pathname)
+          redirecting = true
+          window.location.replace(target ? window.location.href : window.location.pathname)
           return
+        }
+        if (target) {
+          try {
+            if (target !== activeTenant()) {
+              await (notificationSwitch ??= api.switchTenant(target).catch(error => {
+                notificationSwitch = undefined
+                throw error
+              }))
+              await clearStates()
+              setActiveTenant(target)
+              redirecting = true
+              window.location.replace(window.location.pathname + window.location.hash)
+              return
+            }
+            window.history.replaceState(null, "", window.location.pathname + window.location.hash)
+          } catch (error) {
+            window.history.replaceState(null, "", window.location.pathname)
+            toast.error((error as Error).message, { id: "notification-tenant" })
+          }
         }
         setUser(user)
       })
@@ -49,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error instanceof ApiError && error.status === 401) setUser(null)
         else if (!rememberedUser()) setUser(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!redirecting) setLoading(false) })
     const onUnauthorized = () => setUser(null)
     window.addEventListener("pi-group:unauthorized", onUnauthorized)
     const onStorage = (event: StorageEvent) => {

@@ -26,7 +26,7 @@ export function ComposerBox({
   return (
     <div data-composer-box className="relative mb-9 min-w-0 rounded-md border focus-within:ring-1 focus-within:ring-ring">
       {children}
-      <div className="flex items-center gap-1 px-2 pb-2">
+      <div className="flex items-center gap-1 p-2">
         {agent}
         {onStop ? controls : <span className="flex-1" />}
         {onStop ? <span className="flex-1" /> : controls}

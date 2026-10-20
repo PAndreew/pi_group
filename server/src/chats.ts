@@ -234,7 +234,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		for (const userId of memberIds(chat.id)) {
 			if (!isTenantMember(userId, chat.tenantId ?? "work")) continue;
 			deps.sendTo(userId, { type, tenantId: chat.tenantId ?? "work", chatId: chat.id, message });
-			if (pushText && userId !== pushText.except) void pushToUser(userId, { type: "chat", chatId: chat.id, title: chatTitle(chat, userId), author: pushText.author, text: pushText.text.slice(0, 300) });
+			if (pushText && userId !== pushText.except) void pushToUser(userId, { type: "chat", tenantId: chat.tenantId ?? "work", chatId: chat.id, title: chatTitle(chat, userId), author: pushText.author, text: pushText.text.slice(0, 300) });
 		}
 	};
 

@@ -12,8 +12,9 @@ export function useAppViewport() {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         if (viewport && Math.abs(viewport.scale - 1) > 0.01) return
-        root.style.setProperty("--app-height", `${viewport?.height ?? window.innerHeight}px`)
-        root.style.setProperty("--app-top", `${viewport?.offsetTop ?? 0}px`)
+        const editing = document.activeElement instanceof HTMLElement && document.activeElement.matches('textarea, input, [contenteditable="true"]')
+        root.style.setProperty("--app-height", `${editing ? (viewport?.height ?? window.innerHeight) : window.innerHeight}px`)
+        root.style.setProperty("--app-top", `${editing ? (viewport?.offsetTop ?? 0) : 0}px`)
       })
     }
     const settle = () => {
@@ -23,11 +24,17 @@ export function useAppViewport() {
     }
     /** Leaving the app with the keyboard up keeps the shrunken viewport on return (iOS fires no
      * resize then): drop focus on the way out so the keyboard closes, and re-measure on the way back. */
+    const blurEditor = () => {
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active.matches('textarea, input, [contenteditable="true"]')) active.blur()
+    }
+    const resume = () => {
+      blurEditor()
+      settle()
+    }
     const visibility = () => {
-      if (document.visibilityState === "hidden") {
-        const active = document.activeElement
-        if (active instanceof HTMLElement && active.matches("textarea, input")) active.blur()
-      } else settle()
+      blurEditor()
+      if (document.visibilityState !== "hidden") settle()
     }
     settle()
     viewport?.addEventListener("resize", settle)
@@ -35,8 +42,9 @@ export function useAppViewport() {
     window.addEventListener("resize", settle)
     window.addEventListener("focusin", settle)
     window.addEventListener("focusout", settle)
-    window.addEventListener("pageshow", settle)
-    window.addEventListener("focus", settle)
+    window.addEventListener("pagehide", blurEditor)
+    window.addEventListener("pageshow", resume)
+    window.addEventListener("focus", resume)
     document.addEventListener("visibilitychange", visibility)
     return () => {
       cancelAnimationFrame(frame)
@@ -46,8 +54,9 @@ export function useAppViewport() {
       window.removeEventListener("resize", settle)
       window.removeEventListener("focusin", settle)
       window.removeEventListener("focusout", settle)
-      window.removeEventListener("pageshow", settle)
-      window.removeEventListener("focus", settle)
+      window.removeEventListener("pagehide", blurEditor)
+      window.removeEventListener("pageshow", resume)
+      window.removeEventListener("focus", resume)
       document.removeEventListener("visibilitychange", visibility)
       root.style.removeProperty("--app-height")
       root.style.removeProperty("--app-top")

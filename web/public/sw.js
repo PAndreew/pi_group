@@ -14,7 +14,8 @@ self.addEventListener("activate", (event) =>
   )
 )
 
-const sessionUrl = (n) => `/#${new URLSearchParams({ ...(n.path ? { f: n.path } : {}), s: n.key })}`
+const tenantQuery = (n) => n.tenantId ? `?tenant=${encodeURIComponent(n.tenantId)}` : ""
+const sessionUrl = (n) => `/${tenantQuery(n)}#${new URLSearchParams({ ...(n.path ? { f: n.path } : {}), s: n.key })}`
 
 self.addEventListener("push", (event) => {
   const notice = event.data?.json()
@@ -63,7 +64,7 @@ async function chatNotification(notice) {
     renotify: true,
     icon: "/icon-192.png",
     badge: "/badge-96.png",
-    data: { url: `/#c=${encodeURIComponent(notice.chatId)}` },
+    data: { url: `/${tenantQuery(notice)}#c=${encodeURIComponent(notice.chatId)}` },
   })
 }
 

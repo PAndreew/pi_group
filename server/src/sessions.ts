@@ -128,7 +128,7 @@ class Hub {
 		}
 		// Push reaches devices whose app is closed or frozen; the service worker skips it when the app is in front.
 		for (const user of store.data.users) {
-			if (involved(user, meta)) void pushToUser(user.id, notice);
+			if (involved(user, meta)) void pushToUser(user.id, { ...notice, tenantId: meta.tenantId ?? "work" });
 		}
 	}
 

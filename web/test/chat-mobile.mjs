@@ -24,6 +24,7 @@ try {
       body = { message: { ...messages[0], id: 100, message: { role: 'user', author: user, content: sent } } }
     } else if (path === '/api/chats/test') body = { chat, messages }
     else if (path === '/api/chats/test/messages') body = { messages: [] }
+    else if (path === '/api/jobs') body = { jobs: [{ id: 'job', name: 'Mobile job', owner: 'Tester', schedule: '@daily', folder: '', approved: false, enabled: true, canApprove: true, steps: [{ type: 'http', method: 'DELETE', url: 'https://example.com/' + 'a'.repeat(200), headers: {}, timeoutSec: 30 }], lastRun: { at: new Date().toISOString(), ok: false, ms: 10, output: 'x'.repeat(400) } }] }
     else if (path === '/api/chats') body = { chats: [] }
     else if (path === '/api/users/directory') body = { users: [user] }
     else if (path.includes('/sessions/active')) body = { sessions: [] }
@@ -34,6 +35,15 @@ try {
   })
   await page.goto(`${base}/#c=test`)
   await page.getByText('Assistant answer 59:', { exact: false }).waitFor()
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.getByRole('button', { name: /^Scheduled jobs/ }).click()
+    await page.getByLabel('Method', { exact: true }).waitFor()
+    assert.equal(await page.getByRole('dialog').evaluate(el => [...el.querySelectorAll('*')].filter(e => e.clientWidth && getComputedStyle(e).overflowX === 'visible').every(e => e.scrollWidth <= e.clientWidth + 1)), true, 'job editor content fits mobile width')
+    await page.keyboard.press('Escape')
+  }
+  const spacing = await page.locator('[data-composer-box] > div').last().evaluate(el => ({ top: getComputedStyle(el).paddingTop, bottom: getComputedStyle(el).paddingBottom }))
+  assert.equal(spacing.top, spacing.bottom, 'send row has equal spacing above and below')
   const scroller = page.locator('div.overflow-y-auto').last()
   await scroller.evaluate(el => { el.scrollTop = el.scrollHeight / 2 })
   await page.evaluate(() => {
@@ -70,6 +80,15 @@ try {
     assert.ok(box.y >= 0 && box.y + box.height <= height + 1, 'composer stays on screen')
     assert.equal(await page.evaluate(() => window.scrollY), 0)
   }
+  await editor.blur()
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport, 'height', { configurable: true, value: 200 })
+    Object.defineProperty(window.visualViewport, 'offsetTop', { configurable: true, value: 80 })
+    window.dispatchEvent(new Event('pageshow'))
+  })
+  await page.waitForTimeout(150)
+  assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--app-height')), '390px', 'unfocused resumed app ignores stale keyboard viewport')
+  assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--app-top')), '0px')
   await page.goto(`${base}/#s=test-session`)
   await page.getByText('Session assistant answer', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Reply to message', exact: true }).last().click()

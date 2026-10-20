@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { House } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { api } from "@/lib/api"
 import { clearStates } from "@/lib/state-cache"
 import { activeTenant, setActiveTenant } from "@/lib/tenant"
@@ -21,8 +24,15 @@ export function TenantPicker() {
     }
   }
   return (
-    <select aria-label="Tenant" className="h-9 max-w-32 rounded-md border bg-background px-2 text-sm" value={activeTenant()} disabled={busy || tenants.length < 2} onChange={e => void change(e.target.value)}>
-      {tenants.length ? tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>) : <option value={activeTenant()}>…</option>}
-    </select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" aria-label="Tenant" className="min-w-0 max-w-40" disabled={busy || tenants.length < 2}>
+          <House className="shrink-0" /><span className="truncate">{tenants.find(t => t.id === activeTenant())?.name ?? "…"}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {tenants.map(t => <DropdownMenuItem key={t.id} disabled={t.id === activeTenant()} onSelect={() => void change(t.id)}>{t.name}</DropdownMenuItem>)}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

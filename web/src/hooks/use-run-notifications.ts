@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
+import { activeTenant } from "@/lib/tenant"
 import { messageText } from "@/lib/steps"
 import { subscribeUserEvents } from "@/lib/user-stream"
 
@@ -66,7 +67,7 @@ const sessionHash = (n: RunNotice) => `#${new URLSearchParams({ ...(n.path ? { f
 /** Same title, body and tag as the service worker's push notification, so the two collapse into one. */
 async function showSystemNotification(n: RunNotice) {
   const title = n.kind === "error" ? `Agent error · ${n.name}` : `Agent finished · ${n.name}`
-  const options: NotificationOptions = { body: n.text || (n.kind === "error" ? "The run failed." : "The run is done."), tag: `${n.key}:${n.kind}`, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: `/${sessionHash(n)}` } }
+  const options: NotificationOptions = { body: n.text || (n.kind === "error" ? "The run failed." : "The run is done."), tag: `${n.key}:${n.kind}`, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: `/?tenant=${encodeURIComponent(activeTenant())}${sessionHash(n)}` } }
   const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined)
   if (registration) return registration.showNotification(title, options)
   const notification = new Notification(title, options)
@@ -80,7 +81,7 @@ async function showSystemNotification(n: RunNotice) {
 /** Same tag as the service worker's push for this chat message, so the two collapse into one. */
 async function showChatNotification(chatId: string, title: string, body: string) {
   // renotify (alert again for a newer message in the same chat) is missing from the DOM typings.
-  const options: NotificationOptions & { renotify?: boolean } = { body, tag: `chat:${chatId}`, renotify: true, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: `/#c=${encodeURIComponent(chatId)}` } }
+  const options: NotificationOptions & { renotify?: boolean } = { body, tag: `chat:${chatId}`, renotify: true, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: `/?tenant=${encodeURIComponent(activeTenant())}#c=${encodeURIComponent(chatId)}` } }
   const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined)
   if (registration) return registration.showNotification(title, options)
   const notification = new Notification(title, options)
@@ -146,7 +147,12 @@ export function useRunNotifications(currentSession: string | undefined, currentC
   // Clicks on service-worker notifications come back here as a message.
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === "open") window.location.hash = new URL(event.data.url, window.location.origin).hash
+      if (event.data?.type !== "open") return
+      const url = new URL(event.data.url, window.location.origin)
+      if (url.origin !== window.location.origin) return
+      const tenant = url.searchParams.get("tenant")
+      if (tenant && tenant !== activeTenant()) window.location.assign(url.href)
+      else window.location.hash = url.hash
     }
     navigator.serviceWorker?.addEventListener("message", onMessage)
     return () => navigator.serviceWorker?.removeEventListener("message", onMessage)

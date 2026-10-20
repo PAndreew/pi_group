@@ -83,7 +83,7 @@ export function mountInteractions(router: Router, load: (req: Request) => { acce
     saveNow();
     const meta = store.session(card.sessionKey)!;
     const recipients = new Set([meta.ownerId, ...meta.shares.filter((s) => s.access === "write").map((s) => s.userId)]);
-    for (const userId of recipients) if (userId && isTenantMember(userId, meta.tenantId ?? "work")) void pushToUser(userId, { type: "interaction", key: card.sessionKey, id: card.id, title: spec.title }).catch((error) => console.error("Interaction push failed:", error.message));
+    for (const userId of recipients) if (userId && isTenantMember(userId, meta.tenantId ?? "work")) void pushToUser(userId, { type: "interaction", tenantId: meta.tenantId ?? "work", key: card.sessionKey, id: card.id, title: spec.title }).catch((error) => console.error("Interaction push failed:", error.message));
     res.json(card);
   });
   router.get("/interaction-bridge/:key/:id", (req, res) => { res.json(find(req)); });

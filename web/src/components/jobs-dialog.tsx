@@ -54,7 +54,7 @@ function StepEditor({ step, onChange, onRemove }: { step: JobStep; onChange: (st
     </label>
   )
   return (
-    <div className="grid gap-2 rounded-md border bg-muted/30 p-2">
+    <div className="grid min-w-0 grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2">
       <div className="flex items-center gap-2">
         <Select value={step.type} onValueChange={(type) => onChange(blankStep(type as JobStep["type"]))}>
           <SelectTrigger size="sm" className="w-auto text-xs" aria-label="Step type">
@@ -96,7 +96,7 @@ function StepEditor({ step, onChange, onRemove }: { step: JobStep; onChange: (st
         <>
           <div className="flex gap-2">
             <Select value={step.method} onValueChange={(method) => onChange({ ...step, method: method as typeof step.method })}>
-              <SelectTrigger size="sm" className="w-24 text-xs" aria-label="Method">
+              <SelectTrigger size="sm" className="w-24 shrink-0 text-xs" aria-label="Method">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -107,7 +107,7 @@ function StepEditor({ step, onChange, onRemove }: { step: JobStep; onChange: (st
                 ))}
               </SelectContent>
             </Select>
-            <Input value={step.url} onChange={(e) => onChange({ ...step, url: e.target.value })} className="h-8 font-mono text-xs" placeholder="https://…" />
+            <Input value={step.url} onChange={(e) => onChange({ ...step, url: e.target.value })} className="h-8 min-w-0 flex-1 font-mono text-xs" placeholder="https://…" />
           </div>
           <HeadersField headers={step.headers} onChange={(headers) => onChange({ ...step, headers })} />
           {step.method !== "GET" && <Textarea value={step.body ?? ""} onChange={(e) => onChange({ ...step, body: e.target.value || undefined })} rows={3} className="font-mono text-xs" placeholder="Request body" />}
@@ -163,7 +163,7 @@ function JobItem({ job, onChange, onDeleted, onOpenSession }: { job: Job; onChan
   const setStep = (index: number, step: JobStep) => setEdits({ ...draft, steps: draft.steps.map((s, i) => (i === index ? step : s)) })
 
   return (
-    <li className="rounded-md border">
+    <li className="min-w-0 rounded-md border [overflow-wrap:anywhere] [&_.grid]:min-w-0 [&_.grid]:grid-cols-1">
       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className={cn("size-2 shrink-0 rounded-full", STATUS[status].dot)} title={STATUS[status].label} />
         <span className="grid min-w-0 flex-1">
@@ -294,12 +294,12 @@ export function JobsDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-xl">
+      <DialogContent className="flex max-h-[85dvh] min-w-0 flex-col sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Scheduled jobs</DialogTitle>
           <DialogDescription>Prompts, scripts and HTTP calls that run on a schedule. Ask the agent to set one up; it runs once you approve it here.</DialogDescription>
         </DialogHeader>
-        <div className="-mx-2 grid min-h-0 gap-2 overflow-y-auto px-2">
+        <div className="-mx-2 grid min-h-0 min-w-0 grid-cols-1 gap-2 overflow-y-auto px-2">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!jobs && !error && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
           {jobs?.length === 0 && (
@@ -310,7 +310,7 @@ export function JobsDialog({ open, onOpenChange }: { open: boolean; onOpenChange
             </div>
           )}
           {jobs && jobs.length > 0 && (
-            <ul className="grid gap-2">
+            <ul className="grid min-w-0 grid-cols-1 gap-2">
               {jobs.map((job) => (
                 <JobItem
                   key={job.id}
