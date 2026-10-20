@@ -166,6 +166,7 @@ class Hub {
 		const current = this.attached.get(key);
 		if (current?.live === live) return;
 		current?.unsubscribe();
+		if (!this.running.has(key)) this.running.set(key, live.state.running);
 		const unsubscribe = live.subscribe((event) => {
 			this.observe(key, live, event);
 			if (event.type === "state") this.broadcast(key, { ...event, state: this.state(key, event.state) });
@@ -287,6 +288,35 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(input.text), updatedAt: new Date().toISOString() });
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
+
+	const isRunning = (key?: string) => {
+		const meta = key ? store.session(key) : undefined;
+		return Boolean(meta && byId.get(meta.harness)?.live(meta.id)?.state.running);
+	};
+
+	/** Messages shared into other sessions, waiting until neither their source nor their target agent is running. */
+	const forwards: { from?: string; to: string; userId: string; text: string }[] = [];
+	let delivering = false;
+	const deliverForwards = async () => {
+		if (delivering) return;
+		delivering = true;
+		try {
+			// One per target and pass: a delivered prompt starts a run, and the next one waits for it.
+			const started = new Set<string>();
+			for (const item of [...forwards]) {
+				if (started.has(item.to) || isRunning(item.from) || isRunning(item.to)) continue;
+				forwards.splice(forwards.indexOf(item), 1);
+				const meta = store.session(item.to);
+				const user = store.userById(item.userId);
+				if (!meta || meta.deleted || !user || !canWrite(accessOf(user, meta))) continue;
+				started.add(item.to);
+				await promptSession(meta, user, { text: item.text }).catch((error) => console.error(`Sharing into ${item.to} failed:`, error));
+			}
+		} finally {
+			delivering = false;
+		}
+	};
+	hub.onRun(() => void deliverForwards());
 
 	/**
 	 * Rewrite one message of a session whose agent is not running. An idle process is stopped
@@ -415,6 +445,42 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt))
 			.slice(0, limit);
 		res.json({ sessions });
+	});
+
+	/** Sessions the caller can send messages into (the share-to-session picker); chat and memory sessions are left out. */
+	router.get("/sessions/targets", (req, res) => {
+		const sessions = Object.values(store.data.sessions)
+			.filter((meta) => !meta.deleted && (meta.ownerId || meta.updatedAt) && canWrite(accessOf(req.user!, meta)) && !hub.quiet(meta.key))
+			.map((meta) => summary(meta, req.user!))
+			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
+		res.json({ sessions });
+	});
+
+	/** Share a message into other sessions as a prompt; it waits while the source or the target agent is running. */
+	router.post("/sessions/forward", async (req, res) => {
+		const body = z.object({ text: z.string().trim().min(1).max(200_000), from: z.string().optional(), to: z.array(z.string()).min(1).max(50) }).parse(req.body);
+		const source = body.from ? store.session(body.from) : undefined;
+		if (body.from && (!source || source.deleted || !accessOf(req.user!, source))) throw new HttpError(404, "Session not found");
+		const targets = [...new Set(body.to)].filter((key) => key !== body.from);
+		for (const key of targets) {
+			const meta = store.session(key);
+			if (!meta || meta.deleted || !accessOf(req.user!, meta)) throw new HttpError(404, "Session not found");
+			if (!canWrite(accessOf(req.user!, meta))) throw new HttpError(403, `You have read-only access to “${meta.name || meta.firstMessage || "Untitled session"}”`);
+		}
+		const label = source && (source.name || source.firstMessage);
+		const text = `${label ? `Shared from session “${firstLine(label).slice(0, 80)}”` : "Shared from another session"}:
+
+${body.text}`;
+		// Watch the sessions involved now, so their runs ending delivers without waiting for the periodic attach.
+		for (const key of [body.from, ...targets]) {
+			const meta = key ? store.session(key) : undefined;
+			const live = meta && byId.get(meta.harness)?.live(meta.id);
+			if (live) hub.attach(key!, live);
+		}
+		const waiting = targets.filter((to) => isRunning(body.from) || isRunning(to)).length;
+		forwards.push(...targets.map((to) => ({ from: body.from, to, userId: req.user!.id, text })));
+		await deliverForwards();
+		res.json({ shared: targets.length, waiting });
 	});
 
 	const shareSchema = z.array(z.object({ userId: z.string(), access: z.enum(["read", "write"]) })).max(100);
@@ -644,6 +710,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
 	setInterval(() => {
 		for (const adapter of adapters) for (const live of adapter.liveSessions()) hub.attach(`${adapter.id}:${live.id}`, live);
+		if (forwards.length) void deliverForwards();
 	}, 5_000).unref();
 
 	// Stop idle runtimes: not running, nobody watching, not pinned, quiet for IDLE_TIMEOUT_MIN.

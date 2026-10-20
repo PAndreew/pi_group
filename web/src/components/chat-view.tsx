@@ -6,6 +6,7 @@ import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
+import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
 import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
@@ -108,6 +109,8 @@ export function ChatView({ chatId }: { chatId: string }) {
   const [reply, setReply] = useState<ReplyTarget>()
   /** The message whose text the composer holds for editing; `text` is its full text, reply quote included. */
   const [editing, setEditing] = useState<{ id: number; text: string; assistant: boolean }>()
+  /** A Beezy reply being sent on to other sessions. */
+  const [forwarding, setForwarding] = useState<string>()
   const [agent, setAgent] = useState(false)
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [sending, setSending] = useState(false)
@@ -281,7 +284,7 @@ export function ChatView({ chatId }: { chatId: string }) {
               const nextReply = messages.slice(i + 1).find((next) => next.message.role === "assistant")
               const cards = interactions.cards.filter((card) => card.createdAt >= m.createdAt && (!nextReply || card.createdAt < nextReply.createdAt))
               const actions = content && m.status !== "working" ? (
-                <MessageActions copy={content} onReply={onReply} onEdit={() => startEdit(m, content)} editBlocked={piWorking ? "Wait until Beezy has finished" : m.status !== "done" ? "Only finished replies can be edited" : undefined} />
+                <MessageActions copy={content} onReply={onReply} onShare={() => setForwarding(content)} onEdit={() => startEdit(m, content)} editBlocked={piWorking ? "Wait until Beezy has finished" : m.status !== "done" ? "Only finished replies can be edited" : undefined} />
               ) : null
               return <div key={m.id} id={sourceId}><PiMessage m={m} folder={chat?.folder} onWatch={watch} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
             }
@@ -347,6 +350,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           />
         )}
       </div>
+      <ForwardDialog text={forwarding} from={chat?.sessionKey} onOpenChange={(o) => !o && setForwarding(undefined)} />
     </div>
   )
 }

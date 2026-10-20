@@ -1,9 +1,10 @@
-import { Loader2, RotateCw } from "lucide-react"
+import { ChevronRight, Loader2, RotateCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { api, type SessionTools } from "@/lib/api"
+import { api, type McpServer, type SessionTools } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 const KIND_LABEL = { package: "Packages", extension: "Extensions", skill: "Skills", prompt: "Prompt templates" } as const
 const SOURCE_LABEL: Record<string, string> = { extension: "Extension commands", skill: "Skills", prompt: "Prompt templates" }
@@ -44,18 +45,69 @@ function Row({ name, badge, description, title, onClick }: { name: string; badge
   )
 }
 
-/** Tools the session's agent can call, its slash commands and skills, and what pi has installed. */
+function stateColor(server: McpServer) {
+  if (!server.enabled) return "bg-muted-foreground/40"
+  if (server.error || /fail|error/i.test(server.state ?? "")) return "bg-red-500"
+  if (/connect(ed)?$|ready|ok/i.test(server.state ?? "")) return "bg-green-500"
+  return "bg-amber-500"
+}
+
+function ServerRow({ server }: { server: McpServer }) {
+  const [expanded, setExpanded] = useState(false)
+  const tools = server.tools ?? []
+  return (
+    <li className="rounded-md border px-3 py-2">
+      <button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setExpanded((e) => !e)} disabled={!tools.length}>
+        <span className={cn("size-2 shrink-0 rounded-full", stateColor(server))} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{server.name}</span>
+        {server.scope && (
+          <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
+            {server.scope}
+          </Badge>
+        )}
+        {server.transport && <span className="text-[11px] text-muted-foreground">{server.transport}</span>}
+        <span className="text-[11px] text-muted-foreground tabular-nums">{server.enabled ? (server.tools ? `${tools.length} tools` : server.state) : "disabled"}</span>
+        {tools.length > 0 && <ChevronRight className={cn("size-3.5 text-muted-foreground transition-transform", expanded && "rotate-90")} />}
+      </button>
+      {server.error && <p className="mt-1 text-xs break-words text-destructive">{server.error}</p>}
+      {server.target && <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground" title={server.target}>{server.target}</p>}
+      {expanded && (
+        <ul className="mt-2 flex flex-wrap gap-1">
+          {tools.map((tool) => (
+            <li key={tool}>
+              <Badge variant="secondary" className="font-mono text-[11px] font-normal">
+                {tool}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+/** Tools the session's agent can call, its slash commands and skills, MCP servers, and what pi has installed. */
 export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: { sessionKey?: string; path?: string; open: boolean; onOpenChange: (open: boolean) => void; onInsert?: (text: string) => void }) {
   const [data, setData] = useState<SessionTools>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
 
+  const [mcp, setMcp] = useState<{ servers: McpServer[]; live: boolean; note?: string }>()
+  const [mcpError, setMcpError] = useState<string>()
+  const [mcpLoading, setMcpLoading] = useState(false)
+
+  // MCP servers are probed separately: connecting to them can take a while and should not hold up the rest.
   const load = useCallback(() => {
     setLoading(true)
     setError(undefined)
     ;(sessionKey ? api.tools(sessionKey) : api.toolsAt(path ?? ""))
       .then(setData, (e: Error) => setError(e.message))
       .finally(() => setLoading(false))
+    setMcpLoading(true)
+    setMcpError(undefined)
+    ;(sessionKey ? api.mcp(sessionKey) : api.mcpAt(path ?? ""))
+      .then(setMcp, (e: Error) => setMcpError(e.message))
+      .finally(() => setMcpLoading(false))
   }, [sessionKey, path])
 
   useEffect(() => {
@@ -70,9 +122,9 @@ export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: 
       <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            pi tools
-            <Button variant="ghost" size="icon-sm" onClick={load} disabled={loading} aria-label="Refresh">
-              {loading ? <Loader2 className="animate-spin" /> : <RotateCw />}
+            Tools
+            <Button variant="ghost" size="icon-sm" onClick={load} disabled={loading || mcpLoading} aria-label="Refresh">
+              {loading || mcpLoading ? <Loader2 className="animate-spin" /> : <RotateCw />}
             </Button>
           </DialogTitle>
           <DialogDescription>{sessionKey ? "What this session's agent can use. Tap a command to put it in the message box." : `What pi has in /${path ?? ""}.`}</DialogDescription>
@@ -95,6 +147,27 @@ export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: 
                   ))}
                 </Section>
               ))}
+              <section className="grid gap-1.5">
+                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">MCP servers{mcp ? ` (${mcp.servers.length})` : ""}</h3>
+                {mcpError && <p className="text-sm text-destructive">{mcpError}</p>}
+                {!mcp && mcpLoading && (
+                  <p className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" /> Connecting to servers…
+                  </p>
+                )}
+                {mcp && mcp.servers.length === 0 && !mcp.note && <p className="px-2 text-xs text-muted-foreground">No MCP servers configured.</p>}
+                {mcp && mcp.servers.length > 0 && (
+                  <ul className="grid gap-2">
+                    {mcp.servers.map((server) => (
+                      <ServerRow key={server.name} server={server} />
+                    ))}
+                  </ul>
+                )}
+                {mcp?.note && <p className="text-xs text-muted-foreground">{mcp.note}</p>}
+                <p className="text-xs text-muted-foreground">
+                  From <code>~/.pi/agent/mcp.json</code> and the project's <code>.pi/mcp.json</code>; manage them with <code>pi mcp add|remove</code> in the terminal.
+                </p>
+              </section>
               {!data.commands && data.resources.length > 0 && <p className="text-xs text-muted-foreground">Start the session to list its slash commands; below is what is installed on disk.</p>}
               {resourceGroups.map(([kind, items]) => (
                 <Section key={kind} title={`Installed ${KIND_LABEL[kind].toLowerCase()}`}>

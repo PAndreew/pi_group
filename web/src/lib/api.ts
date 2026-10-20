@@ -273,6 +273,10 @@ export const api = {
   mcpAt: (path: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/mcp?${q({ path })}`),
   activeSessions: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/active"),
   recentSessions: (limit = 3) => request<{ sessions: SessionSummary[] }>("GET", `/api/sessions/recent?${q({ limit: String(limit) })}`),
+  /** Sessions the caller can send a shared message into. */
+  shareTargets: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/targets"),
+  /** Add a message to the end of other sessions; it waits while the source or a target agent is running. */
+  forward: (body: { text: string; from?: string; to: string[] }) => request<{ shared: number; waiting: number }>("POST", "/api/sessions/forward", body),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>

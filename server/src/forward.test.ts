@@ -1,0 +1,88 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { once } from "node:events";
+import { test } from "node:test";
+import express from "express";
+import type { HarnessAdapter, LiveSession, PromptInput, SessionEvent, SessionState } from "./harness/types.js";
+
+/** A live session whose running flag the test flips; prompts are recorded and start a run. */
+function fakeLive(id: string, cwd: string) {
+	const listeners = new Set<(event: SessionEvent) => void>();
+	const prompts: PromptInput[] = [];
+	const state: SessionState = { messages: [], partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: true };
+	const setRunning = (running: boolean) => {
+		state.running = running;
+		for (const listener of listeners) listener({ type: "state", state });
+	};
+	const live = {
+		id,
+		cwd,
+		state,
+		viewers: 0,
+		lastActivity: Date.now(),
+		subscribe: (listener: (event: SessionEvent) => void) => (listeners.add(listener), () => listeners.delete(listener)),
+		prompt: async (input: PromptInput) => {
+			prompts.push(input);
+			setRunning(true);
+		},
+	} as unknown as LiveSession;
+	return { live, prompts, setRunning };
+}
+
+test("sharing a message into other sessions waits until both agents are idle", async () => {
+	const dir = mkdtempSync(path.join(os.tmpdir(), "pi-group-forward-"));
+	process.env.DATA_DIR = dir;
+	process.env.FS_ROOT = dir;
+	const { authenticate, authRoutes, createUser } = await import("./auth.js");
+	const { loadStore, saveNow, store } = await import("./store.js");
+	const { sessionRoutes } = await import("./sessions.js");
+	loadStore();
+	const owner = createUser("fwd-owner", "test-password", "member");
+	const reader = createUser("fwd-reader", "test-password", "member");
+	const lives = Object.fromEntries(["src", "idle", "busy", "ro"].map((id) => [id, fakeLive(id, dir)]));
+	const adapter = {
+		id: "fake",
+		live: (id: string) => lives[id]?.live,
+		liveSessions: () => Object.values(lives).map((l) => l.live),
+		open: async (id: string) => lives[id].live,
+	} as unknown as HarnessAdapter;
+	const base = { harness: "fake", cwd: dir, updatedAt: "2026-01-01T00:00:00.000Z" };
+	store.upsertSession({ ...base, key: "fake:src", id: "src", ownerId: owner.id, name: "Source" });
+	store.upsertSession({ ...base, key: "fake:idle", id: "idle", ownerId: owner.id });
+	store.upsertSession({ ...base, key: "fake:busy", id: "busy", ownerId: owner.id });
+	store.upsertSession({ ...base, key: "fake:ro", id: "ro", ownerId: reader.id, visibility: "shared", shares: [{ userId: owner.id, access: "read" }] });
+
+	const app = express();
+	app.use(express.json(), authenticate, authRoutes(), sessionRoutes([adapter]));
+	const server = app.listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const url = `http://127.0.0.1:${address.port}`;
+	const res = await fetch(`${url}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: owner.username, password: "test-password" }) });
+	const cookie = res.headers.get("set-cookie")!.split(";")[0];
+	const call = (method: string, route: string, body?: unknown) =>
+		fetch(`${url}${route}`, { method, headers: { Cookie: cookie, "X-Pi-Group": "1", "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+	try {
+		const targets = ((await (await call("GET", "/sessions/targets")).json()).sessions as { key: string }[]).map((s) => s.key).sort();
+		assert.deepEqual(targets, ["fake:busy", "fake:idle", "fake:src"]);
+
+		assert.equal((await call("POST", "/sessions/forward", { text: "hi", from: "fake:src", to: ["fake:ro"] })).status, 403);
+
+		lives.busy.setRunning(true);
+		const shared = await (await call("POST", "/sessions/forward", { text: "The answer", from: "fake:src", to: ["fake:idle", "fake:busy"] })).json();
+		assert.deepEqual(shared, { shared: 2, waiting: 1 });
+		assert.deepEqual(lives.idle.prompts.map((p) => p.text), ["Shared from session “Source”:\n\nThe answer"]);
+		assert.equal(lives.busy.prompts.length, 0);
+
+		lives.busy.setRunning(false);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		assert.equal(lives.busy.prompts.length, 1);
+	} finally {
+		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+		saveNow();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});

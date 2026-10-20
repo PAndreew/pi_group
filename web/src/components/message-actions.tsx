@@ -1,4 +1,4 @@
-import { Copy, Pencil, Reply, SmilePlus, X } from "lucide-react"
+import { Copy, Pencil, Reply, Share, SmilePlus, X } from "lucide-react"
 import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -23,7 +23,8 @@ async function copyText(text: string) {
 const round = "grid size-8 shrink-0 place-items-center rounded-full transition-colors focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-35 [&_svg]:size-4"
 
 /**
- * Round actions under a message card: reply, copy, edit and, on people's messages in chats, react.
+ * Round actions under a message card: reply, copy, edit and, on people's messages in chats, react;
+ * agent messages get a share button instead, sending them on to other sessions.
  * An action without a handler is left out; `editBlocked` shows edit disabled with the reason as its tooltip.
  */
 export function MessageActions({
@@ -33,6 +34,7 @@ export function MessageActions({
   onEdit,
   editBlocked,
   onReact,
+  onShare,
   className,
 }: {
   align?: "start" | "end"
@@ -42,6 +44,7 @@ export function MessageActions({
   onEdit?: () => void
   editBlocked?: string
   onReact?: (emoji: string) => void
+  onShare?: () => void
   className?: string
 }) {
   return (
@@ -63,6 +66,11 @@ export function MessageActions({
       {(onEdit || editBlocked) && (
         <button type="button" className={cn(round, "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300")} onClick={onEdit} disabled={Boolean(editBlocked)} aria-label="Edit message" title={editBlocked ?? "Edit"}>
           <Pencil />
+        </button>
+      )}
+      {onShare && (
+        <button type="button" className={cn(round, "bg-violet-500/15 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300")} onClick={onShare} aria-label="Send to other sessions" title="Send to other sessions">
+          <Share />
         </button>
       )}
       {onReact && (

@@ -1,7 +1,6 @@
 import { Bot, FolderOpen, Gauge, Hammer, Paperclip, SquareTerminal } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { ExplorerDialog } from "@/components/explorer-dialog"
-import { McpDialog, McpIcon } from "@/components/mcp-dialog"
 import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
 import { ToolsDialog } from "@/components/tools-dialog"
 import { Button } from "@/components/ui/button"
@@ -11,7 +10,7 @@ import { useNav } from "@/lib/nav"
 /** xterm.js is large; load it only when someone opens a terminal. */
 const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
-type Panel = "terminal" | "tools" | "mcp" | "monitor" | "explorer"
+type Panel = "terminal" | "tools" | "monitor" | "explorer"
 
 /**
  * The icons under every message box, each opening its own modal. With a session they act on it;
@@ -47,8 +46,7 @@ export function ComposerTools({
         {onAttach && icon("attach", "Attach files", <Paperclip className="size-[22px]" />, onAttach)}
         {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot className="size-[22px]" />, onModel ?? nav.openDefaults)}
         {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal className="size-[22px]" />, () => setPanel("terminal"))}
-        {icon("tools", "pi tools, commands and skills", <Hammer className="size-[22px]" />, () => setPanel("tools"))}
-        {icon("mcp", "MCP servers", <McpIcon className="size-[22px]" />, () => setPanel("mcp"))}
+        {icon("tools", "Tools, skills, commands and MCP servers", <Hammer className="size-[22px]" />, () => setPanel("tools"))}
         {icon("monitor", "Resource monitor", <Gauge className="size-[22px]" />, () => setPanel("monitor"))}
         {icon("explorer", "Folders and files", <FolderOpen className="size-[22px]" />, () => setPanel("explorer"))}
       </div>
@@ -65,7 +63,6 @@ export function ComposerTools({
           })
         }
       />
-      <McpDialog sessionKey={sessionKey} path={folder} open={panel === "mcp"} onOpenChange={openChange("mcp")} />
       <ResourceMonitorDialog open={panel === "monitor"} onOpenChange={openChange("monitor")} onOpenSession={(s) => nav.openSession(s.key, s.path)} />
       <ExplorerDialog folder={folder} open={panel === "explorer"} onOpenChange={openChange("explorer")} />
       {panel === "terminal" && (

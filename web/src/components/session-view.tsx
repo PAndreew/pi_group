@@ -23,6 +23,7 @@ import { InteractionCards, useInteractions } from "@/components/interaction-card
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
+import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions } from "@/components/message-actions"
 import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
@@ -191,6 +192,7 @@ function AgentBubble({
 function RunView({
   run,
   onReply,
+  onShare,
   onEdit,
   editBlocked,
   selfId,
@@ -208,6 +210,7 @@ function RunView({
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
   onReply?: (reply: ReplyTarget) => void
+  onShare?: (text: string) => void
   /** Absent without write access. */
   onEdit?: (target: EditTarget) => void
   editBlocked?: string
@@ -244,6 +247,7 @@ function RunView({
               className="pl-10"
               copy={answerText}
               onReply={onReply && (() => onReply({ author: "Beezy", text: answerText, sourceId, assistant: true }))}
+              onShare={onShare && (() => onShare(answerText))}
               onEdit={onEdit && answerMessage && (() => onEdit({ message: answerMessage, text: answerText, prompt: false }))}
               editBlocked={onEdit && editBlocked}
             />
@@ -267,6 +271,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [text, setText] = useState("")
   const [reply, setReply] = useState<ReplyTarget>()
   const [editing, setEditing] = useState<EditTarget>()
+  /** An agent answer being sent on to other sessions. */
+  const [forwarding, setForwarding] = useState<string>()
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
@@ -503,6 +509,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               run={run}
               folder={summary?.path}
               onReply={canWrite ? (target) => selectReply(setReply, target) : undefined}
+              onShare={setForwarding}
               onEdit={canWrite ? startEdit : undefined}
               editBlocked={running ? "Wait until the agent has finished" : undefined}
               selfId={user?.id}
@@ -622,6 +629,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
+      <ForwardDialog text={forwarding} from={sessionKey} onOpenChange={(o) => !o && setForwarding(undefined)} />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>
