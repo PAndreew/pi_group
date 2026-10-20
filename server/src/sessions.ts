@@ -4,7 +4,7 @@ import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { creationOptions } from "./preferences.js";
-import { mountChats } from "./chats.js";
+import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
 import { mountInteractions } from "./interactions.js";
 import { mountMemory } from "./memory.js";
@@ -294,29 +294,42 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return Boolean(meta && byId.get(meta.harness)?.live(meta.id)?.state.running);
 	};
 
-	/** Messages shared into other sessions, waiting until neither their source nor their target agent is running. */
-	const forwards: { from?: string; to: string; userId: string; text: string }[] = [];
+	/** Set once the chat routes are mounted below. */
+	let chats: ReturnType<typeof mountChats>;
+	/** Where a shared message comes from or goes to: a session, or a chat with people (and maybe pi). */
+	type ShareRef = { kind: "session" | "chat"; id: string };
+	const busy = (ref?: ShareRef) => (ref?.kind === "chat" ? chats.busy(ref.id) : isRunning(ref?.id));
+	const sameRef = (a?: ShareRef, b?: ShareRef) => Boolean(a && b && a.kind === b.kind && a.id === b.id);
+
+	/** Messages shared elsewhere, waiting until neither their source nor their target agent is running. */
+	const forwards: { from?: ShareRef; to: ShareRef; userId: string; text: string }[] = [];
 	let delivering = false;
 	const deliverForwards = async () => {
 		if (delivering) return;
 		delivering = true;
 		try {
-			// One per target and pass: a delivered prompt starts a run, and the next one waits for it.
+			// One per session and pass: a delivered prompt starts a run, and the next one waits for it.
 			const started = new Set<string>();
 			for (const item of [...forwards]) {
-				if (started.has(item.to) || isRunning(item.from) || isRunning(item.to)) continue;
+				if (started.has(item.to.id) || busy(item.from) || busy(item.to)) continue;
 				forwards.splice(forwards.indexOf(item), 1);
-				const meta = store.session(item.to);
 				const user = store.userById(item.userId);
-				if (!meta || meta.deleted || !user || !canWrite(accessOf(user, meta))) continue;
-				started.add(item.to);
-				await promptSession(meta, user, { text: item.text }).catch((error) => console.error(`Sharing into ${item.to} failed:`, error));
+				if (!user) continue;
+				if (item.to.kind === "chat") {
+					chats.post(item.to.id, user, item.text);
+					continue;
+				}
+				const meta = store.session(item.to.id);
+				if (!meta || meta.deleted || !canWrite(accessOf(user, meta))) continue;
+				started.add(item.to.id);
+				await promptSession(meta, user, { text: item.text }).catch((error) => console.error(`Sharing into ${item.to.id} failed:`, error));
 			}
 		} finally {
 			delivering = false;
 		}
 	};
-	hub.onRun(() => void deliverForwards());
+	// After the other run listeners: a chat marks pi's reply done in its own listener.
+	hub.onRun(() => void setTimeout(() => void deliverForwards(), 0));
 
 	/**
 	 * Rewrite one message of a session whose agent is not running. An idle process is stopped
@@ -447,38 +460,60 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ sessions });
 	});
 
-	/** Sessions the caller can send messages into (the share-to-session picker); chat and memory sessions are left out. */
+	/** Sessions and chats the caller can send messages into (the share-to picker); sessions behind a chat and memory are left out. */
 	router.get("/sessions/targets", (req, res) => {
 		const sessions = Object.values(store.data.sessions)
 			.filter((meta) => !meta.deleted && (meta.ownerId || meta.updatedAt) && canWrite(accessOf(req.user!, meta)) && !hub.quiet(meta.key))
-			.map((meta) => summary(meta, req.user!))
-			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
-		res.json({ sessions });
+			.map((meta) => {
+				const s = summary(meta, req.user!);
+				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, running: s.running, updatedAt: s.updatedAt };
+			});
+		const targets = [...chats.shareTargets(req.user!), ...sessions].sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
+		res.json({ targets });
 	});
 
-	/** Share a message into other sessions as a prompt; it waits while the source or the target agent is running. */
+	/**
+	 * Share a message into other sessions (as a prompt) and chats (as the caller's message);
+	 * it waits while the source or the target agent is running.
+	 */
 	router.post("/sessions/forward", async (req, res) => {
-		const body = z.object({ text: z.string().trim().min(1).max(200_000), from: z.string().optional(), to: z.array(z.string()).min(1).max(50) }).parse(req.body);
-		const source = body.from ? store.session(body.from) : undefined;
-		if (body.from && (!source || source.deleted || !accessOf(req.user!, source))) throw new HttpError(404, "Session not found");
-		const targets = [...new Set(body.to)].filter((key) => key !== body.from);
-		for (const key of targets) {
-			const meta = store.session(key);
-			if (!meta || meta.deleted || !accessOf(req.user!, meta)) throw new HttpError(404, "Session not found");
-			if (!canWrite(accessOf(req.user!, meta))) throw new HttpError(403, `You have read-only access to “${meta.name || meta.firstMessage || "Untitled session"}”`);
+		const ref = z.object({ kind: z.enum(["session", "chat"]), id: z.string() });
+		const body = z.object({ text: z.string().trim().min(1).max(200_000), from: ref.optional(), to: z.array(ref).min(1).max(50) }).parse(req.body);
+		const user = req.user!;
+		const sessionOf = (id: string) => {
+			const meta = store.session(id);
+			if (!meta || meta.deleted || !accessOf(user, meta)) throw new HttpError(404, "Session not found");
+			return meta;
+		};
+		const chatTitle = (id: string) => {
+			if (!chats.isMember(id, user)) throw new HttpError(404, "Chat not found");
+			return chats.title(id, user.id)!;
+		};
+		let label: string | undefined;
+		if (body.from?.kind === "chat") label = `chat “${firstLine(chatTitle(body.from.id)).slice(0, 80)}”`;
+		else if (body.from) {
+			const source = sessionOf(body.from.id);
+			const name = source.name || source.firstMessage;
+			label = name ? `session “${firstLine(name).slice(0, 80)}”` : undefined;
 		}
-		const label = source && (source.name || source.firstMessage);
-		const text = `${label ? `Shared from session “${firstLine(label).slice(0, 80)}”` : "Shared from another session"}:
-
-${body.text}`;
+		const targets = body.to.filter((to, i) => !sameRef(to, body.from) && body.to.findIndex((other) => sameRef(other, to)) === i);
+		for (const to of targets) {
+			if (to.kind === "chat") {
+				chatTitle(to.id);
+				continue;
+			}
+			const meta = sessionOf(to.id);
+			if (!canWrite(accessOf(user, meta))) throw new HttpError(403, `You have read-only access to “${meta.name || meta.firstMessage || "Untitled session"}”`);
+		}
+		const text = `Shared from ${label ?? "another session"}:\n\n${body.text}`;
 		// Watch the sessions involved now, so their runs ending delivers without waiting for the periodic attach.
-		for (const key of [body.from, ...targets]) {
+		for (const key of [body.from, ...targets].map((r) => (r?.kind === "chat" ? getChat(r.id)?.sessionKey : r?.id))) {
 			const meta = key ? store.session(key) : undefined;
 			const live = meta && byId.get(meta.harness)?.live(meta.id);
 			if (live) hub.attach(key!, live);
 		}
-		const waiting = targets.filter((to) => isRunning(body.from) || isRunning(to)).length;
-		forwards.push(...targets.map((to) => ({ from: body.from, to, userId: req.user!.id, text })));
+		const waiting = targets.filter((to) => busy(body.from) || busy(to)).length;
+		forwards.push(...targets.map((to) => ({ from: body.from, to, userId: user.id, text })));
 		await deliverForwards();
 		res.json({ shared: targets.length, waiting });
 	});
@@ -704,7 +739,7 @@ ${body.text}`;
 		editSession,
 		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
 	};
-	mountChats(router, chatDeps);
+	chats = mountChats(router, chatDeps);
 	mountMemory(router, chatDeps);
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.

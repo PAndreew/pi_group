@@ -350,7 +350,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           />
         )}
       </div>
-      <ForwardDialog text={forwarding} from={chat?.sessionKey} onOpenChange={(o) => !o && setForwarding(undefined)} />
+      <ForwardDialog text={forwarding} from={{ kind: "chat", id: chatId }} onOpenChange={(o) => !o && setForwarding(undefined)} />
     </div>
   )
 }

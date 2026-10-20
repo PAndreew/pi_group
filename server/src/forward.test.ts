@@ -38,6 +38,7 @@ test("sharing a message into other sessions waits until both agents are idle", a
 	const { authenticate, authRoutes, createUser } = await import("./auth.js");
 	const { loadStore, saveNow, store } = await import("./store.js");
 	const { sessionRoutes } = await import("./sessions.js");
+	const { closeChats } = await import("./chats.js");
 	loadStore();
 	const owner = createUser("fwd-owner", "test-password", "member");
 	const reader = createUser("fwd-reader", "test-password", "member");
@@ -66,14 +67,19 @@ test("sharing a message into other sessions waits until both agents are idle", a
 	const call = (method: string, route: string, body?: unknown) =>
 		fetch(`${url}${route}`, { method, headers: { Cookie: cookie, "X-Pi-Group": "1", "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 	try {
-		const targets = ((await (await call("GET", "/sessions/targets")).json()).sessions as { key: string }[]).map((s) => s.key).sort();
-		assert.deepEqual(targets, ["fake:busy", "fake:idle", "fake:src"]);
+		const { chat } = await (await call("POST", "/chats", { text: "hello", userIds: [reader.id] })).json();
+		const targets = ((await (await call("GET", "/sessions/targets")).json()).targets as { kind: string; id: string }[]).map((t) => `${t.kind}:${t.id}`).sort();
+		assert.deepEqual(targets, [`chat:${chat}`, "session:fake:busy", "session:fake:idle", "session:fake:src"]);
 
-		assert.equal((await call("POST", "/sessions/forward", { text: "hi", from: "fake:src", to: ["fake:ro"] })).status, 403);
+		const session = (id: string) => ({ kind: "session", id });
+		assert.equal((await call("POST", "/sessions/forward", { text: "hi", from: session("fake:src"), to: [session("fake:ro")] })).status, 403);
 
 		lives.busy.setRunning(true);
-		const shared = await (await call("POST", "/sessions/forward", { text: "The answer", from: "fake:src", to: ["fake:idle", "fake:busy"] })).json();
-		assert.deepEqual(shared, { shared: 2, waiting: 1 });
+		const shared = await (await call("POST", "/sessions/forward", { text: "The answer", from: session("fake:src"), to: [session("fake:idle"), session("fake:busy"), { kind: "chat", id: chat }] })).json();
+		assert.deepEqual(shared, { shared: 3, waiting: 1 });
+		const posted = (await (await call("GET", `/chats/${chat}`)).json()).messages.at(-1);
+		assert.equal(posted.message.content[0].text, "Shared from session “Source”:\n\nThe answer");
+		assert.equal(posted.message.author.id, owner.id);
 		assert.deepEqual(lives.idle.prompts.map((p) => p.text), ["Shared from session “Source”:\n\nThe answer"]);
 		assert.equal(lives.busy.prompts.length, 0);
 
@@ -83,6 +89,7 @@ test("sharing a message into other sessions waits until both agents are idle", a
 	} finally {
 		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 		saveNow();
+		closeChats();
 		rmSync(dir, { recursive: true, force: true });
 	}
 });

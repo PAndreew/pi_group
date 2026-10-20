@@ -251,6 +251,8 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	// not when prompt() returns (that only acknowledges receipt).
 	const turns = new Map<string, Promise<void>>();
 	const completed = new Map<string, () => void>();
+	/** pi has a turn going or queued in the chat. */
+	const busy = (chatId: string) => turns.has(chatId) || Boolean(database().prepare("SELECT 1 FROM messages WHERE chat_id = ? AND status = 'working'").get(chatId));
 	const askPi = (chat: Chat, user: User, upTo: number, options: { model?: { provider: string; id: string }; thinkingLevel?: string } = {}) => {
 		const previous = turns.get(chat.id) ?? Promise.resolve();
 		const turn = previous.catch(() => {}).then(async () => {
@@ -431,7 +433,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		const { text } = z.object({ text: z.string().trim().min(1).max(50_000) }).parse(req.body);
 		const assistant = message.message.role === "assistant";
 		if (!assistant && (message.message.author as { id?: string } | undefined)?.id !== user.id) throw new HttpError(403, "You can only edit your own messages");
-		if (turns.has(chat.id) || database().prepare("SELECT 1 FROM messages WHERE chat_id = ? AND status = 'working'").get(chat.id)) throw new HttpError(409, "Wait until pi has finished before editing");
+		if (busy(chat.id)) throw new HttpError(409, "Wait until pi has finished before editing");
 		if (assistant && message.status !== "done") throw new HttpError(400, "Only finished replies can be edited");
 		const before = textOf(message.message);
 		const content = replaceText(message.message.content, text, before);
@@ -520,6 +522,28 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		const top = scored.slice(0, 15).map((x) => x.e);
 		res.json({ folders: top.filter((e) => e.type === "dir").map((e) => e.path), entries: top, chatFolder: toRel(config.chatFolder) });
 	});
+
+	const isMember = (chatId: string, user: User) => Boolean(getChat(chatId) && memberIds(chatId).includes(user.id));
+	return {
+		busy,
+		isMember,
+		title: (chatId: string, viewerId: string) => {
+			const chat = getChat(chatId);
+			return chat ? chatTitle(chat, viewerId) : undefined;
+		},
+		/** Chats `user` is in, newest first, for the share-to picker. */
+		shareTargets: (user: User) =>
+			(database().prepare("SELECT c.* FROM chats c JOIN members m ON m.chat_id = c.id AND m.user_id = ? ORDER BY c.updated_at DESC LIMIT 300").all(user.id) as Row[])
+				.map(toChat)
+				.map((chat) => ({ kind: "chat" as const, id: chat.id, title: chatTitle(chat, user.id), folder: chat.folder, running: busy(chat.id), updatedAt: chat.updatedAt })),
+		/** Post a message shared from elsewhere as `user`'s; pi reads it with the rest on its next turn. */
+		post: (chatId: string, user: User, text: string) => {
+			const chat = getChat(chatId);
+			if (!chat || !isMember(chatId, user)) return;
+			const message = insert(chat.id, { role: "user", content: [{ type: "text", text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
+			fanOut(chat, "chat_message", message, { author: user.username, text, except: user.id });
+		},
+	};
 }
 
 /** Every folder under FS_ROOT a few levels deep (relative paths), cached briefly. */

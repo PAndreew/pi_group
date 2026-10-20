@@ -629,7 +629,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
-      <ForwardDialog text={forwarding} from={sessionKey} onOpenChange={(o) => !o && setForwarding(undefined)} />
+      <ForwardDialog text={forwarding} from={{ kind: "session", id: sessionKey }} onOpenChange={(o) => !o && setForwarding(undefined)} />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>

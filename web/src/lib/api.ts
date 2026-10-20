@@ -191,6 +191,10 @@ export type ChatListItem =
   | { kind: "chat"; id: string; title: string; folder: string; pi: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } }
   | { kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean }
 
+/** A session or a chat with people, as the source or target of a shared message. */
+export type ShareRef = { kind: "session" | "chat"; id: string }
+export type ShareTarget = ShareRef & { title: string; folder: string; running: boolean; updatedAt: string }
+
 export class ApiError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
@@ -273,10 +277,10 @@ export const api = {
   mcpAt: (path: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/mcp?${q({ path })}`),
   activeSessions: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/active"),
   recentSessions: (limit = 3) => request<{ sessions: SessionSummary[] }>("GET", `/api/sessions/recent?${q({ limit: String(limit) })}`),
-  /** Sessions the caller can send a shared message into. */
-  shareTargets: () => request<{ sessions: SessionSummary[] }>("GET", "/api/sessions/targets"),
-  /** Add a message to the end of other sessions; it waits while the source or a target agent is running. */
-  forward: (body: { text: string; from?: string; to: string[] }) => request<{ shared: number; waiting: number }>("POST", "/api/sessions/forward", body),
+  /** Sessions and chats the caller can send a shared message into. */
+  shareTargets: () => request<{ targets: ShareTarget[] }>("GET", "/api/sessions/targets"),
+  /** Add a message to the end of other sessions and chats; it waits while the source or a target agent is running. */
+  forward: (body: { text: string; from?: ShareRef; to: ShareRef[] }) => request<{ shared: number; waiting: number }>("POST", "/api/sessions/forward", body),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
