@@ -33,10 +33,19 @@ export interface Interaction {
 const secret = randomBytes(32);
 const tokenFor = (key: string) => createHmac("sha256", secret).update(key).digest("hex");
 export function interactionEnvironment(key: string) {
+  const base = `http://${config.host === "::1" ? "[::1]" : "127.0.0.1"}:${config.port}/api`;
   return {
-    BEEZY_INTERACTION_URL: `http://${config.host === "::1" ? "[::1]" : "127.0.0.1"}:${config.port}/api/interaction-bridge/${encodeURIComponent(key)}`,
+    BEEZY_INTERACTION_URL: `${base}/interaction-bridge/${encodeURIComponent(key)}`,
+    BEEZY_JOBS_URL: `${base}/job-bridge/${encodeURIComponent(key)}`,
     BEEZY_INTERACTION_TOKEN: tokenFor(key),
   };
+}
+
+/** Whether an Authorization header carries the bridge credential of session `key`. */
+export function bridgeCredentialValid(key: string, authorization?: string) {
+  const supplied = Buffer.from(authorization?.replace(/^Bearer /, "") ?? "");
+  const expected = Buffer.from(tokenFor(key));
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
 export function expireInteractions(key?: string) {
@@ -59,9 +68,7 @@ export function mountInteractions(router: Router, load: (req: Request) => { acce
     return card;
   };
   router.use("/interaction-bridge/:key", (req, _res, next) => {
-    const supplied = Buffer.from(req.headers.authorization?.replace(/^Bearer /, "") ?? "");
-    const expected = Buffer.from(tokenFor(String(req.params.key)));
-    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return next(new HttpError(403, "Invalid interaction credential"));
+    if (!bridgeCredentialValid(String(req.params.key), req.headers.authorization)) return next(new HttpError(403, "Invalid interaction credential"));
     const meta = store.session(String(req.params.key));
     if (!meta || meta.deleted) return next(new HttpError(404, "Session not found"));
     next();

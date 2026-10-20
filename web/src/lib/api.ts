@@ -195,6 +195,45 @@ export type ChatListItem =
 export type ShareRef = { kind: "session" | "chat"; id: string }
 export type ShareTarget = ShareRef & { title: string; folder: string; running: boolean; updatedAt: string }
 
+export type JobStep =
+  | { type: "prompt"; text: string }
+  | { type: "script"; command: string; timeoutSec: number }
+  | { type: "http"; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; url: string; headers: Record<string, string>; body?: string; timeoutSec: number }
+
+export interface JobSessionRef {
+  key: string
+  folder: string
+  name: string
+}
+
+/** A scheduled job: runs its steps in order on its schedule, once a person approved it. */
+export interface Job {
+  id: string
+  name: string
+  schedule: string
+  steps: JobStep[]
+  enabled: boolean
+  approved: boolean
+  approvedBy?: string
+  approvedAt?: string
+  canApprove: boolean
+  /** It runs a script, so only an admin can approve it. */
+  needsAdmin: boolean
+  folder: string
+  owner: string
+  session?: JobSessionRef
+  proposedIn?: JobSessionRef
+  note?: string
+  createdAt: string
+  updatedAt: string
+  nextRunAt?: string
+  lastRun?: { at: string; ok: boolean; output: string; ms: number }
+  failures: number
+  running: boolean
+}
+
+export type JobInput = Pick<Job, "name" | "schedule" | "steps" | "enabled">
+
 export class ApiError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
@@ -281,6 +320,11 @@ export const api = {
   shareTargets: () => request<{ targets: ShareTarget[] }>("GET", "/api/sessions/targets"),
   /** Add a message to the end of other sessions and chats; it waits while the source or a target agent is running. */
   forward: (body: { text: string; from?: ShareRef; to: ShareRef[] }) => request<{ shared: number; waiting: number }>("POST", "/api/sessions/forward", body),
+  jobs: () => request<{ jobs: Job[] }>("GET", "/api/jobs"),
+  updateJob: (id: string, job: JobInput) => request<{ job: Job }>("PUT", `/api/jobs/${enc(id)}`, job),
+  approveJob: (id: string) => request<{ job: Job }>("POST", `/api/jobs/${enc(id)}/approve`),
+  runJob: (id: string) => request<{ job: Job }>("POST", `/api/jobs/${enc(id)}/run`),
+  deleteJob: (id: string) => request("DELETE", `/api/jobs/${enc(id)}`),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>

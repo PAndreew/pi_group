@@ -165,7 +165,8 @@ export function Sidebar({
   const [entries, setEntries] = useState<FsEntry[]>()
   const [counts, setCounts] = useState<Record<string, Count>>({})
   const [here, setHere] = useState<Count>()
-  const [hereOpen, setHereOpen] = useState(true)
+  // Closed at first: people usually look at the folder's content before its sessions.
+  const [hereOpen, setHereOpen] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [hidden, setHidden] = useState(() => localStorage.getItem("pi-group:hidden") === "1")
   const [busy, setBusy] = useState(false)
@@ -192,6 +193,7 @@ export function Sidebar({
     setEntries(undefined)
     setCounts({})
     setHere(undefined)
+    setHereOpen(false)
     setExpanded(new Set())
   }, [folder])
 

@@ -7,6 +7,7 @@ import { creationOptions } from "./preferences.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
 import { mountInteractions } from "./interactions.js";
+import { mountJobs } from "./jobs.js";
 import { mountMemory } from "./memory.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, registerPrompt, rekeyAuthors } from "./authorship.js";
@@ -743,6 +744,12 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 	chats = mountChats(router, chatDeps);
 	mountMemory(router, chatDeps);
+	mountJobs(router, {
+		...chatDeps,
+		isRunning,
+		isQuiet: (key) => hub.quiet(key),
+		canWrite: (user, meta) => canWrite(accessOf(user, meta)),
+	});
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
 	setInterval(() => {

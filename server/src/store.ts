@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import type { SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 import type { Interaction } from "./interactions.js";
+import type { Job } from "./jobs.js";
 
 export type Role = "admin" | "member";
 export type Access = "read" | "write";
@@ -71,10 +72,11 @@ interface Data {
 	durableFolders: string[];
 	pushSubscriptions: PushSubscriptionRecord[];
 	interactions: Interaction[];
+	jobs: Job[];
 }
 
 const file = path.join(config.dataDir, "db.json");
-let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [] };
+let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {

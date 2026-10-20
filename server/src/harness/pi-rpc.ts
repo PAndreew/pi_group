@@ -78,7 +78,7 @@ class RpcProcess {
 
 	constructor(args: string[], cwd: string, sessionKey?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
-		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs")];
+		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		this.child = spawn(command, argv, {
 			cwd,
