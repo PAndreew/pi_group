@@ -25,6 +25,7 @@ export default function (pi) {
         name: { ...text(120), description: "Short name shown in the list." },
         schedule: { ...text(100), description: "When it runs." },
         session: { type: "string", enum: ["new", "this"], default: "new", description: "Where prompt steps go: a dedicated new session (default), or this session." },
+        recipients: { type: "array", maxItems: 20, items: text(120), description: "Exact Beezy account usernames to receive read access and run notifications. Ask if unknown; names in the prompt do not route delivery. Requires session=new and a prompt step. The owner also retains access. Recipients can see the entire dedicated session, including tool output." },
         reason: { type: "string", maxLength: 1000, description: "One or two sentences for the person approving: what it does and why." },
         steps: {
           type: "array", minItems: 1, maxItems: 5,

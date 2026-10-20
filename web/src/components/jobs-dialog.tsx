@@ -184,6 +184,7 @@ function JobItem({ job, onChange, onDeleted, onOpenSession }: { job: Job; onChan
       </button>
       {open && (
         <div className="grid gap-3 border-t px-3 py-3">
+          <p className="text-xs text-muted-foreground">Output session: owner {job.owner}{job.recipients?.length ? ` + ${job.recipients.join(", ")}` : " only"}. Recipients get read access to the entire session and run notifications (push requires device permission).</p>
           {(job.proposedIn || job.note) && (
             <p className="text-xs text-muted-foreground">
               {job.proposedIn ? (

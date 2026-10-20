@@ -52,13 +52,17 @@ const scheduleSchema = text(100).superRefine((schedule, ctx) => {
 	}
 });
 export const jobInput = z.object({ name: text(120), schedule: scheduleSchema, steps: z.array(stepSchema).min(1).max(5) }).strict();
-const proposalSchema = jobInput.extend({ session: z.enum(["this", "new"]).default("new"), reason: z.string().trim().max(1000).optional() }).strict();
+const proposalSchema = jobInput.extend({ session: z.enum(["this", "new"]).default("new"), recipients: z.array(text(120)).max(20).default([]), reason: z.string().trim().max(1000).optional() }).strict();
 
 export interface Job {
 	tenantId?: string;
 	id: string;
 	name: string;
 	ownerId: string;
+	/** Explicit output recipients, resolved to stable account IDs at proposal time. */
+	recipientIds?: string[];
+	/** Disable after the first attempted run, successful or not. */
+	once?: boolean;
 	cwd: string;
 	schedule: string;
 	steps: JobStep[];
@@ -210,6 +214,21 @@ async function runHttp(job: Job, step: Extract<JobStep, { type: "http" }>) {
 	return result;
 }
 
+export function resolveRecipients(names: string[], users: Pick<User, "id" | "username">[]) {
+	return [...new Set(names.map((name) => {
+		const user = users.find((u) => u.username === name);
+		if (!user) throw new HttpError(400, `Unknown recipient username: ${name}`);
+		return user.id;
+	}))];
+}
+
+export function shareJobOutput(meta: SessionMeta, recipientIds: string[]) {
+	for (const userId of recipientIds) {
+		if (isTenantMember(userId, meta.tenantId ?? "work") && userId !== meta.ownerId && !meta.shares.some((s) => s.userId === userId)) meta.shares.push({ userId, access: "read" });
+	}
+	if (meta.shares.length) meta.visibility = "shared";
+}
+
 export function mountJobs(router: Router, deps: JobDeps) {
 	store.data.jobs ??= [];
 	const running = new Set<string>();
@@ -233,6 +252,8 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			job.sessionKey = meta.key;
 			saveNow();
 		}
+		shareJobOutput(meta, job.recipientIds ?? []);
+		saveNow();
 		// Wait for a run that is already going, so its end is not taken for this prompt's.
 		for (const until = Date.now() + PROMPT_TIMEOUT_MS; deps.isRunning(meta.key); ) {
 			if (Date.now() > until) throw new Error("The session stayed busy");
@@ -285,6 +306,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			current.enabled = false;
 			void pushToUser(current.ownerId, { type: "job", title: `Scheduled job paused · ${current.name}`, text: `It failed ${FAILURES_BEFORE_PAUSE} times in a row.` }).catch(() => {});
 		} else if (!ok) void pushToUser(current.ownerId, { type: "job", title: `Scheduled job failed · ${current.name}`, text: log.at(-1)!.slice(0, 300) }).catch(() => {});
+		if (current.once) current.enabled = false;
 		plan(current);
 		saveNow();
 		changed(current);
@@ -325,6 +347,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			needsAdmin: needsAdmin(job),
 			folder: toRel(job.cwd),
 			owner: store.userById(job.ownerId)?.username ?? "unknown",
+			recipients: (job.recipientIds ?? []).map((id) => store.userById(id)?.username ?? "Deleted account"),
 			session: ref(session),
 			proposedIn: ref(source),
 			note: job.note,
@@ -358,6 +381,8 @@ export function mountJobs(router: Router, deps: JobDeps) {
 		const owner = meta.ownerId ? store.userById(meta.ownerId) : undefined;
 		if (!owner) throw new HttpError(400, "This session has no owner to approve a job");
 		const body = proposalSchema.parse(req.body);
+		const recipientIds = resolveRecipients(body.recipients, store.data.users.filter(u => isTenantMember(u.id, meta.tenantId ?? "work")));
+		if (recipientIds.length && (body.session !== "new" || !body.steps.some((s) => s.type === "prompt"))) throw new HttpError(400, "Recipients require a new dedicated session and at least one prompt step");
 		if (store.data.jobs.filter((j) => j.ownerId === owner.id).length >= MAX_JOBS_PER_OWNER) throw new HttpError(429, `${owner.username} already has ${MAX_JOBS_PER_OWNER} scheduled jobs; delete one first`);
 		const at = new Date().toISOString();
 		const job: Job = {
@@ -365,6 +390,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			id: randomUUID(),
 			name: body.name,
 			ownerId: owner.id,
+			recipientIds,
 			cwd: meta.cwd,
 			schedule: body.schedule,
 			steps: body.steps,

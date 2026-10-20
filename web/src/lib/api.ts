@@ -221,6 +221,7 @@ export interface Job {
   needsAdmin: boolean
   folder: string
   owner: string
+  recipients?: string[]
   session?: JobSessionRef
   proposedIn?: JobSessionRef
   note?: string

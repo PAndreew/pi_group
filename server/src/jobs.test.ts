@@ -14,6 +14,21 @@ const dir = mkdtempSync(path.join(os.tmpdir(), "pi-group-jobs-"));
 process.env.DATA_DIR = dir;
 process.env.FS_ROOT = dir;
 
+test("explicit recipients resolve exactly and receive read-only output access and notifications", async () => {
+	const { resolveRecipients, shareJobOutput } = await import("./jobs.js");
+	const { involved } = await import("./sessions.js");
+	const owner = { id: "owner", username: "owner", passwordHash: "", role: "member" as const, createdAt: new Date().toISOString() };
+	const recipient = { ...owner, id: "recipient", username: "recipient", role: "member" as const };
+	assert.deepEqual(resolveRecipients(["recipient", "recipient"], [recipient]), ["recipient"]);
+	assert.throws(() => resolveRecipients(["misspelled"], [recipient]), /Unknown recipient/);
+	const meta: SessionMeta = { key: "pi:delivery", harness: "pi", id: "delivery", cwd: dir, ownerId: owner.id, visibility: "private", shares: [], createdAt: new Date().toISOString() };
+	assert.equal(involved(recipient, meta), false);
+	shareJobOutput(meta, [recipient.id, owner.id]);
+	shareJobOutput(meta, [recipient.id]);
+	assert.deepEqual(meta.shares, [{ userId: recipient.id, access: "read" }]);
+	assert.equal(involved(recipient, meta), true);
+});
+
 test("cron schedules find their next run in local time", () => {
 	const saturday = new Date(2026, 9, 17, 12, 0);
 	assert.deepEqual(nextRun("30 7 * * 1-5", saturday), new Date(2026, 9, 19, 7, 30));
@@ -87,6 +102,7 @@ test("agents propose jobs that run only after the right person approves them", a
 			name: "Morning digest",
 			schedule: "0 7 * * *",
 			reason: "Asked for a daily summary",
+			recipients: [admin.username],
 			steps: [
 				{ type: "script", command: 'node -e "console.log(41 + 1)"' },
 				{ type: "prompt", text: "Summarise this:\n{{output}}" },
@@ -95,6 +111,8 @@ test("agents propose jobs that run only after the right person approves them", a
 		assert.equal((await bridge("wrong", proposal)).status, 403);
 		const token = interactionEnvironment("fake:src").BEEZY_INTERACTION_TOKEN;
 		assert.equal((await bridge(token, { ...proposal, schedule: "* * * * *" })).status, 400);
+		assert.equal((await bridge(token, { ...proposal, recipients: ["missing-user"] })).status, 400);
+		assert.equal((await bridge(token, { ...proposal, session: "this" })).status, 400);
 		const proposed = await (await bridge(token, proposal)).json();
 		assert.equal(proposed.status, "waiting_for_approval");
 
@@ -134,6 +152,8 @@ test("agents propose jobs that run only after the right person approves them", a
 		assert.equal(prompts[0].key, "fake:job");
 		assert.match(prompts[0].text, /^⏰ Scheduled job “Digest”[\s\S]*Summarise this:\nThe previous step's output follows[\s\S]*```\n42\n```$/);
 		assert.equal(job.session.key, "fake:job");
+		assert.deepEqual(job.recipients, [admin.username]);
+		assert.deepEqual(store.session("fake:job")?.shares, [{ userId: admin.id, access: "read" }]);
 
 		assert.equal((await asMember("DELETE", `/jobs/${job.id}`)).status, 200);
 		assert.deepEqual((await (await asAdmin("GET", "/jobs")).json()).jobs, []);

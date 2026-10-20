@@ -11,6 +11,7 @@ The tool takes, and the server validates, this shape:
   "name": "Umbrella check",
   "schedule": "30 7 * * 1-5",
   "session": "new",
+  "recipients": ["berci"],
   "reason": "You asked for a weekday rain warning.",
   "steps": [
     { "type": "http", "method": "GET", "url": "https://api.open-meteo.com/v1/forecast?latitude=48.1&longitude=11.6&daily=precipitation_probability_max", "headers": {}, "timeoutSec": 30 },
@@ -25,6 +26,12 @@ The tool takes, and the server validates, this shape:
   - `script`: a shell command run in the job's folder, with the previous output on stdin. `timeoutSec` can be at most 600.
   - `http`: one request using GET, POST, PUT, PATCH or DELETE. `timeoutSec` can be at most 120.
 - **session**: `new` (the default) gets a dedicated "⏰ name" session on the first run. `this` uses the session that proposed the job; chat and memory sessions always get a new one.
+
+## Output recipients
+
+Agents can supply `recipients`, an array of exact Beezy account usernames. Unknown usernames are rejected; naming someone in the prompt does not route output. Recipients require `session: "new"` and at least one prompt step. The approval screen displays recipients before approval.
+
+The job still runs as its owner. Recipients receive **read access to the entire dedicated session**, including tool output, and the normal session run notifications. The owner retains access and notifications. Device push requires notification permission and a valid subscription; delivery is not guaranteed. Output is stored in the session, not automatically written to a file. End a multi-step job with a prompt to put its final summary in that session. Existing session history is never shared by an agent proposal using `session: "this"`.
 
 ## Guards
 
