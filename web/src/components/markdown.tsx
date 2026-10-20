@@ -35,6 +35,8 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
         components={{
           a: ({ node: _node, href, children, ...props }) => {
             const file = files ? fileLinkPath(href, base, root) : undefined
+            // "#…" links are routes in this app (a shared message's source); they open in place.
+            if (href?.startsWith("#")) return <a {...props} href={href}>{children}</a>
             if (!file) return <a {...props} href={href} target="_blank" rel="noreferrer noopener">{children}</a>
             return (
               <a

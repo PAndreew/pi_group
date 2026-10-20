@@ -8,6 +8,7 @@ import { InteractionCards, useInteractions } from "@/components/interaction-card
 import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
+import { MessageBody } from "@/components/message-body"
 import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
@@ -58,7 +59,7 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
   )
 }
 
-function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; showName: boolean }) {
+function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boolean; showName: boolean; folder?: string }) {
   const author = m.message.author as { id: string; username: string } | undefined
   const text = messageText(m.message.content)
   if (own)
@@ -66,8 +67,8 @@ function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; show
       <div className="flex justify-end">
         <ReplyStack text={text} align="end" className="max-w-[85%]">
           {(body) => (
-            <div className="rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">
-              {body}
+            <div className="min-w-0 rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+              <MessageBody text={body} folder={folder} tinted />
               <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
             </div>
           )}
@@ -79,9 +80,9 @@ function HumanMessage({ m, own, showName }: { m: ChatMessage; own: boolean; show
       {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8" />}
       <ReplyStack text={text} className="max-w-[85%]">
         {(body) => (
-          <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
+          <div className="min-w-0 rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm">
             {showName && <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">{author?.username}</div>}
-            {body}
+            <MessageBody text={body} folder={folder} />
             <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
           </div>
         )}
@@ -294,7 +295,7 @@ export function ChatView({ chatId }: { chatId: string }) {
             const align = own ? "end" : "start"
             return (
               <div key={m.id} id={sourceId}>
-                <HumanMessage m={m} own={own} showName={authorId !== previous} />
+                <HumanMessage m={m} own={own} showName={authorId !== previous} folder={chat?.folder} />
                 <div className={cn(!own && "pl-10")}>
                   <Reactions reactions={m.reactions} selfId={user?.id} names={nameOf} align={align} onReact={(emoji) => void react(m, emoji)} />
                   {content && (

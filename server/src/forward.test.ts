@@ -78,9 +78,9 @@ test("sharing a message into other sessions waits until both agents are idle", a
 		const shared = await (await call("POST", "/sessions/forward", { text: "The answer", from: session("fake:src"), to: [session("fake:idle"), session("fake:busy"), { kind: "chat", id: chat }] })).json();
 		assert.deepEqual(shared, { shared: 3, waiting: 1 });
 		const posted = (await (await call("GET", `/chats/${chat}`)).json()).messages.at(-1);
-		assert.equal(posted.message.content[0].text, "Shared from session “Source”:\n\nThe answer");
+		assert.equal(posted.message.content[0].text, "Shared from [session “Source”](#f=&s=fake%3Asrc):\n\nThe answer");
 		assert.equal(posted.message.author.id, owner.id);
-		assert.deepEqual(lives.idle.prompts.map((p) => p.text), ["Shared from session “Source”:\n\nThe answer"]);
+		assert.deepEqual(lives.idle.prompts.map((p) => p.text), ["Shared from [session “Source”](#f=&s=fake%3Asrc):\n\nThe answer"]);
 		assert.equal(lives.busy.prompts.length, 0);
 
 		lives.busy.setRunning(false);

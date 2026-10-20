@@ -25,6 +25,7 @@ import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dial
 import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions } from "@/components/message-actions"
+import { MessageBody } from "@/components/message-body"
 import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
@@ -54,7 +55,7 @@ function readBase64(file: File) {
   })
 }
 
-function UserBubble({ message }: { message: AgentMessage }) {
+function UserBubble({ message, folder }: { message: AgentMessage; folder?: string }) {
   const text = messageText(message.content)
   const images = Array.isArray(message.content) ? message.content.filter((c: any) => c?.type === "image") : []
   return (
@@ -63,7 +64,7 @@ function UserBubble({ message }: { message: AgentMessage }) {
         {(body) => (
           <div className="rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
             <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
-            <div className="whitespace-pre-wrap break-words">{body}</div>
+            <MessageBody text={body} folder={folder} tinted />
             {images.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {images.map((img: any, i: number) => (
@@ -226,7 +227,7 @@ function RunView({
     <div className="space-y-2" id={sourceId}>
       {user && (
         <div>
-          <UserBubble message={user} />
+          <UserBubble message={user} folder={folder} />
           {userText && (
             <MessageActions
               align="end"

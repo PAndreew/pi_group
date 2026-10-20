@@ -489,12 +489,14 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			if (!chats.isMember(id, user)) throw new HttpError(404, "Chat not found");
 			return chats.title(id, user.id)!;
 		};
+		// The header links back to the source in the app (a hash route), so the card can open it.
+		const title = (name: string) => `“${firstLine(name).replace(/[[\]]/g, "").slice(0, 80)}”`;
 		let label: string | undefined;
-		if (body.from?.kind === "chat") label = `chat “${firstLine(chatTitle(body.from.id)).slice(0, 80)}”`;
+		if (body.from?.kind === "chat") label = `[chat ${title(chatTitle(body.from.id))}](#${new URLSearchParams({ c: body.from.id })})`;
 		else if (body.from) {
 			const source = sessionOf(body.from.id);
 			const name = source.name || source.firstMessage;
-			label = name ? `session “${firstLine(name).slice(0, 80)}”` : undefined;
+			label = `[${name ? `session ${title(name)}` : "another session"}](#${new URLSearchParams({ f: toRel(source.cwd), s: source.key })})`;
 		}
 		const targets = body.to.filter((to, i) => !sameRef(to, body.from) && body.to.findIndex((other) => sameRef(other, to)) === i);
 		for (const to of targets) {
