@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { currentTenant } from "./tenant-context.js";
 
 /** Load KEY=VALUE pairs from a .env file next to the working directory, without overriding real env vars. */
 function loadDotEnv(file: string) {
@@ -37,7 +38,7 @@ export const config = {
 	/** App state: users, login sessions, session ACLs, durable storages. */
 	dataDir: path.resolve(env("DATA_DIR", path.join(os.homedir(), ".pi-group"))),
 	/** Everything the file browser can see. Users cannot leave this directory. */
-	fsRoot: path.resolve(env("FS_ROOT", os.homedir())),
+	get fsRoot() { return currentTenant()?.root ?? path.resolve(env("FS_ROOT", os.homedir())); },
 	/** pi executable. A path ending in .js is run with the current node binary. */
 	piBin: env("PI_BIN", "pi"),
 	piAgentDir,
@@ -50,7 +51,7 @@ export const config = {
 	loginTtlDays: num("LOGIN_TTL_DAYS", 30),
 	enableDurable: bool("ENABLE_DURABLE", true),
 	/** Shared folder for chats started without a #folder; also holds the consolidated memory. Inside FS_ROOT. */
-	chatFolder: path.resolve(env("CHAT_FOLDER", path.join(path.resolve(env("FS_ROOT", os.homedir())), "pi-chat"))),
+	get chatFolder() { return currentTenant()?.chatFolder ?? path.resolve(env("CHAT_FOLDER", path.join(path.resolve(env("FS_ROOT", os.homedir())), "pi-chat"))); },
 	/** Consolidate chats untouched for this many days into the memory session; 0 turns it off. */
 	memoryAfterDays: num("MEMORY_AFTER_DAYS", 7),
 	/** Contact for push services (mailto: or https:). Keys are generated into DATA_DIR/vapid.json unless set. */

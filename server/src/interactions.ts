@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { HttpError } from "./files.js";
 import { saveNow, store } from "./store.js";
 import { pushToUser } from "./push.js";
+import { isTenantMember } from "./tenants.js";
 
 const option = z.object({ id: z.string().min(1).max(100), label: z.string().min(1).max(300), description: z.string().max(1000).optional() }).strict();
 export const interactionSpec = z.object({
@@ -82,7 +83,7 @@ export function mountInteractions(router: Router, load: (req: Request) => { acce
     saveNow();
     const meta = store.session(card.sessionKey)!;
     const recipients = new Set([meta.ownerId, ...meta.shares.filter((s) => s.access === "write").map((s) => s.userId)]);
-    for (const userId of recipients) if (userId) void pushToUser(userId, { type: "interaction", key: card.sessionKey, id: card.id, title: spec.title }).catch((error) => console.error("Interaction push failed:", error.message));
+    for (const userId of recipients) if (userId && isTenantMember(userId, meta.tenantId ?? "work")) void pushToUser(userId, { type: "interaction", key: card.sessionKey, id: card.id, title: spec.title }).catch((error) => console.error("Interaction push failed:", error.message));
     res.json(card);
   });
   router.get("/interaction-bridge/:key/:id", (req, res) => { res.json(find(req)); });

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { unsubscribePush } from "@/hooks/use-run-notifications"
 import { ApiError, api, type User, type SessionDefaults } from "@/lib/api"
 import { clearStates } from "@/lib/state-cache"
+import { activeTenant, setActiveTenant } from "@/lib/tenant"
 
 interface AuthValue {
   user: User | null
@@ -25,7 +26,7 @@ function rememberedUser(): User | null {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(rememberedUser)
-  const [loading, setLoading] = useState(() => !rememberedUser())
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
@@ -35,7 +36,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     api
       .me()
-      .then(({ user }) => setUser(user))
+      .then(({ user, tenantId }) => {
+        if (tenantId && tenantId !== activeTenant()) {
+          setActiveTenant(tenantId)
+          window.location.replace(window.location.pathname)
+          return
+        }
+        setUser(user)
+      })
       .catch((error) => {
         // Offline or the server is restarting: keep the remembered user; only a 401 signs out.
         if (error instanceof ApiError && error.status === 401) setUser(null)
@@ -44,12 +52,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false))
     const onUnauthorized = () => setUser(null)
     window.addEventListener("pi-group:unauthorized", onUnauthorized)
-    return () => window.removeEventListener("pi-group:unauthorized", onUnauthorized)
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "pi-group:tenant" || event.key === USER_KEY) window.location.replace(window.location.pathname)
+    }
+    window.addEventListener("storage", onStorage)
+    return () => {
+      window.removeEventListener("pi-group:unauthorized", onUnauthorized)
+      window.removeEventListener("storage", onStorage)
+    }
   }, [])
 
   const login = useCallback(async (username: string, password: string) => {
-    const { user } = await api.login(username, password)
-    setUser(user)
+    await api.login(username, password)
+    await clearStates()
+    const { tenantId } = await api.me()
+    setActiveTenant(tenantId ?? "work")
+    window.location.replace(window.location.pathname)
   }, [])
 
   const logout = useCallback(async () => {

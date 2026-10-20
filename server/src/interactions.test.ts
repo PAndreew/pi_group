@@ -11,6 +11,8 @@ test("interaction tool bridge persists cards and only a writer can resolve them,
   process.env.DATA_DIR = dir;
   const { loadStore, store } = await import("./store.js");
   loadStore();
+  // This fixture injects req.user directly instead of creating real accounts.
+  store.data.tenants.find(t => t.id === "work")!.memberIds.push("writer", "reader");
   store.upsertSession({ key: "pi:test", id: "test", harness: "pi", cwd: dir, ownerId: "writer" });
   const { mountInteractions, interactionEnvironment } = await import("./interactions.js");
   const app = express();

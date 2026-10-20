@@ -18,6 +18,7 @@ try {
     if (path === '/api/sessions/test-session') body = { session: { key: 'test-session', access: 'owner', path: '', live: true, harness: 'pi', name: 'Test session' } }
     else if (path === '/api/sessions/test-session/prompt') { sent = route.request().postDataJSON().text }
     else if (path === '/api/auth/me') body = { user }
+    else if (path === '/api/tenants') body = { active: 'work', tenants: [{ id: 'work', name: 'Work' }] }
     else if (path === '/api/chats/test/messages' && route.request().method() === 'POST') {
       sent = route.request().postDataJSON().text
       body = { message: { ...messages[0], id: 100, message: { role: 'user', author: user, content: sent } } }
@@ -55,7 +56,7 @@ try {
   await page.getByRole('button', { name: 'Cancel reply' }).click()
   assert.equal(await editor.inputValue(), 'My question')
   await page.getByRole('button', { name: 'Reply to message', exact: true }).nth(1).click()
-  await page.getByRole('button', { name: /Send/ }).click()
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('[aria-label="Reply preview"]'))
   assert.ok(sent.startsWith('@pi Replying to Beezy:'))
   assert.match(sent, /> Assistant answer 1/)

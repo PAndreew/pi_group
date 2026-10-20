@@ -104,6 +104,10 @@ Edit `.env` and restart Beezy. See [`.env.example`](.env.example) for all option
 
 Service setup, updates and development commands: [Operations](docs/operations.md).
 
+## Tenants
+
+Use the home toolbar's **Tenant** selector to keep Work and Family conversations, default agent folders and memory separate. Access checks run on the server; OS-level agent isolation is still a separate deployment step. See [tenant setup and boundaries](docs/tenants.md).
+
 ## License
 
 [MIT](LICENSE)

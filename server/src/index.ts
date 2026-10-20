@@ -15,6 +15,7 @@ import { expireInteractions } from "./interactions.js";
 import { sessionRoutes } from "./sessions.js";
 import { attachTerminal } from "./terminal.js";
 import { loadStore, saveNow } from "./store.js";
+import { tenantRoutes } from "./tenants.js";
 
 loadStore();
 expireInteractions();
@@ -35,6 +36,7 @@ app.use(authenticate);
 
 const api = express.Router();
 api.use(authRoutes());
+api.use(tenantRoutes());
 api.use(fileRoutes());
 api.use(pushRoutes());
 api.use(monitorRoutes(adapters));

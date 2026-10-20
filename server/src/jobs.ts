@@ -12,6 +12,8 @@ import { pushToUser } from "./push.js";
 import { checkSchedule, nextRun } from "./schedule.js";
 import type { RunOutcome } from "./sessions.js";
 import { saveNow, type SessionMeta, store, type User } from "./store.js";
+import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
+import { inTenant } from "./tenant-context.js";
 
 /*
  * Scheduled jobs: a schedule plus up to five steps (a prompt to the agent, a shell script, an HTTP
@@ -53,6 +55,7 @@ export const jobInput = z.object({ name: text(120), schedule: scheduleSchema, st
 const proposalSchema = jobInput.extend({ session: z.enum(["this", "new"]).default("new"), reason: z.string().trim().max(1000).optional() }).strict();
 
 export interface Job {
+	tenantId?: string;
 	id: string;
 	name: string;
 	ownerId: string;
@@ -91,11 +94,11 @@ export interface JobDeps {
 /** Scripts run as the server's user, like the terminal, so only admins may approve them. */
 const needsAdmin = (job: Pick<Job, "steps">) => job.steps.some((s) => s.type === "script");
 export const canApprove = (user: User, job: Pick<Job, "steps" | "ownerId">) => user.role === "admin" || (user.id === job.ownerId && !needsAdmin(job));
-const canSee = (user: User, job: Job) => user.role === "admin" || user.id === job.ownerId;
+const canSee = (user: User, job: Job) => tenantAccess(user, job) && (user.role === "admin" || user.id === job.ownerId);
 /** Re-checked before every run: the approver may have lost the role that let them approve. */
 function approved(job: Job) {
 	const approver = job.approvedBy ? store.userById(job.approvedBy) : undefined;
-	return Boolean(approver && canApprove(approver, job));
+	return Boolean(approver && isTenantMember(approver.id, job.tenantId ?? "work") && isTenantMember(job.ownerId, job.tenantId ?? "work") && canApprove(approver, job));
 }
 
 function plan(job: Job) {
@@ -219,7 +222,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 
 	const changed = (job: Job) => {
 		const recipients = new Set([job.ownerId, ...store.data.users.filter((u) => u.role === "admin").map((u) => u.id)]);
-		for (const id of recipients) deps.sendTo(id, { type: "jobs" });
+		for (const id of recipients) if (isTenantMember(id, job.tenantId ?? "work")) deps.sendTo(id, { type: "jobs", tenantId: job.tenantId ?? "work" });
 	};
 
 	const runPrompt = async (job: Job, owner: User, step: Extract<JobStep, { type: "prompt" }>, previous?: string) => {
@@ -251,7 +254,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 		}
 	};
 
-	const runJob = async (job: Job) => {
+	const performJob = async (job: Job) => {
 		if (running.has(job.id)) return;
 		running.add(job.id);
 		changed(job);
@@ -285,6 +288,11 @@ export function mountJobs(router: Router, deps: JobDeps) {
 		plan(current);
 		saveNow();
 		changed(current);
+	};
+
+	const runJob = (job: Job) => {
+		const tenant = tenantOf(job.tenantId ?? "work");
+		return tenant ? inTenant(tenant, () => performJob(job)) : performJob(job);
 	};
 
 	for (const job of store.data.jobs) if (!job.nextRunAt) plan(job);
@@ -336,6 +344,12 @@ export function mountJobs(router: Router, deps: JobDeps) {
 	};
 
 	/** The agent's proposal, through the session's bridge credential. It is saved disabled and unapproved. */
+	router.use("/job-bridge/:key", (req, _res, next) => {
+		const key = String(req.params.key);
+		if (!bridgeCredentialValid(key, req.headers.authorization)) throw new HttpError(403, "Invalid bridge credential");
+		const tenant = tenantOf(store.session(key)?.tenantId ?? "work");
+		return tenant ? inTenant(tenant, next) : next();
+	});
 	router.post("/job-bridge/:key", (req, res) => {
 		const key = String(req.params.key);
 		if (!bridgeCredentialValid(key, req.headers.authorization)) throw new HttpError(403, "Invalid bridge credential");
@@ -347,6 +361,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 		if (store.data.jobs.filter((j) => j.ownerId === owner.id).length >= MAX_JOBS_PER_OWNER) throw new HttpError(429, `${owner.username} already has ${MAX_JOBS_PER_OWNER} scheduled jobs; delete one first`);
 		const at = new Date().toISOString();
 		const job: Job = {
+			tenantId: meta.tenantId ?? "work",
 			id: randomUUID(),
 			name: body.name,
 			ownerId: owner.id,

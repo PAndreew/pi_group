@@ -9,6 +9,8 @@ import { authenticate } from "./auth.js";
 import { config } from "./config.js";
 import { resolveSafe } from "./files.js";
 import { store } from "./store.js";
+import { tenantAccess, isTenantMember } from "./tenants.js";
+import { tenantId } from "./tenant-context.js";
 
 /** A shell on a pseudo-terminal, whichever backend provides it. */
 interface Pty {
@@ -135,15 +137,17 @@ export function attachTerminal(server: Server) {
 		const url = new URL(req.url ?? "/", "http://localhost");
 		if (url.pathname !== "/api/terminal") return void socket.destroy();
 		const request = req as Request;
-		authenticate(request, {} as Response, () => {});
+		authenticate(request, {} as Response, () => {
 		const refuse = (status: string) => {
 			socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
 			socket.destroy();
 		};
 		if (!request.user) return refuse("401 Unauthorized");
-		if (request.user.role !== "admin") return refuse("403 Forbidden");
+		if (request.user.role !== "admin" || !isTenantMember(request.user.id)) return refuse("403 Forbidden");
+		if (url.searchParams.get("tenant") && url.searchParams.get("tenant") !== tenantId()) return refuse("403 Forbidden");
 		if (!sameOrigin(req)) return refuse("403 Forbidden");
 		const meta = store.session(url.searchParams.get("key") ?? "");
+		if (url.searchParams.has("key") && (!meta || !tenantAccess(request.user, meta))) return refuse("404 Not Found");
 		const folder = (() => {
 			try {
 				return url.searchParams.has("path") ? resolveSafe(url.searchParams.get("path")) : undefined;
@@ -153,6 +157,7 @@ export function attachTerminal(server: Server) {
 		})();
 		const cwd = meta && existsSync(meta.cwd) ? meta.cwd : folder && existsSync(folder) ? folder : existsSync(config.fsRoot) ? config.fsRoot : os.homedir();
 		wss.handleUpgrade(req, socket, head, (ws) => void run(ws, cwd, size(url.searchParams.get("cols"), 80, 500), size(url.searchParams.get("rows"), 24, 200)));
+		});
 	});
 
 	async function run(ws: WebSocket, cwd: string, cols: number, rows: number) {

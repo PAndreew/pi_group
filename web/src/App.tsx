@@ -2,6 +2,7 @@ import { Activity, ArrowLeft, Bell, BellOff, Bot, Brain, KeyRound, Loader2, LogO
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { ChatList } from "@/components/chat-list"
+import { TenantPicker } from "@/components/tenant-picker"
 import { ChatView } from "@/components/chat-view"
 import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
@@ -175,6 +176,7 @@ function Workspace() {
           <button type="button" onClick={nav.home} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
             <img src="/beezy-logo.svg" alt="beezy" className="size-7" />
           </button>
+          <TenantPicker />
           <div className="flex-1" />
           <ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} />
           <DropdownMenu>

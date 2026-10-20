@@ -7,6 +7,8 @@ import { toRel } from "./files.js";
 import type { AgentMessage } from "./harness/types.js";
 import type { RunOutcome } from "./sessions.js";
 import { type SessionMeta, store } from "./store.js";
+import { inTenant, tenantId } from "./tenant-context.js";
+import { isTenantMember } from "./tenants.js";
 
 /*
  * Memory consolidation: chats nobody touched for MEMORY_AFTER_DAYS are handed, one at a time, to a
@@ -50,20 +52,20 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 		waiters.delete(key);
 	});
 
-	let running = false;
-	let lastRun: { at: string; consolidated: number; error?: string } | undefined;
+	const running = new Set<string>();
+	const lastRuns = new Map<string, { at: string; consolidated: number; error?: string }>();
 
 	const masterSession = async () => {
-		const existing = Object.values(store.data.sessions).find((s) => s.memory && !s.deleted);
+		const existing = Object.values(store.data.sessions).find((s) => s.memory && !s.deleted && (s.tenantId ?? "work") === tenantId());
 		if (existing) return existing;
-		const admin = store.data.users.find((u) => u.role === "admin");
+		const admin = store.data.users.find((u) => u.role === "admin" && isTenantMember(u.id));
 		if (!admin) throw new Error("No admin user to own the memory session");
 		const meta = await deps.createSession(admin, { harness: await deps.harnessFor(admin), cwd: ensureChatFolder(), name: "Memory" });
 		return store.upsertSession({ ...meta, memory: true });
 	};
 
 	const candidates = async (before: string): Promise<Candidate[]> => {
-		const chats: Candidate[] = staleChats(before).map((chat) => ({
+		const chats: Candidate[] = staleChats(before).filter(chat => (chat.tenantId ?? "work") === tenantId()).map((chat) => ({
 			kind: "chat",
 			id: chat.id,
 			title: chatTitle(chat),
@@ -74,7 +76,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 		}));
 		// pi-only chats started without a folder live in the chat folder.
 		const sessions: Candidate[] = Object.values(store.data.sessions)
-			.filter((s) => !s.deleted && !s.memory && s.cwd === config.chatFolder && !chatOfSession(s.key))
+			.filter((s) => !s.deleted && !s.memory && (s.tenantId ?? "work") === tenantId() && s.cwd === config.chatFolder && !chatOfSession(s.key))
 			.filter((s) => (s.updatedAt ?? s.createdAt) < before && (!s.consolidatedAt || s.consolidatedAt < (s.updatedAt ?? s.createdAt)))
 			.map((s) => ({
 				kind: "session",
@@ -93,8 +95,9 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 
 	/** Fold every stale conversation into memory, one run at a time. */
 	const consolidate = async (before: string) => {
-		if (running) return 0;
-		running = true;
+		const id = tenantId();
+		if (running.has(id)) return 0;
+		running.add(id);
 		let count = 0;
 		try {
 			const todo = await candidates(before);
@@ -121,33 +124,35 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 				item.done(startedAt);
 				count++;
 			}
-			lastRun = { at: new Date().toISOString(), consolidated: count };
+			lastRuns.set(id, { at: new Date().toISOString(), consolidated: count });
 			return count;
 		} catch (error) {
-			lastRun = { at: new Date().toISOString(), consolidated: count, error: (error as Error).message };
+			lastRuns.set(id, { at: new Date().toISOString(), consolidated: count, error: (error as Error).message });
 			console.error("memory:", (error as Error).message);
 			return count;
 		} finally {
-			running = false;
+			running.delete(id);
 		}
 	};
 
 	const cutoff = () => new Date(Date.now() - config.memoryAfterDays * 86_400_000).toISOString();
 	if (config.memoryAfterDays > 0) {
-		const tick = () => void consolidate(cutoff());
+		const tick = () => {
+			for (const tenant of store.data.tenants) void inTenant(tenant, () => consolidate(cutoff()));
+		};
 		setTimeout(tick, 2 * 60_000).unref();
 		setInterval(tick, 60 * 60_000).unref();
 	}
 
 	router.get("/memory", async (_req, res) => {
-		const master = Object.values(store.data.sessions).find((s) => s.memory && !s.deleted);
+		const master = Object.values(store.data.sessions).find((s) => s.memory && !s.deleted && (s.tenantId ?? "work") === tenantId());
 		res.json({
 			enabled: config.memoryAfterDays > 0,
 			afterDays: config.memoryAfterDays,
 			folder: toRel(config.chatFolder),
 			sessionKey: master?.key,
-			running,
-			lastRun,
+			running: running.has(tenantId()),
+			lastRun: lastRuns.get(tenantId()),
 			pending: config.memoryAfterDays > 0 ? (await candidates(cutoff())).length : 0,
 		});
 	});
@@ -155,7 +160,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 	/** Consolidate now; `all` ignores the age limit (everything not consolidated since its last activity). */
 	router.post("/memory/consolidate", async (req, res) => {
 		const { all } = z.object({ all: z.boolean().default(false) }).parse(req.body ?? {});
-		if (running) return void res.json({ started: false, reason: "Already running" });
+		if (running.has(tenantId())) return void res.json({ started: false, reason: "Already running" });
 		const before = all ? new Date(Date.now() + 1000).toISOString() : cutoff();
 		const pending = (await candidates(before)).length;
 		void consolidate(before);

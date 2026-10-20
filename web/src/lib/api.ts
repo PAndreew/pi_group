@@ -234,6 +234,8 @@ export interface Job {
 
 export type JobInput = Pick<Job, "name" | "schedule" | "steps" | "enabled">
 
+import { activeTenant, tenantUrl } from "@/lib/tenant"
+
 export class ApiError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
@@ -243,7 +245,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method, credentials: "same-origin", headers: { "X-Pi-Group": "1" } }
+  const init: RequestInit = { method, credentials: "same-origin", headers: { "X-Pi-Group": "1", "X-Pi-Tenant": activeTenant() } }
   if (body instanceof FormData) init.body = body
   else if (body !== undefined) {
     init.body = JSON.stringify(body)
@@ -265,7 +267,9 @@ export const api = {
   interactions: (key: string) => request<{ interactions: Interaction[] }>("GET", `/api/sessions/${enc(key)}/interactions`),
   answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
-  me: () => request<{ user: User }>("GET", "/api/auth/me"),
+  me: () => request<{ user: User; tenantId?: string }>("GET", "/api/auth/me"),
+  tenants: () => request<{ active: string; tenants: { id: string; name: string }[] }>("GET", "/api/tenants"),
+  switchTenant: (id: string) => request("POST", "/api/tenants/switch", { id }),
   login: (username: string, password: string) => request<{ user: User }>("POST", "/api/auth/login", { username, password }),
   saveAvatar: (avatar: string | null) => request("PUT", "/api/auth/avatar", { avatar }),
   logout: () => request("POST", "/api/auth/logout"),
@@ -289,8 +293,8 @@ export const api = {
     for (const f of files) form.append("files", f, f.name)
     return request<{ files: { name: string; path: string; size: number; mime: string }[] }>("POST", `/api/fs/upload?${q({ path: dir })}`, form)
   },
-  rawUrl: (path: string) => `/api/fs/raw?${q({ path })}`,
-  downloadUrl: (path: string) => `/api/fs/download?${q({ path })}`,
+  rawUrl: (path: string) => tenantUrl(`/api/fs/raw?${q({ path })}`),
+  downloadUrl: (path: string) => tenantUrl(`/api/fs/download?${q({ path })}`),
 
   harnesses: () => request<{ harnesses: Harness[] }>("GET", "/api/harnesses"),
   models: (harness: string) => request<{ models: ModelInfo[] }>("GET", `/api/harnesses/${enc(harness)}/models`),
@@ -329,12 +333,12 @@ export const api = {
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
     request<{ session: SessionSummary }>("POST", "/api/sessions", body),
-  eventsUrl: (key: string) => `/api/sessions/${enc(key)}/events`,
+  eventsUrl: (key: string) => tenantUrl(`/api/sessions/${enc(key)}/events`),
   tools: (key: string) => request<SessionTools>("GET", `/api/sessions/${enc(key)}/tools`),
   mcp: (key: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/sessions/${enc(key)}/mcp`),
   /** A session's folder, or a plain folder when there is no session yet. */
   terminalUrl: (target: { key?: string; path?: string }, cols: number, rows: number) =>
-    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ ...(target.key ? { key: target.key } : { path: target.path ?? "" }), cols: String(cols), rows: String(rows) })}`,
+    tenantUrl(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ ...(target.key ? { key: target.key } : { path: target.path ?? "" }), cols: String(cols), rows: String(rows) })}`),
   prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
   /** Edit a message of a session whose agent is not running; `expect` is its current text. */

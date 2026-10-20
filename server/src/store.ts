@@ -5,6 +5,7 @@ import type { SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 import type { Interaction } from "./interactions.js";
 import type { Job } from "./jobs.js";
+import { tenantId, type Tenant } from "./tenant-context.js";
 
 export type Role = "admin" | "member";
 export type Access = "read" | "write";
@@ -20,6 +21,7 @@ export interface User {
 }
 
 export interface LoginSession {
+	tenantId?: string;
 	/** sha256 of the cookie token; the token itself is never stored. */
 	tokenHash: string;
 	userId: string;
@@ -33,6 +35,7 @@ export interface Share {
 
 /** App-side metadata of one harness session: who owns it and who may see it. */
 export interface SessionMeta {
+	tenantId?: string;
 	key: string;
 	harness: string;
 	id: string;
@@ -65,6 +68,7 @@ export interface PushSubscriptionRecord {
 }
 
 interface Data {
+	tenants: Tenant[];
 	users: User[];
 	logins: LoginSession[];
 	sessions: Record<string, SessionMeta>;
@@ -76,7 +80,7 @@ interface Data {
 }
 
 const file = path.join(config.dataDir, "db.json");
-let data: Data = { users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [] };
+let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {
@@ -87,6 +91,12 @@ export function loadStore() {
 		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 	}
 	data.logins = data.logins.filter((login) => login.expiresAt > Date.now());
+	// Idempotent migration: legacy app data belongs to Work, never to a new tenant.
+	if (!data.tenants.length) {
+		data.tenants = [{ id: "work", name: "Work", root: config.fsRoot, chatFolder: config.chatFolder, memberIds: data.users.map(u => u.id) }];
+	}
+	for (const meta of Object.values(data.sessions)) meta.tenantId ??= "work";
+	for (const job of data.jobs) job.tenantId ??= "work";
 }
 
 function flush() {
@@ -115,7 +125,7 @@ export const store = {
 	session: (key: string) => data.sessions[key] as SessionMeta | undefined,
 	upsertSession(meta: Omit<SessionMeta, "visibility" | "shares" | "createdAt"> & Partial<SessionMeta>) {
 		const existing = data.sessions[meta.key];
-		const defaults = { visibility: "private", shares: [], createdAt: new Date().toISOString() };
+		const defaults = { tenantId: tenantId(), visibility: "private", shares: [], createdAt: new Date().toISOString() };
 		const next = {
 			...defaults,
 			...existing,

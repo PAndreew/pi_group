@@ -1,4 +1,5 @@
 import { liveStream } from "@/lib/live-stream"
+import { tenantUrl } from "@/lib/tenant"
 
 /**
  * The signed-in user's event stream (/api/notifications): run outcomes and chat messages, plus a
@@ -12,7 +13,7 @@ let close: (() => void) | undefined
 
 export function subscribeUserEvents(listener: Listener) {
   listeners.add(listener)
-  close ??= liveStream("/api/notifications", {
+  close ??= liveStream(tenantUrl("/api/notifications"), {
     // Events sent while the connection was down are lost; this tells views to catch up.
     onOpen: () => {
       for (const l of listeners) l({ type: "stream_open" })

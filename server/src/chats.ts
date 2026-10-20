@@ -12,6 +12,8 @@ import type { AgentMessage, PromptInput } from "./harness/types.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type RunOutcome } from "./sessions.js";
 import { type SessionMeta, store, type User } from "./store.js";
+import { tenantId } from "./tenant-context.js";
+import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
 
 /*
  * Chats between people, optionally with pi. Messages are stored in pi's message shape
@@ -36,6 +38,7 @@ export interface ChatMessage {
 }
 
 export interface Chat {
+	tenantId?: string;
 	id: string;
 	title?: string;
 	/** Fixed folder, relative to FS_ROOT. */
@@ -75,6 +78,8 @@ function database() {
 		const columns = (db.prepare("PRAGMA table_info(messages)").all() as Row[]).map((c) => String(c.name));
 		if (!columns.includes("edited_at")) db.exec("ALTER TABLE messages ADD COLUMN edited_at TEXT");
 		if (!columns.includes("reactions")) db.exec("ALTER TABLE messages ADD COLUMN reactions TEXT");
+		const chatColumns = (db.prepare("PRAGMA table_info(chats)").all() as Row[]).map(c => String(c.name));
+		if (!chatColumns.includes("tenant_id")) db.exec("ALTER TABLE chats ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'work'");
 	}
 	return db;
 }
@@ -91,6 +96,7 @@ const str = (v: unknown) => (v === null || v === undefined ? undefined : String(
 function toChat(row: Row): Chat {
 	return {
 		id: String(row.id),
+		tenantId: str(row.tenant_id) ?? "work",
 		title: str(row.title),
 		folder: String(row.folder),
 		sessionKey: str(row.session_key),
@@ -177,7 +183,8 @@ export function ensureChatFolder() {
 			[
 				"# Chat folder",
 				"",
-				"This folder belongs to the π group chat. Long-term memory of earlier conversations lives in `MEMORY.md`",
+				`This folder belongs to the ${tenantOf()?.name ?? "Work"} tenant. Do not mix its conversation context or memory with other tenants.`,
+				"Long-term memory of earlier conversations lives in `MEMORY.md`",
 				"(an index, one line per conversation) and in `memory/` (one file per conversation).",
 				"Read `MEMORY.md` when earlier context, decisions or preferences could help, and open the matching file in `memory/` for details.",
 				"",
@@ -225,13 +232,15 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	/** Live event to every member; a push to the others when it is someone's message. */
 	const fanOut = (chat: Chat, type: "chat_message" | "chat_update", message: ChatMessage, pushText?: { author: string; text: string; except?: string }) => {
 		for (const userId of memberIds(chat.id)) {
-			deps.sendTo(userId, { type, chatId: chat.id, message });
+			if (!isTenantMember(userId, chat.tenantId ?? "work")) continue;
+			deps.sendTo(userId, { type, tenantId: chat.tenantId ?? "work", chatId: chat.id, message });
 			if (pushText && userId !== pushText.except) void pushToUser(userId, { type: "chat", chatId: chat.id, title: chatTitle(chat, userId), author: pushText.author, text: pushText.text.slice(0, 300) });
 		}
 	};
 
 	const addMembers = (chat: Chat, userIds: string[]) => {
 		const stmt = database().prepare("INSERT OR IGNORE INTO members (chat_id, user_id) VALUES (?, ?)");
+		if (userIds.some(id => !isTenantMember(id, chat.tenantId ?? "work"))) throw new HttpError(400, "Cannot add members from another tenant");
 		for (const id of userIds) if (store.userById(id)) stmt.run(chat.id, id);
 		// People in the chat can follow (and steer) pi's session.
 		const meta = chat.sessionKey ? store.session(chat.sessionKey) : undefined;
@@ -243,7 +252,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 
 	const membership = (chatId: string, user: User) => {
 		const chat = getChat(chatId);
-		if (!chat || !memberIds(chatId).includes(user.id)) throw new HttpError(404, "Chat not found");
+		if (!chat || !tenantAccess(user, chat) || !memberIds(chatId).includes(user.id)) throw new HttpError(404, "Chat not found");
 		return chat;
 	};
 
@@ -330,6 +339,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		const body = z
 			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional() })
 			.parse(req.body);
+		if (body.userIds.some(id => !isTenantMember(id))) throw new HttpError(400, "Cannot add members from another tenant");
 		const others = [...new Set(body.userIds)].filter((id) => id !== user.id && store.userById(id));
 		if (!body.pi && others.length === 0) throw new HttpError(400, "Mention @pi or at least one person");
 		const cwd = body.folder ? resolveSafe(body.folder) : ensureChatFolder();
@@ -343,7 +353,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 
 		const at = now();
 		const id = randomUUID();
-		database().prepare("INSERT INTO chats (id, folder, pi, created_by, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)").run(id, toRel(cwd), user.id, at, at);
+		database().prepare("INSERT INTO chats (id, folder, pi, created_by, created_at, updated_at, tenant_id) VALUES (?, ?, 0, ?, ?, ?, ?)").run(id, toRel(cwd), user.id, at, at, tenantId());
 		const chat = getChat(id)!;
 		addMembers(chat, [user.id, ...others]);
 		const first = insert(id, { role: "user", content: [{ type: "text", text: body.text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
@@ -365,7 +375,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			)
 			.all(user.id, user.id) as Row[];
 		const linked = new Set<string>();
-		const chats = rows.map((row) => {
+		const chats = rows.filter(row => tenantAccess(user, toChat(row))).map((row) => {
 			const chat = toChat(row);
 			if (chat.sessionKey) linked.add(chat.sessionKey);
 			const last = row.last ? (JSON.parse(String(row.last)) as AgentMessage) : undefined;
@@ -406,7 +416,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		let chat = membership(String(req.params.id), user);
 		const { text, ...options } = sendSchema.parse(req.body);
 		const names = mentions(text);
-		const newcomers = names.map((n) => store.userByName(n)?.id).filter((id): id is string => Boolean(id));
+		const newcomers = names.map((n) => store.userByName(n)?.id).filter((id): id is string => Boolean(id && isTenantMember(id)));
 		if (newcomers.length) addMembers(chat, newcomers);
 		const message = insert(chat.id, { role: "user", content: [{ type: "text", text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
 		database().prepare("UPDATE members SET last_read = ? WHERE chat_id = ? AND user_id = ?").run(message.id, chat.id, user.id);
@@ -523,7 +533,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		res.json({ folders: top.filter((e) => e.type === "dir").map((e) => e.path), entries: top, chatFolder: toRel(config.chatFolder) });
 	});
 
-	const isMember = (chatId: string, user: User) => Boolean(getChat(chatId) && memberIds(chatId).includes(user.id));
+	const isMember = (chatId: string, user: User) => { const chat = getChat(chatId); return Boolean(chat && tenantAccess(user, chat) && memberIds(chatId).includes(user.id)); };
 	return {
 		busy,
 		isMember,
@@ -535,6 +545,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		shareTargets: (user: User) =>
 			(database().prepare("SELECT c.* FROM chats c JOIN members m ON m.chat_id = c.id AND m.user_id = ? ORDER BY c.updated_at DESC LIMIT 300").all(user.id) as Row[])
 				.map(toChat)
+				.filter(chat => tenantAccess(user, chat))
 				.map((chat) => ({ kind: "chat" as const, id: chat.id, title: chatTitle(chat, user.id), folder: chat.folder, running: busy(chat.id), updatedAt: chat.updatedAt })),
 		/** Post a message shared from elsewhere as `user`'s; pi reads it with the rest on its next turn. */
 		post: (chatId: string, user: User, text: string) => {
@@ -547,10 +558,10 @@ export function mountChats(router: Router, deps: ChatDeps) {
 }
 
 /** Every folder under FS_ROOT a few levels deep (relative paths), cached briefly. */
-let folderCache: { at: number; folders: string[] } | undefined;
+let folderCache: { root: string; at: number; folders: string[] } | undefined;
 const SKIP = new Set(["node_modules", "__pycache__", "venv", ".venv", "dist", "build", "target"]);
 function allFolders() {
-	if (folderCache && Date.now() - folderCache.at < 60_000) return folderCache.folders;
+	if (folderCache?.root === config.fsRoot && Date.now() - folderCache.at < 60_000) return folderCache.folders;
 	const folders: string[] = [];
 	const queue: { dir: string; depth: number }[] = [{ dir: config.fsRoot, depth: 0 }];
 	while (queue.length && folders.length < 20_000) {
@@ -568,14 +579,14 @@ function allFolders() {
 			if (depth < 5) queue.push({ dir: full, depth: depth + 1 });
 		}
 	}
-	folderCache = { at: Date.now(), folders };
+	folderCache = { root: config.fsRoot, at: Date.now(), folders };
 	return folders;
 }
 
 /** Files and folders under FS_ROOT a few levels deep, for #file mentions; cached briefly. */
-let entryCache: { at: number; entries: { path: string; type: "dir" | "file" }[] } | undefined;
+let entryCache: { root: string; at: number; entries: { path: string; type: "dir" | "file" }[] } | undefined;
 function allEntries() {
-	if (entryCache && Date.now() - entryCache.at < 60_000) return entryCache.entries;
+	if (entryCache?.root === config.fsRoot && Date.now() - entryCache.at < 60_000) return entryCache.entries;
 	const entries: { path: string; type: "dir" | "file" }[] = [];
 	const queue: { dir: string; depth: number }[] = [{ dir: config.fsRoot, depth: 0 }];
 	while (queue.length && entries.length < 50_000) {
@@ -595,7 +606,7 @@ function allEntries() {
 			} else if (entry.isFile()) entries.push({ path: toRel(full), type: "file" });
 		}
 	}
-	entryCache = { at: Date.now(), entries };
+	entryCache = { root: config.fsRoot, at: Date.now(), entries };
 	return entries;
 }
 

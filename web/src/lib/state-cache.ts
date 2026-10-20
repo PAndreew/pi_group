@@ -1,4 +1,6 @@
 import type { SessionState } from "@/lib/api"
+import { activeTenant } from "@/lib/tenant"
+const scoped = (key: string) => `${activeTenant()}:${key}`
 
 /**
  * Last known state of recently viewed sessions, so reopening the app (or a session) paints at once
@@ -42,10 +44,11 @@ function done(request: IDBRequest | IDBTransaction) {
 const settled = (state: SessionState): SessionState => ({ ...state, partial: null, dialogs: [], runningTools: [], toolOutputs: {} })
 
 export function cachedState(key: string) {
-  return memory.get(key)
+  return memory.get(scoped(key))
 }
 
 export async function loadState(key: string): Promise<SessionState | undefined> {
+  key = scoped(key)
   if (memory.has(key)) return memory.get(key)
   const database = await open()
   if (!database) return undefined
@@ -55,6 +58,7 @@ export async function loadState(key: string): Promise<SessionState | undefined> 
 }
 
 export async function saveState(key: string, state: SessionState) {
+  key = scoped(key)
   const value = settled(state)
   memory.set(key, value)
   const database = await open()

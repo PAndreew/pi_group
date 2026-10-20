@@ -17,9 +17,13 @@ import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, HarnessAdapter, LiveSession, PromptInput, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
 import { type Access, type SessionMeta, save, saveNow, store, type User } from "./store.js";
 
+import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
+import { currentTenant, inTenant, tenantId } from "./tenant-context.js";
+
 export type EffectiveAccess = "admin" | "owner" | Access;
 
 export function accessOf(user: User, meta: SessionMeta): EffectiveAccess | undefined {
+	if (!tenantAccess(user, meta)) return undefined;
 	if (meta.ownerId === user.id) return "owner";
 	if (user.role === "admin") return "admin";
 	if (meta.visibility === "shared") return meta.shares.find((s) => s.userId === user.id)?.access;
@@ -83,7 +87,7 @@ class Hub {
 	}
 	private attached = new Map<string, { live: LiveSession; unsubscribe: () => void }>();
 	private running = new Map<string, boolean>();
-	private watchers = new Set<{ user: User; res: Response }>();
+	private watchers = new Set<{ user: User; res: Response; tenantId: string }>();
 	private runListeners = new Set<(key: string, outcome: RunOutcome) => void>();
 	/** Sessions whose outcomes are reported elsewhere (a chat posts pi's reply), so no run notification. */
 	quiet: (key: string) => boolean = () => false;
@@ -96,7 +100,8 @@ class Hub {
 
 	/** Send an event on one user's stream (every open tab or device). */
 	sendTo(userId: string, event: unknown) {
-		for (const { user, res } of this.watchers) if (user.id === userId) send(res, event);
+		const id = (event as { tenantId?: string })?.tenantId ?? tenantId();
+		for (const { user, res, tenantId: selected } of this.watchers) if (user.id === userId && selected === id && isTenantMember(user.id, id)) send(res, event);
 	}
 
 	private finish(key: string, outcome: RunOutcome) {
@@ -106,7 +111,7 @@ class Hub {
 
 	/** Per-user stream of run outcomes (finished / failed) for browser notifications. */
 	watch(user: User, res: Response) {
-		const watcher = { user, res };
+		const watcher = { user, res, tenantId: tenantId() };
 		this.watchers.add(watcher);
 		return () => this.watchers.delete(watcher);
 	}
@@ -115,7 +120,8 @@ class Hub {
 		const meta = store.session(key);
 		if (!meta) return;
 		const notice: RunNotice = { type: "run", kind, key, path: toRel(meta.cwd), name: meta.name || meta.firstMessage || "Untitled session", text: plainText(text).slice(0, 300) };
-		for (const { user, res } of this.watchers) {
+		for (const { user, res, tenantId: selected } of this.watchers) {
+			if (selected !== (meta.tenantId ?? "work")) continue;
 			// Re-read the user: roles and sharing may have changed since the stream opened.
 			const current = store.userById(user.id);
 			if (current && involved(current, meta)) send(res, notice);
@@ -168,7 +174,7 @@ class Hub {
 		if (current?.live === live) return;
 		current?.unsubscribe();
 		if (!this.running.has(key)) this.running.set(key, live.state.running);
-		const unsubscribe = live.subscribe((event) => {
+		const relay = (event: SessionEvent) => {
 			this.observe(key, live, event);
 			if (event.type === "state") this.broadcast(key, { ...event, state: this.state(key, event.state) });
 			else if (event.type === "message") {
@@ -176,6 +182,11 @@ class Hub {
 				this.broadcast(key, { ...event, message: state.messages.at(-1) ?? event.message });
 			} else this.broadcast(key, event);
 			if (event.type === "state" && !event.state.live) this.detach(key, live);
+		};
+		const unsubscribe = live.subscribe(event => {
+			const tenant = tenantOf(store.session(key)?.tenantId ?? "work");
+			if (tenant) inTenant(tenant, () => relay(event));
+			else relay(event);
 		});
 		this.attached.set(key, { live, unsubscribe });
 	}
@@ -255,6 +266,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		user: User,
 		input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"] },
 	) => {
+		if (!isTenantMember(user.id)) throw new HttpError(403, "Tenant unavailable");
+		resolveSafe(toRel(input.cwd));
 		const adapter = adapterOf(input.harness);
 		const live = await adapter.create(input.cwd, { ...creationOptions(input, user.sessionDefaults), name: input.name });
 		const meta = store.upsertSession({
@@ -265,7 +278,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			ownerId: user.id,
 			name: input.name || undefined,
 			visibility: input.visibility ?? "private",
-			shares: (input.shares ?? []).filter((s) => s.userId !== user.id && store.userById(s.userId)),
+			shares: (input.shares ?? []).filter((s) => s.userId !== user.id && isTenantMember(s.userId)),
 		});
 		hub.attach(meta.key, live);
 		return meta;
@@ -273,6 +286,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 
 	/** Send a prompt as `user`, starting the runtime if needed; while a run is going it is queued as a follow-up unless a mode is given. */
 	const promptSession = async (meta: SessionMeta, user: User, body: PromptInput) => {
+		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const live = await ensureLive(meta, adapterOf(meta.harness));
 		const input = { ...body, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
@@ -303,7 +317,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const sameRef = (a?: ShareRef, b?: ShareRef) => Boolean(a && b && a.kind === b.kind && a.id === b.id);
 
 	/** Messages shared elsewhere, waiting until neither their source nor their target agent is running. */
-	const forwards: { from?: ShareRef; to: ShareRef; userId: string; text: string }[] = [];
+	const forwards: { from?: ShareRef; to: ShareRef; userId: string; text: string; tenantId: string }[] = [];
 	let delivering = false;
 	const deliverForwards = async () => {
 		if (delivering) return;
@@ -316,14 +330,18 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				forwards.splice(forwards.indexOf(item), 1);
 				const user = store.userById(item.userId);
 				if (!user) continue;
-				if (item.to.kind === "chat") {
-					chats.post(item.to.id, user, item.text);
-					continue;
-				}
-				const meta = store.session(item.to.id);
-				if (!meta || meta.deleted || !canWrite(accessOf(user, meta))) continue;
-				started.add(item.to.id);
-				await promptSession(meta, user, { text: item.text }).catch((error) => console.error(`Sharing into ${item.to.id} failed:`, error));
+				const tenant = tenantOf(item.tenantId);
+				const deliver = async () => {
+					if (item.to.kind === "chat") {
+						if (chats.isMember(item.to.id, user)) chats.post(item.to.id, user, item.text);
+						return;
+					}
+					const meta = store.session(item.to.id);
+					if (!meta || meta.deleted || !canWrite(accessOf(user, meta))) return;
+					started.add(item.to.id);
+					await promptSession(meta, user, { text: item.text }).catch((error) => console.error(`Sharing into ${item.to.id} failed:`, error));
+				};
+				if (tenant) await inTenant(tenant, deliver);
 			}
 		} finally {
 			delivering = false;
@@ -516,7 +534,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			if (live) hub.attach(key!, live);
 		}
 		const waiting = targets.filter((to) => busy(body.from) || busy(to)).length;
-		forwards.push(...targets.map((to) => ({ from: body.from, to, userId: user.id, text })));
+		forwards.push(...targets.map((to) => ({ from: body.from, to, userId: user.id, text, tenantId: tenantId() })));
 		await deliverForwards();
 		res.json({ shared: targets.length, waiting });
 	});
@@ -709,6 +727,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const { meta, access } = load(req);
 		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can change sharing");
 		const body = z.object({ visibility: z.enum(["private", "shared"]), shares: shareSchema }).parse(req.body);
+		if (body.shares.some(s => !isTenantMember(s.userId, meta.tenantId ?? "work"))) throw new HttpError(400, "Cannot share across tenants");
 		const shares = body.shares.filter((s) => s.userId !== meta.ownerId && store.userById(s.userId));
 		const next = store.upsertSession({ ...meta, visibility: body.visibility, shares });
 		res.json({ session: summary(next, req.user!) });
@@ -719,7 +738,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const { meta } = load(req);
 		if (req.user!.role !== "admin") throw new HttpError(403, "Admins only");
 		const body = z.object({ userId: z.string() }).parse(req.body);
-		if (!store.userById(body.userId)) throw new HttpError(400, "No such user");
+		if (!store.userById(body.userId) || !isTenantMember(body.userId, meta.tenantId ?? "work")) throw new HttpError(400, "No such tenant member");
 		const next = store.upsertSession({ ...meta, ownerId: body.userId, shares: meta.shares.filter((s) => s.userId !== body.userId) });
 		res.json({ session: summary(next, req.user!) });
 	});

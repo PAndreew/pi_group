@@ -4,7 +4,9 @@ import express from "express";
 import { z } from "zod";
 import { sessionDefaultsSchema } from "./preferences.js";
 import { config } from "./config.js";
-import { type Role, save, store, type User } from "./store.js";
+import { type Role, save, store, type User, type LoginSession } from "./store.js";
+import { inTenant, tenantId } from "./tenant-context.js";
+import { isTenantMember, tenantOf } from "./tenants.js";
 
 const COOKIE = "pg_session";
 
@@ -12,6 +14,7 @@ declare global {
 	namespace Express {
 		interface Request {
 			user?: User;
+			login?: LoginSession;
 		}
 	}
 }
@@ -38,6 +41,8 @@ export function createUser(username: string, password: string, role: Role): User
 	if (store.userByName(username)) throw new Error(`User ${username} already exists`);
 	const user: User = { id: randomUUID(), username, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString() };
 	store.data.users.push(user);
+	const tenant = tenantOf();
+	if (tenant) tenant.memberIds.push(user.id);
 	save();
 	return user;
 }
@@ -76,13 +81,25 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
 	const token = readCookie(req, COOKIE);
 	if (token) {
 		const login = store.data.logins.find((l) => l.tokenHash === sha256(token));
-		if (login && login.expiresAt > Date.now()) req.user = store.userById(login.userId);
+		if (login && login.expiresAt > Date.now()) {
+			req.user = store.userById(login.userId);
+			req.login = login;
+		}
+	}
+	if (req.user) {
+		const selected = req.login?.tenantId ?? store.data.tenants.find(t => isTenantMember(req.user!.id, t.id))?.id;
+		const tenant = tenantOf(selected);
+		if (tenant && isTenantMember(req.user.id, tenant.id)) return inTenant(tenant, next);
 	}
 	next();
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
 	if (!req.user) return void res.status(401).json({ error: "Not logged in" });
+	if (!isTenantMember(req.user.id)) return void res.status(403).json({ error: "Tenant unavailable" });
+	// A stale tab must not silently submit its old draft into a newly selected tenant.
+	const expected = req.headers["x-pi-tenant"] ?? req.query.tenant;
+	if (expected && expected !== tenantId()) return void res.status(409).json({ error: "Tenant changed. Reload this page." });
 	// Cross-site requests cannot set custom headers without a CORS preflight, which this server never grants.
 	if (req.method !== "GET" && req.method !== "HEAD" && req.headers["x-pi-group"] !== "1") {
 		return void res.status(403).json({ error: "Missing X-Pi-Group header" });
@@ -116,7 +133,7 @@ export function authRoutes(): Router {
 		failures.delete(key);
 		const token = randomBytes(32).toString("base64url");
 		const ttl = config.loginTtlDays * 86400;
-		store.data.logins.push({ tokenHash: sha256(token), userId: user.id, expiresAt: Date.now() + ttl * 1000 });
+		store.data.logins.push({ tokenHash: sha256(token), userId: user.id, tenantId: store.data.tenants.find(t => isTenantMember(user.id, t.id))?.id, expiresAt: Date.now() + ttl * 1000 });
 		save();
 		setCookie(res, token, ttl);
 		res.json({ user: publicUser(user) });
@@ -134,7 +151,7 @@ export function authRoutes(): Router {
 
 	router.get("/auth/me", (req, res) => {
 		if (!req.user) return void res.status(401).json({ error: "Not logged in" });
-		res.json({ user: publicUser(req.user) });
+		res.json({ user: publicUser(req.user), tenantId: tenantId() });
 	});
 
 	router.put("/auth/avatar", requireAuth, (req, res) => {
@@ -148,7 +165,7 @@ export function authRoutes(): Router {
 	});
 
 	router.get("/users/:id/avatar", requireAuth, (req, res) => {
-		const avatar = store.data.users.find((u) => u.id === req.params.id)?.avatar;
+		const avatar = store.data.users.find((u) => u.id === req.params.id && isTenantMember(u.id))?.avatar;
 		res.setHeader("Cache-Control", "no-store");
 		if (!avatar) return void res.sendStatus(404);
 		res.setHeader("Content-Type", "image/png");
@@ -174,7 +191,7 @@ export function authRoutes(): Router {
 
 	/** Usernames for the share dialog; every member may see who else is in the group. */
 	router.get("/users/directory", requireAuth, (_req, res) => {
-		res.json({ users: store.data.users.map((u) => ({ id: u.id, username: u.username })) });
+		res.json({ users: store.data.users.filter(u => isTenantMember(u.id)).map((u) => ({ id: u.id, username: u.username })) });
 	});
 
 	router.get("/users", requireAuth, requireAdmin, (_req, res) => {
