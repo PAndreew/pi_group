@@ -23,6 +23,8 @@ git pull --ff-only
 npm run setup
 npm run build
 # Do not interrupt the running service unless installation and build succeeded.
+# The vault is optional and may run elsewhere; restart it only where it is installed next to Beezy.
+if systemctl --user cat beezy-vault.service >/dev/null 2>&1; then systemctl --user restart beezy-vault.service; fi
 systemctl --user restart "$SERVICE"
 for attempt in {1..30}; do
   if systemctl --user is-active --quiet "$SERVICE" && curl --fail --silent --output /dev/null "$URL"; then

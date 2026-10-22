@@ -108,6 +108,10 @@ Service setup, updates and development commands: [Operations](docs/operations.md
 
 Use the home toolbar's **Tenant** selector to keep Work and Family conversations, default agent folders and memory separate. Access checks run on the server; OS-level agent isolation is still a separate deployment step. See [tenant setup and boundaries](docs/tenants.md).
 
+## Secrets
+
+Keep API tokens and passwords in the **Secret vault** (user menu). Agents see each secret's key and description, and read a value only when a task needs it. The vault runs as a separate service (`npm run start:vault`). See [secret vault](docs/vault.md).
+
 ## License
 
 [MIT](LICENSE)

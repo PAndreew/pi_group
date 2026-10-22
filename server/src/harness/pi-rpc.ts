@@ -78,7 +78,7 @@ class RpcProcess {
 
 	constructor(args: string[], cwd: string, sessionKey?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
-		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs")];
+		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("vault.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		this.child = spawn(command, argv, {
 			cwd,
@@ -571,6 +571,40 @@ export class PiRpcAdapter implements HarnessAdapter {
 			} catch {
 				return line;
 			}
+		});
+		const temp = `${file}.${randomUUID()}.tmp`;
+		await fs.writeFile(temp, lines.join("\n"));
+		await fs.rename(temp, file);
+		this.files.delete(file);
+	}
+
+	/**
+	 * Drop the message's entry from pi's session tree: its children hang on its parent instead, and
+	 * references to it (compaction's first kept entry, labels) move to its neighbours.
+	 */
+	async deleteMessage(id: string, cwd: string, index: number) {
+		if (this.live(id)) throw new Error("Stop the session before deleting from it");
+		const file = await this.fileOf(id, cwd);
+		if (!file) throw new Error("Session file not found");
+		const records = await readJsonl(file);
+		const entry = displayed(records)[index]?.entry;
+		if (entry?.type !== "message") throw new Error("Message not found");
+		// Labels on the message go with it; anything hanging on a removed entry moves up to the first kept ancestor.
+		const removed = new Map<string, string | null>(records.filter((r) => r.id === entry.id || r.targetId === entry.id).map((r) => [r.id, r.parentId ?? null]));
+		const kept = (id: string | null): string | null => (id !== null && removed.has(id) ? kept(removed.get(id)!) : id);
+		const child = records.find((r) => !removed.has(r.id) && removed.has(r.parentId))?.id;
+		const lines = (await fs.readFile(file, "utf8")).split("\n").flatMap((line) => {
+			if (![...removed.keys()].some((id) => line.includes(id))) return [line];
+			let record: RpcRecord;
+			try {
+				record = JSON.parse(line);
+			} catch {
+				return [line];
+			}
+			if (removed.has(record.id)) return [];
+			if (removed.has(record.parentId)) record.parentId = kept(record.parentId);
+			if (record.firstKeptEntryId === entry.id) record.firstKeptEntryId = child ?? kept(entry.id);
+			return [JSON.stringify(record)];
 		});
 		const temp = `${file}.${randomUUID()}.tmp`;
 		await fs.writeFile(temp, lines.join("\n"));

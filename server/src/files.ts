@@ -72,6 +72,9 @@ async function uniqueName(dir: string, name: string) {
 	return candidate;
 }
 
+/** Matches the viewer's text limit: larger files are not loaded into the editor. */
+const MAX_EDIT_BYTES = 3 * 1024 * 1024;
+
 const sanitize = (name: string) => path.basename(name).replace(/[\u0000-\u001f<>:"|?*]/g, "_").slice(0, 200) || "upload";
 
 export function fileRoutes(): Router {
@@ -133,6 +136,26 @@ export function fileRoutes(): Router {
 		const stat = await fs.stat(file);
 		if (!stat.isFile()) throw new HttpError(400, "Not a file");
 		res.download(file, path.basename(file), { dotfiles: "allow" });
+	});
+
+	/** Save a text file from the in-app editor; `mtime` from the load refuses to overwrite someone else's newer save. */
+	router.put("/fs/text", async (req, res) => {
+		const body = z.object({ path: z.string().min(1), content: z.string().max(MAX_EDIT_BYTES), mtime: z.number().optional() }).parse(req.body);
+		const requested = resolveSafe(body.path);
+		const stat = await fs.stat(requested).catch(() => undefined);
+		// Write through symlinks instead of replacing them; resolveSafe already checked their target.
+		const file = stat ? realpathSync(requested) : requested;
+		if (stat && !stat.isFile()) throw new HttpError(400, "Not a file");
+		if (stat && body.mtime !== undefined && Math.abs(stat.mtimeMs - body.mtime) > 1) throw new HttpError(409, "The file changed on disk since you opened it; reload to see the new version");
+		// Same directory, then rename: readers (and the agent) never see a half-written file.
+		const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+		await fs.writeFile(temp, body.content, { mode: stat?.mode });
+		await fs.rename(temp, file).catch(async (error) => {
+			await fs.rm(temp, { force: true });
+			throw error;
+		});
+		const saved = await fs.stat(file);
+		res.json({ path: toRel(requested), size: saved.size, mtime: saved.mtimeMs });
 	});
 
 	router.post("/fs/mkdir", async (req, res) => {

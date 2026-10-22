@@ -4,6 +4,8 @@
 
 For a persistent service, adapt [`deploy/pi-group.service`](../deploy/pi-group.service) to your checkout and OS user. Check its paths and environment before enabling it.
 
+The optional secret vault is a separate service with its own unit, [`deploy/beezy-vault.service`](../deploy/beezy-vault.service). `npm run deploy` restarts it when it is installed as a user service. See [secret vault](vault.md).
+
 For remote access, use an HTTPS reverse proxy (for example Caddy, nginx or Tailscale Serve). Set `COOKIE_SECURE=true`. Disable proxy buffering for event streams (`proxy_buffering off` in nginx).
 
 Android: browser menu → Install app. iPhone: Safari → Share → Add to Home Screen. On iOS 16.4+, notifications require the installed app. Enable notifications from the user menu over HTTPS.
@@ -39,6 +41,7 @@ npm run dev:server       # API on :8787
 npm run dev:web          # UI on :5173
 npm test --prefix server
 npm test --prefix web
+npm test --prefix vault
 npm run lint --prefix web
 npm run build
 ```

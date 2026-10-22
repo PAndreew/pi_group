@@ -1,5 +1,8 @@
 import { Share } from "lucide-react"
+import { ImageGallery } from "@/components/image-gallery"
 import { Markdown } from "@/components/markdown"
+import { api } from "@/lib/api"
+import { imageRefs, withoutAttachmentList } from "@/lib/attachments"
 import { linkify, parseShared } from "@/lib/shared"
 import { cn } from "@/lib/utils"
 
@@ -24,14 +27,19 @@ export function Linkified({ text }: { text: string }) {
  * The text of a person's message: plain with clickable links, or, for a message shared from another
  * session or chat, a link to its source and the shared content as markdown. `tinted` is for
  * primary-colored bubbles, so code blocks and quotes take their color from the text.
+ * Images the message refers to (uploads) are shown under it and open full screen.
  */
 export function MessageBody({ text, folder, tinted }: { text: string; folder?: string; tinted?: boolean }) {
   const shared = parseShared(text)
   if (!shared) {
+    const images = imageRefs(text, folder).map((path) => ({ src: api.rawUrl(path), name: path.split("/").pop(), download: api.downloadUrl(path) }))
     return (
-      <div className="whitespace-pre-wrap break-words">
-        <Linkified text={text} />
-      </div>
+      <>
+        <div className="whitespace-pre-wrap break-words">
+          <Linkified text={withoutAttachmentList(text)} />
+        </div>
+        <ImageGallery images={images} />
+      </>
     )
   }
   return (

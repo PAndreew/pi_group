@@ -12,6 +12,7 @@ type Event =
   | { type: "status"; status: Omit<SessionState, "messages" | "partial" | "toolOutputs"> }
   | { type: "notify"; level: "info" | "warn" | "error"; text: string; silent?: boolean }
   | { type: "deleted"; by: string }
+  | { type: "pending_deletes"; pendingDeletes: NonNullable<SessionState["pendingDeletes"]> }
   | { type: "reset"; cached?: SessionState }
   | { type: "cached"; state: SessionState }
 
@@ -28,6 +29,8 @@ function reduce(state: SessionState | null, event: Event): SessionState | null {
       return { ...state, messages: [...state.messages, event.message] }
     case "partial":
       return state && { ...state, partial: event.partial }
+    case "pending_deletes":
+      return state && { ...state, pendingDeletes: event.pendingDeletes }
     case "tool_output":
       return state && { ...state, toolOutputs: { ...state.toolOutputs, [event.toolCallId]: event.output } }
     case "status": {

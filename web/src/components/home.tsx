@@ -7,6 +7,7 @@ import { ComposerTools } from "@/components/composer-tools"
 import { MentionComposer, parseMessage, withFolder } from "@/components/mention-composer"
 import { useAuth } from "@/hooks/use-auth"
 import { useOverlayOpen } from "@/hooks/use-overlay-open"
+import { uploadDir } from "@/lib/attachments"
 import { api } from "@/lib/api"
 import { useNav } from "@/lib/nav"
 
@@ -77,7 +78,7 @@ export function Home() {
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => {
               if (!files.length) return
               setBusy(true)
-              void api.upload(folder, files).then(({ files: uploaded }) => {
+              void api.upload(uploadDir(folder), files).then(({ files: uploaded }) => {
                 setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
               }, (error) => toast.error(error.message)).finally(() => setBusy(false))
             }} />

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type Router } from "express";
@@ -10,12 +11,12 @@ import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountMemory } from "./memory.js";
 import { pushToUser } from "./push.js";
-import { attributeMessages, registerPrompt, rekeyAuthors } from "./authorship.js";
+import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
 import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, HarnessAdapter, LiveSession, PromptInput, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
-import { type Access, type SessionMeta, save, saveNow, store, type User } from "./store.js";
+import { type Access, type PendingDelete, type SessionMeta, save, saveNow, store, type User } from "./store.js";
 
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
 import { currentTenant, inTenant, tenantId } from "./tenant-context.js";
@@ -71,6 +72,11 @@ function lastAssistant(state: SessionState) {
 	return state.messages.findLast((m) => m.role === "assistant");
 }
 
+/** A message rewrite: new text replacing `expect`, or removal. */
+export type Rewrite = { index: number; expect: string; text: string } | { index: number; expect: string; remove: true };
+
+const messageText = (m: AgentMessage) => contentText(m.content) || (typeof m.content === "string" ? m.content : "");
+
 const firstLine = (text: string) => text.trim().split("\n")[0].slice(0, 200);
 
 /** Fans one live session's events out to every SSE client watching it. */
@@ -78,12 +84,18 @@ class Hub {
 	private clients = new Map<string, Set<Response>>();
 
 	state(key: string, state: SessionState): SessionState {
+		const pendingDeletes = this.pendingDeletes(key);
 		const ledger = store.session(key)?.authorship;
-		if (!ledger) return state;
+		if (!ledger) return { ...state, pendingDeletes };
 		const pendingCount = ledger.pending.length;
 		const messages = attributeMessages(ledger, state.messages);
 		if (ledger.pending.length !== pendingCount) saveNow();
-		return { ...state, messages };
+		return { ...state, messages, pendingDeletes };
+	}
+
+	/** Prompts waiting to be deleted when the run ends, for viewers to mark. */
+	pendingDeletes(key: string) {
+		return store.session(key)?.pendingDeletes?.flatMap((d) => (d.expect !== undefined ? [{ timestamp: d.timestamp, text: d.expect }] : [])) ?? [];
 	}
 	private attached = new Map<string, { live: LiveSession; unsubscribe: () => void }>();
 	private running = new Map<string, boolean>();
@@ -351,32 +363,122 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	hub.onRun(() => void setTimeout(() => void deliverForwards(), 0));
 
 	/**
-	 * Rewrite one message of a session whose agent is not running. An idle process is stopped
+	 * Rewrite or remove one message of a session whose agent is not running. An idle process is stopped
 	 * first (pi rereads the edited history when the session continues); viewers get the new history.
-	 * `pick` chooses the message from the stored history and its new text, or returns undefined to skip.
+	 * `pick` chooses the message from the stored history and its new text (or `remove`), or returns undefined to skip.
 	 */
-	const editSession = async (meta: SessionMeta, pick: (messages: AgentMessage[]) => { index: number; text: string; expect: string } | undefined) => {
+	const editSession = async (meta: SessionMeta, pick: (messages: AgentMessage[]) => Rewrite | undefined) => {
 		const adapter = adapterOf(meta.harness);
-		if (!adapter.editMessage) throw new HttpError(400, `Messages of ${adapter.label} sessions cannot be edited`);
-		const live = adapter.live(meta.id);
-		if (live?.state.running) throw new HttpError(409, "Wait until the agent has finished before editing");
+		const running = () => Boolean(adapter.live(meta.id)?.state.running);
+		if (running()) throw new HttpError(409, "Wait until the agent has finished before editing");
 		const stored = await adapter.readSession(meta.id, meta.cwd);
 		const target = stored && pick(stored.messages);
 		if (!stored || !target) return false;
+		if (!("remove" in target ? adapter.deleteMessage : adapter.editMessage)) throw new HttpError(400, `Messages of ${adapter.label} sessions cannot be changed`);
 		const message = stored.messages[target.index];
-		const content = replaceText(message.content, target.text, target.expect);
-		if (content === undefined) throw new HttpError(409, "The message changed meanwhile; reload and try again");
-		await live?.close();
-		await adapter.editMessage(meta.id, meta.cwd, target.index, content);
-		const messages = stored.messages.map((m, i) => (i === target.index ? { ...m, content } : m));
+		const content = "remove" in target ? undefined : replaceText(message.content, target.text, target.expect);
+		if (!("remove" in target) && content === undefined) throw new HttpError(409, "The message changed meanwhile; reload and try again");
+		// A run may have started while the history was read.
+		if (running()) throw new HttpError(409, "Wait until the agent has finished before editing");
+		await adapter.live(meta.id)?.close();
 		const current = store.session(meta.key)!;
-		if (current.authorship) rekeyAuthors(current.authorship, stored.messages, messages);
-		if (message.role === "user" && stored.messages.findIndex((m) => m.role === "user") === target.index) current.firstMessage = firstLine(target.text);
+		let messages: AgentMessage[];
+		if ("remove" in target) {
+			await adapter.deleteMessage!(meta.id, meta.cwd, target.index);
+			messages = stored.messages.filter((_, i) => i !== target.index);
+			if (current.authorship) dropAuthor(current.authorship, stored.messages, target.index);
+		} else {
+			await adapter.editMessage!(meta.id, meta.cwd, target.index, content);
+			messages = stored.messages.map((m, i) => (i === target.index ? { ...m, content } : m));
+			if (current.authorship) rekeyAuthors(current.authorship, stored.messages, messages);
+		}
+		if (message.role === "user" && stored.messages.findIndex((m) => m.role === "user") === target.index) {
+			const firstUser = messages.find((m) => m.role === "user");
+			current.firstMessage = firstUser ? firstLine(messageText(firstUser)) : undefined;
+		}
 		saveNow();
 		const state: SessionState = { messages, partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: false, name: current.name ?? stored.name };
 		hub.broadcast(meta.key, { type: "state", state: hub.state(meta.key, state) });
 		return true;
 	};
+
+	/** The prompt a deletion means, checked against `messages`: the caller's own, at its index or else its timestamp. */
+	const locatePrompt = (meta: SessionMeta, messages: AgentMessage[], request: Omit<PendingDelete, "id">) => {
+		const fits = (m: AgentMessage | undefined) => m?.role === "user" && messageText(m) === request.expect;
+		let index = request.index !== undefined && fits(messages[request.index]) ? request.index : -1;
+		if (index < 0 && request.timestamp !== undefined) index = messages.findIndex((m) => m.timestamp === request.timestamp && fits(m));
+		if (index < 0) throw new HttpError(409, "The message changed meanwhile; reload and try again");
+		const ledger = store.session(meta.key)?.authorship;
+		const author = ledger && (attributeMessages(ledger, messages)[index].author as { id?: string } | undefined);
+		if (author?.id !== request.userId) throw new HttpError(403, "You can only delete your own messages");
+		return index;
+	};
+
+	/** A chat message inside pi's transcript prompts: cut its "author: text" block, or the whole prompt when nothing else is left. */
+	const locateTranscript = (messages: AgentMessage[], needle: string, nth: number): Rewrite | undefined => {
+		let seen = 0;
+		for (const [index, m] of messages.entries()) {
+			if (m.role !== "user") continue;
+			const expect = messageText(m);
+			for (let at = expect.indexOf(needle); at >= 0; at = expect.indexOf(needle, at + needle.length)) {
+				if (seen++ !== nth) continue;
+				const text = `${expect.slice(0, at).replace(/\n+$/, "")}\n\n${expect.slice(at + needle.length).replace(/^\n+/, "")}`.trim();
+				return text ? { index, expect, text } : { index, expect, remove: true };
+			}
+		}
+		return undefined;
+	};
+
+	const applyDelete = (meta: SessionMeta, request: Omit<PendingDelete, "id">) =>
+		editSession(meta, (messages) => {
+			if (request.needle !== undefined) return locateTranscript(messages, request.needle, request.nth ?? 0);
+			return { index: locatePrompt(meta, messages, request), expect: request.expect ?? "", remove: true };
+		});
+
+	/** Delete now, or once the run ends when the agent is busy. Resolves true when queued. */
+	const deleteFromSession = async (meta: SessionMeta, request: Omit<PendingDelete, "id">) => {
+		const adapter = adapterOf(meta.harness);
+		if (!adapter.deleteMessage) throw new HttpError(400, `Messages of ${adapter.label} sessions cannot be deleted`);
+		const live = adapter.live(meta.id);
+		if (!live?.state.running) {
+			await applyDelete(meta, request);
+			return false;
+		}
+		const current = store.session(meta.key)!;
+		(current.pendingDeletes ??= []).push({ id: randomUUID(), ...request });
+		saveNow();
+		hub.broadcast(meta.key, { type: "pending_deletes", pendingDeletes: hub.pendingDeletes(meta.key) });
+		return true;
+	};
+
+	/** Apply an idle session's queued deletions in order; one blocked by a new run waits for the next pass. */
+	const draining = new Set<string>();
+	const drainDeletes = async (key: string) => {
+		if (draining.has(key) || isRunning(key) || !store.session(key)?.pendingDeletes?.length) return;
+		draining.add(key);
+		try {
+			for (let next = store.session(key)?.pendingDeletes?.[0]; next && !isRunning(key); next = store.session(key)?.pendingDeletes?.[0]) {
+				const item = next;
+				const meta = store.session(key)!;
+				const tenant = tenantOf(meta.tenantId ?? "work");
+				try {
+					await (tenant ? inTenant(tenant, () => applyDelete(meta, item)) : applyDelete(meta, item));
+				} catch (error) {
+					if (error instanceof HttpError && error.status === 409 && isRunning(key)) break;
+					console.error(`Deleting a message from ${key} failed:`, (error as Error).message);
+				}
+				const current = store.session(key)!;
+				current.pendingDeletes = current.pendingDeletes?.filter((d) => d.id !== item.id);
+				if (!current.pendingDeletes?.length) delete current.pendingDeletes;
+				saveNow();
+				// The deletion's own broadcast went out before the queue shrank.
+				hub.broadcast(key, { type: "pending_deletes", pendingDeletes: hub.pendingDeletes(key) });
+			}
+		} finally {
+			draining.delete(key);
+		}
+	};
+	hub.onRun((key) => void setTimeout(() => void drainDeletes(key), 0));
 
 	const summary = (meta: SessionMeta, user: User, listing?: SessionListing) => {
 		const live = byId.get(meta.harness)?.live(meta.id);
@@ -657,6 +759,16 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ ok: true });
 	});
 
+	/** Delete one of the caller's own prompts; while the agent runs, the deletion waits until the run ends. */
+	router.post("/sessions/:key/messages/delete", async (req, res) => {
+		const { meta, adapter } = writable(req);
+		const body = z.object({ index: z.number().int().min(0), timestamp: z.number().optional(), expect: z.string() }).parse(req.body);
+		const request = { userId: req.user!.id, ...body };
+		const live = adapter.live(meta.id);
+		locatePrompt(meta, live?.state.messages ?? (await adapter.readSession(meta.id, meta.cwd))?.messages ?? [], request);
+		res.json({ queued: await deleteFromSession(meta, request) });
+	});
+
 	router.post("/sessions/:key/abort", async (req, res) => {
 		const { meta, adapter } = writable(req);
 		await adapter.live(meta.id)?.abort();
@@ -759,6 +871,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		setQuiet: (quiet: (key: string) => boolean) => void (hub.quiet = quiet),
 		sessionSummary: (meta: SessionMeta, user: User) => summary(meta, user),
 		editSession,
+		deleteFromSession,
 		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
 	};
 	chats = mountChats(router, chatDeps);
@@ -774,6 +887,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	setInterval(() => {
 		for (const adapter of adapters) for (const live of adapter.liveSessions()) hub.attach(`${adapter.id}:${live.id}`, live);
 		if (forwards.length) void deliverForwards();
+		for (const meta of Object.values(store.data.sessions)) if (meta.pendingDeletes?.length) void drainDeletes(meta.key);
 	}, 5_000).unref();
 
 	// Stop idle runtimes: not running, nobody watching, not pinned, quiet for IDLE_TIMEOUT_MIN.

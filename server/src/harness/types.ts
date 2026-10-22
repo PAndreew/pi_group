@@ -54,6 +54,8 @@ export interface SessionState {
 	dialogs: ExtensionDialog[];
 	name?: string;
 	live: boolean;
+	/** Messages whose deletion waits for the current run to end (filled in by the session layer). */
+	pendingDeletes?: { timestamp?: number; text: string }[];
 }
 
 export type SessionEvent =
@@ -148,6 +150,8 @@ export interface HarnessAdapter {
 	create(cwd: string, options: CreateOptions): Promise<LiveSession>;
 	/** Replace the content of the `index`th message of `readSession` in a session that is not live. Absent when the harness cannot rewrite history. */
 	editMessage?(id: string, cwd: string, index: number, content: unknown): Promise<void>;
+	/** Remove the `index`th message of `readSession` from a session that is not live. Absent when the harness cannot rewrite history. */
+	deleteMessage?(id: string, cwd: string, index: number): Promise<void>;
 	/** Stop and remove a session. Resolves false when the harness cannot erase it; the app then hides it. */
 	deleteSession(id: string, cwd: string): Promise<boolean>;
 	/** Tools and commands of a session, for the tools overview; never starts a process. */

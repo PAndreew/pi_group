@@ -1,0 +1,23 @@
+# systemd unit for Beezy's secret vault (vault/). It can run on this machine or on another one;
+# Beezy only needs VAULT_URL and the shared VAULT_TOKEN. See docs/vault.md.
+# Install (user service, next to pi-group.service):
+#   cp deploy/beezy-vault.service ~/.config/systemd/user/
+#   systemctl --user edit beezy-vault   # adjust WorkingDirectory / PATH if needed
+#   systemctl --user daemon-reload && systemctl --user enable --now beezy-vault
+[Unit]
+Description=Beezy secret vault
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Reads VAULT_* from .env here or one directory up (the repository root).
+WorkingDirectory=%h/pi_group/vault
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node src/index.mjs
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

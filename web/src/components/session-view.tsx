@@ -24,7 +24,9 @@ import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
+import { ImageGallery } from "@/components/image-gallery"
 import { EditPreview, MessageActions } from "@/components/message-actions"
+import { imageRefs, uploadDir } from "@/lib/attachments"
 import { MessageBody } from "@/components/message-body"
 import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
@@ -57,7 +59,8 @@ function readBase64(file: File) {
 
 function UserBubble({ message, folder }: { message: AgentMessage; folder?: string }) {
   const text = messageText(message.content)
-  const images = Array.isArray(message.content) ? message.content.filter((c: any) => c?.type === "image") : []
+  // Uploads show from their files (MessageBody); inline copies only when the prompt names no stored image.
+  const images = Array.isArray(message.content) && imageRefs(text, folder).length === 0 ? message.content.filter((c: any) => c?.type === "image").map((img: any) => ({ src: `data:${img.mimeType};base64,${img.data}` })) : []
   return (
     <div className="flex items-start justify-end gap-2">
       <ReplyStack text={text} align="end" className="max-w-[88%]">
@@ -65,13 +68,7 @@ function UserBubble({ message, folder }: { message: AgentMessage; folder?: strin
           <div className="rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
             <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
             <MessageBody text={body} folder={folder} tinted />
-            {images.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {images.map((img: any, i: number) => (
-                  <img key={i} src={`data:${img.mimeType};base64,${img.data}`} alt="" className="max-h-28 rounded" />
-                ))}
-              </div>
-            )}
+            <ImageGallery images={images} />
           </div>
         )}
       </ReplyStack>
@@ -196,6 +193,8 @@ function RunView({
   onShare,
   onEdit,
   editBlocked,
+  onDelete,
+  pendingDelete,
   selfId,
   onOpen,
   question,
@@ -215,6 +214,10 @@ function RunView({
   /** Absent without write access. */
   onEdit?: (target: EditTarget) => void
   editBlocked?: string
+  /** Delete one of your own prompts; absent without write access. */
+  onDelete?: (message: AgentMessage, text: string) => void
+  /** Whether this run's prompt waits to be deleted when the agent finishes. */
+  pendingDelete?: boolean
   selfId?: string
   interactions?: React.ReactNode
 }) {
@@ -227,7 +230,9 @@ function RunView({
     <div className="space-y-2" id={sourceId}>
       {user && (
         <div>
-          <UserBubble message={user} folder={folder} />
+          <div className={cn(pendingDelete && "opacity-50")}>
+            <UserBubble message={user} folder={folder} />
+          </div>
           {userText && (
             <MessageActions
               align="end"
@@ -236,6 +241,8 @@ function RunView({
               onReply={onReply && (() => onReply({ author: user.author?.username ?? "Unknown author", text: userText, sourceId }))}
               onEdit={onEdit && (() => onEdit({ message: user, text: userText, prompt: true }))}
               editBlocked={onEdit && (user.author?.id !== selfId ? "Only the author can edit this message" : editBlocked)}
+              onDelete={onDelete && user.author?.id === selfId && !pendingDelete ? () => onDelete(user, userText) : undefined}
+              deletePending={pendingDelete}
             />
           )}
         </div>
@@ -363,6 +370,18 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
     setEditing(undefined)
     setText("")
   }
+  /** Delete one of your own prompts; while the agent runs the server queues it until the run ends. */
+  const deletePrompt = async (message: AgentMessage, text: string) => {
+    if (!state || !window.confirm("Delete this message from the session? The agent will no longer see it.")) return
+    try {
+      const { queued } = await api.deleteMessage(sessionKey, { index: state.messages.indexOf(message), timestamp: message.timestamp, expect: text })
+      toast.success(queued ? "The message will be deleted when the agent finishes" : "Message deleted")
+      if (editing?.message === message) cancelEdit()
+      if (!queued) refresh()
+    } catch (error) {
+      toast.error((error as Error).message)
+    }
+  }
   const saveEdit = async (target: EditTarget) => {
     const body = text.trim()
     if (!body || !state) return
@@ -393,7 +412,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       let prompt = message
       let images: { data: string; mimeType: string }[] | undefined
       if (files.length) {
-        const dir = summary.path ? `${summary.path}/uploads` : "uploads"
+        const dir = uploadDir(summary.path)
         const uploaded = await api.upload(dir, files)
         const rel = uploaded.files.map((f) => (summary.path && f.path.startsWith(`${summary.path}/`) ? f.path.slice(summary.path.length + 1) : f.path))
         prompt = `${message || "See the attached files."}\n\nAttached files (relative to the working directory):\n${rel.map((p) => `- ${p}`).join("\n")}`
@@ -513,6 +532,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               onShare={setForwarding}
               onEdit={canWrite ? startEdit : undefined}
               editBlocked={running ? "Wait until the agent has finished" : undefined}
+              onDelete={canWrite ? (message, text) => void deletePrompt(message, text) : undefined}
+              pendingDelete={Boolean(run.user && state?.pendingDeletes?.some((d) => d.text === messageText(run.user!.content) && (d.timestamp === undefined || d.timestamp === run.user!.timestamp)))}
               selfId={user?.id}
               onOpen={(step) => setOpen({ run: index, step })}
               question={run === lastRun ? question : undefined}

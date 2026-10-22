@@ -1,4 +1,4 @@
-import { Copy, Pencil, Reply, Share, SmilePlus, X } from "lucide-react"
+import { Clock, Copy, Pencil, Reply, Share, SmilePlus, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -23,9 +23,10 @@ async function copyText(text: string) {
 const round = "grid size-8 shrink-0 place-items-center rounded-full transition-colors focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-35 [&_svg]:size-4"
 
 /**
- * Round actions under a message card: reply, copy, edit and, on people's messages in chats, react;
+ * Round actions under a message card: reply, copy, edit, delete and, on people's messages in chats, react;
  * agent messages get a share button instead, sending them on to other sessions.
- * An action without a handler is left out; `editBlocked` shows edit disabled with the reason as its tooltip.
+ * An action without a handler is left out; `editBlocked` shows edit disabled with the reason as its tooltip,
+ * `deletePending` shows that a deletion waits for the agent's run to end.
  */
 export function MessageActions({
   align = "start",
@@ -35,6 +36,8 @@ export function MessageActions({
   editBlocked,
   onReact,
   onShare,
+  onDelete,
+  deletePending,
   className,
 }: {
   align?: "start" | "end"
@@ -45,6 +48,8 @@ export function MessageActions({
   editBlocked?: string
   onReact?: (emoji: string) => void
   onShare?: () => void
+  onDelete?: () => void
+  deletePending?: boolean
   className?: string
 }) {
   return (
@@ -66,6 +71,18 @@ export function MessageActions({
       {(onEdit || editBlocked) && (
         <button type="button" className={cn(round, "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300")} onClick={onEdit} disabled={Boolean(editBlocked)} aria-label="Edit message" title={editBlocked ?? "Edit"}>
           <Pencil />
+        </button>
+      )}
+      {(onDelete || deletePending) && (
+        <button
+          type="button"
+          className={cn(round, "bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-300")}
+          onClick={onDelete}
+          disabled={deletePending}
+          aria-label={deletePending ? "Deletion queued" : "Delete message"}
+          title={deletePending ? "Will be deleted when the agent finishes" : "Delete"}
+        >
+          {deletePending ? <Clock /> : <Trash2 />}
         </button>
       )}
       {onShare && (

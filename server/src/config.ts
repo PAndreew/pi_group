@@ -58,5 +58,12 @@ export const config = {
 	vapidSubject: env("VAPID_SUBJECT", "https://github.com/PAndreew/pi_group"),
 	vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
 	vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+	/** Separately deployed secret vault (vault/); both must be set for the vault UI and agent tools. */
+	vaultUrl: process.env.VAULT_URL ?? (process.env.VAULT_TOKEN ? "http://127.0.0.1:8790" : ""),
+	vaultToken: process.env.VAULT_TOKEN ?? "",
 	webDist: path.resolve(env("WEB_DIST", path.join(import.meta.dirname, "..", "..", "web", "dist"))),
 };
+
+// Agent processes, terminals and job scripts inherit process.env; none of them may hold the vault credential.
+delete process.env.VAULT_TOKEN;
+delete process.env.VAULT_MASTER_KEY;

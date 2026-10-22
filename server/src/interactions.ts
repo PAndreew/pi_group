@@ -39,6 +39,7 @@ export function interactionEnvironment(key: string) {
     BEEZY_INTERACTION_URL: `${base}/interaction-bridge/${encodeURIComponent(key)}`,
     BEEZY_JOBS_URL: `${base}/job-bridge/${encodeURIComponent(key)}`,
     BEEZY_INTERACTION_TOKEN: tokenFor(key),
+    ...(config.vaultUrl && config.vaultToken ? { BEEZY_VAULT_URL: `${base}/vault-bridge/${encodeURIComponent(key)}` } : {}),
   };
 }
 

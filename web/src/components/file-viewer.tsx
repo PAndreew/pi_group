@@ -1,5 +1,6 @@
-import { Code, Download, Eye, FileQuestion, Loader2 } from "lucide-react"
+import { Code, Download, Eye, FileQuestion, Loader2, Pencil, Save, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { CodeBlock, languageFor } from "@/components/code-block"
 import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
@@ -58,7 +59,7 @@ function parseCsv(text: string, sep: string, maxRows = 500) {
 }
 
 function useText(path: string, enabled: boolean) {
-  const [state, setState] = useState<{ text?: string; error?: string; binary?: boolean; tooBig?: number }>({})
+  const [state, setState] = useState<{ text?: string; mtime?: number; error?: string; binary?: boolean; tooBig?: number }>({})
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
@@ -72,7 +73,7 @@ function useText(path: string, enabled: boolean) {
         const buffer = await res.arrayBuffer()
         const bytes = new Uint8Array(buffer.slice(0, 8000))
         if (bytes.includes(0)) return !cancelled && setState({ binary: true })
-        if (!cancelled) setState({ text: new TextDecoder().decode(buffer) })
+        if (!cancelled) setState({ text: new TextDecoder().decode(buffer), mtime: info.mtime })
       } catch (error) {
         if (!cancelled) setState({ error: (error as Error).message })
       }
@@ -81,18 +82,85 @@ function useText(path: string, enabled: boolean) {
       cancelled = true
     }
   }, [path, enabled])
-  return state
+  return [state, setState] as const
+}
+
+/**
+ * Plain-text editor for source, config and .env files. Saving sends the modification time the file
+ * was loaded with, so a newer version on disk (another person, the agent) is never overwritten blindly.
+ */
+function TextEditor({ path, text, mtime, onSaved, onClose }: { path: string; text: string; mtime?: number; onSaved: (text: string, mtime: number) => void; onClose: () => void }) {
+  // Textareas work in \n; files written with \r\n keep their line endings.
+  const crlf = text.includes("\r\n")
+  const original = crlf ? text.replace(/\r\n/g, "\n") : text
+  const [draft, setDraft] = useState(original)
+  const [saving, setSaving] = useState(false)
+  const dirty = draft !== original
+  const save = async () => {
+    if (!dirty || saving) return
+    setSaving(true)
+    try {
+      const content = crlf ? draft.replace(/\n/g, "\r\n") : draft
+      const saved = await api.saveText(path, content, mtime)
+      onSaved(content, saved.mtime)
+      toast.success("Saved")
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  const close = () => (!dirty || window.confirm("Discard your unsaved changes?")) && onClose()
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <span className="flex-1">{dirty ? "Unsaved changes" : "No changes"} · Ctrl+S saves</span>
+        <Button variant="ghost" size="sm" onClick={close}>
+          <X /> Close
+        </Button>
+        <Button size="sm" onClick={() => void save()} disabled={!dirty || saving}>
+          {saving ? <Loader2 className="animate-spin" /> : <Save />} Save
+        </Button>
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault()
+            void save()
+          } else if (e.key === "Escape") close()
+          else if (e.key === "Tab" && !e.shiftKey) {
+            e.preventDefault()
+            const el = e.currentTarget
+            const { selectionStart: start, selectionEnd: end } = el
+            setDraft(`${draft.slice(0, start)}\t${draft.slice(end)}`)
+            requestAnimationFrame(() => el.setSelectionRange(start + 1, start + 1))
+          }
+        }}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        aria-label={`Edit ${path}`}
+        className="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-[13px] leading-relaxed outline-none [tab-size:4]"
+      />
+    </div>
+  )
 }
 
 export function FileViewer({ path }: { path: string }) {
   const kind = kindOf(path)
   const needsText = kind === "html" || kind === "markdown" || kind === "csv" || kind === "text"
-  const { text, error, binary, tooBig } = useText(path, needsText)
+  const [{ text, mtime, error, binary, tooBig }, setLoaded] = useText(path, needsText)
   const [source, setSource] = useState(false)
+  const [editing, setEditing] = useState(false)
   const name = path.split("/").pop() ?? path
   const url = api.rawUrl(path)
   const rows = useMemo(() => (kind === "csv" && text ? parseCsv(text, path.toLowerCase().endsWith(".tsv") ? "\t" : ",") : []), [kind, text, path])
-  useEffect(() => setSource(false), [path])
+  useEffect(() => {
+    setSource(false)
+    setEditing(false)
+  }, [path])
 
   const canToggle = (kind === "html" || kind === "markdown" || kind === "csv") && text !== undefined
 
@@ -120,6 +188,8 @@ export function FileViewer({ path }: { path: string }) {
       </div>
     )
   else if (text === undefined) body = <Loader2 className="mx-auto mt-10 animate-spin" />
+  else if (editing)
+    body = <TextEditor path={path} text={text} mtime={mtime} onSaved={(saved, at) => setLoaded({ text: saved, mtime: at })} onClose={() => setEditing(false)} />
   else if (source || kind === "text") body = <CodeBlock code={text} language={source && kind === "html" ? "xml" : languageFor(path)} className="min-h-full rounded-none bg-transparent" />
   else if (kind === "markdown") body = <Markdown text={text} className="mx-auto max-w-3xl p-4 sm:p-6" />
   else if (kind === "html")
@@ -151,7 +221,13 @@ export function FileViewer({ path }: { path: string }) {
         <span className="min-w-0 flex-1 truncate text-sm font-medium" title={path}>
           {name}
         </span>
-        {canToggle && (
+        {needsText && text !== undefined && !editing && (
+          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+            <Pencil />
+            <span className="hidden sm:inline">Edit</span>
+          </Button>
+        )}
+        {canToggle && !editing && (
           <Button variant="ghost" size="sm" onClick={() => setSource((s) => !s)}>
             {source ? <Eye /> : <Code />}
             <span className="hidden sm:inline">{source ? "Preview" : "Source"}</span>
@@ -164,7 +240,7 @@ export function FileViewer({ path }: { path: string }) {
           </a>
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">{body}</div>
+      <div className={editing ? "min-h-0 flex-1" : "min-h-0 flex-1 overflow-auto"}>{body}</div>
     </div>
   )
 }

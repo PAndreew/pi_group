@@ -63,3 +63,12 @@ export function rekeyAuthors(ledger: Authorship, before: AgentMessage[], after: 
 	for (const key of oldKeys) delete ledger.authors[key];
 	Object.assign(ledger.authors, moved);
 }
+
+/** Keep authors attached after the message at `index` was removed from `before`. */
+export function dropAuthor(ledger: Authorship, before: AgentMessage[], index: number) {
+	const oldKeys = messageKeys(before);
+	const newKeys = messageKeys(before.filter((_, i) => i !== index));
+	const moved = Object.fromEntries(oldKeys.flatMap((key, i) => (i !== index && ledger.authors[key] ? [[newKeys[i < index ? i : i - 1], ledger.authors[key]]] : [])));
+	for (const key of oldKeys) delete ledger.authors[key];
+	Object.assign(ledger.authors, moved);
+}

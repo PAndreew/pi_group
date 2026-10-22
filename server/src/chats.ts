@@ -10,8 +10,8 @@ import { HttpError, resolveSafe, toRel } from "./files.js";
 import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, PromptInput } from "./harness/types.js";
 import { pushToUser } from "./push.js";
-import { accessOf, involved, type RunOutcome } from "./sessions.js";
-import { type SessionMeta, store, type User } from "./store.js";
+import { accessOf, involved, type Rewrite, type RunOutcome } from "./sessions.js";
+import { type PendingDelete, type SessionMeta, store, type User } from "./store.js";
 import { tenantId } from "./tenant-context.js";
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
 
@@ -206,7 +206,9 @@ export interface ChatDeps {
 	/** Summary of a session for the chat list. */
 	sessionSummary: (meta: SessionMeta, user: User) => { running: boolean; live: boolean; name?: string; firstMessage?: string; updatedAt: string; path: string; harness: string };
 	/** Rewrite one message of a session that is not running; `pick` returns undefined when there is nothing to change. */
-	editSession: (meta: SessionMeta, pick: (messages: AgentMessage[]) => { index: number; text: string; expect: string } | undefined) => Promise<boolean>;
+	editSession: (meta: SessionMeta, pick: (messages: AgentMessage[]) => Rewrite | undefined) => Promise<boolean>;
+	/** Remove a message from a session now, or once its run ends; resolves true when queued. */
+	deleteFromSession: (meta: SessionMeta, request: Omit<PendingDelete, "id">) => Promise<boolean>;
 }
 
 const MENTION = /(^|\s)@([\w.-]+)/g;
@@ -481,6 +483,39 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		database().prepare("UPDATE messages SET message = ?, edited_at = ? WHERE id = ?").run(JSON.stringify(message.message), message.editedAt, message.id);
 		fanOut(chat, "chat_update", message);
 		res.json({ message });
+	});
+
+	/**
+	 * Delete one of the caller's own messages. It leaves the chat at once; if pi has already read it,
+	 * it is also cut from pi's session, after the current run when pi is working.
+	 */
+	router.delete("/chats/:id/messages/:messageId", async (req, res) => {
+		const user = req.user!;
+		const chat = membership(String(req.params.id), user);
+		const message = chatMessage(chat, req.params.messageId);
+		if (message.message.role !== "user" || (message.message.author as { id?: string } | undefined)?.id !== user.id) throw new HttpError(403, "You can only delete your own messages");
+		const meta = chat.sessionKey ? store.session(chat.sessionKey) : undefined;
+		let queued = false;
+		if (meta && message.id <= chat.piCursor) {
+			const name = authorName(message.message);
+			const text = textOf(message.message).trim();
+			// Earlier identical messages by the same author come first in pi's transcript too.
+			const nth = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id < ?").all(chat.id, message.id) as Row[])
+				.map(toMessage)
+				.filter((m) => m.message.role === "user" && authorName(m.message) === name && textOf(m.message).trim() === text).length;
+			if (text) {
+				queued = await deps.deleteFromSession(meta, { userId: user.id, needle: `${name}: ${text}`, nth }).catch((error) => {
+					// Harnesses that cannot rewrite history (400) keep pi's copy; the chat still loses the message.
+					if (!(error instanceof HttpError && error.status === 400)) throw error;
+					return false;
+				});
+			}
+		}
+		database().prepare("DELETE FROM messages WHERE id = ?").run(message.id);
+		for (const userId of memberIds(chat.id)) {
+			if (isTenantMember(userId, chat.tenantId ?? "work")) deps.sendTo(userId, { type: "chat_delete", tenantId: chat.tenantId ?? "work", chatId: chat.id, messageId: message.id });
+		}
+		res.json({ ok: true, queued });
 	});
 
 	/** Toggle the caller's emoji reaction on someone's message (pi's replies take none). */

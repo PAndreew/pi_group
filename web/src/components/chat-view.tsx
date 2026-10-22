@@ -15,6 +15,7 @@ import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import { api, type Chat, type ChatMessage } from "@/lib/api"
+import { uploadDir } from "@/lib/attachments"
 import { useNav } from "@/lib/nav"
 import { messageText } from "@/lib/steps"
 import { subscribeUserEvents } from "@/lib/user-stream"
@@ -160,6 +161,7 @@ export function ChatView({ chatId }: { chatId: string }) {
       if (event.type === "stream_open") return sync()
       if (event.chatId !== chatId) return
       if (event.type === "chat_message" || event.type === "chat_update") merge([event.message])
+      if (event.type === "chat_delete") setMessages((current) => current?.filter((m) => m.id !== event.messageId))
       // The first @pi links a session, and mentions can add people: refresh the header.
       if (event.type === "chat_message" && (event.message.status === "working" || event.message.message.role === "user")) void refreshHeader()
     })
@@ -226,15 +228,27 @@ export function ChatView({ chatId }: { chatId: string }) {
   }
   const react = (m: ChatMessage, emoji: string) =>
     api.reactChat(chatId, m.id, emoji).then(({ message }) => setMessages((current) => mergeMessages(current, [message])), (error) => toast.error(error.message))
+  /** Delete your own message; pi forgets it too (after its current run when it is working). */
+  const remove = async (m: ChatMessage) => {
+    if (!window.confirm("Delete this message for everyone in the chat?")) return
+    try {
+      const { queued } = await api.deleteChatMessage(chatId, m.id)
+      setMessages((current) => current?.filter((other) => other.id !== m.id))
+      if (editing?.id === m.id) cancelEdit()
+      toast.success(queued ? "Deleted; Beezy forgets it when it finishes the current run" : "Message deleted")
+    } catch (error) {
+      toast.error((error as Error).message)
+    }
+  }
   const piWorking = Boolean(messages?.some((m) => m.status === "working"))
   const nameOf = (id: string) => (id === user?.id ? "you" : (chat?.members.find((member) => member.id === id)?.username ?? "someone"))
 
-  /** Files go to the chat's folder; the message gets their paths so pi (and people) can find them. */
+  /** Files go to the chat folder's uploads; the message gets their paths so pi (and people) can find them. */
   const attach = async (files: File[]) => {
     if (!files.length || !chat) return
     setUploading(true)
     try {
-      const { files: done } = await api.upload(chat.folder, files)
+      const { files: done } = await api.upload(uploadDir(chat.folder), files)
       setText((t) => `${t}${t ? " " : ""}${done.map((f) => `\`${f.path}\``).join(" ")} `)
     } catch (error) {
       toast.error((error as Error).message)
@@ -306,6 +320,7 @@ export function ChatView({ chatId }: { chatId: string }) {
                       onEdit={() => startEdit(m, content)}
                       editBlocked={!own ? "Only the author can edit this message" : piWorking ? "Wait until Beezy has finished" : undefined}
                       onReact={(emoji) => void react(m, emoji)}
+                      onDelete={own ? () => void remove(m) : undefined}
                     />
                   )}
                 </div>

@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Bell, BellOff, Bot, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Sun, Users } from "lucide-react"
+import { Activity, ArrowLeft, Bell, BellOff, Bot, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Sun, Users, Vault } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { ChatList } from "@/components/chat-list"
@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
+import { VaultDialog } from "@/components/vault-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
 import { useAppViewport } from "@/hooks/use-app-viewport"
 import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
@@ -128,6 +129,7 @@ function Workspace() {
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [vaultOpen, setVaultOpen] = useState(false)
 
   const nav: Nav = useMemo(
     () => ({
@@ -209,6 +211,9 @@ function Workspace() {
               <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
                 <Users /> Profile picture
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setVaultOpen(true)}>
+                <Vault /> Secret vault
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
                 <KeyRound /> Change password
               </DropdownMenuItem>
@@ -266,6 +271,7 @@ function Workspace() {
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+        <VaultDialog open={vaultOpen} onOpenChange={setVaultOpen} />
       </div>
     </NavContext.Provider>
   )

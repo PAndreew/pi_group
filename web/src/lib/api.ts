@@ -90,6 +90,15 @@ export interface SessionState {
   dialogs: ExtensionDialog[]
   name?: string
   live: boolean
+  /** Prompts that will be deleted once the current run ends. */
+  pendingDeletes?: { timestamp?: number; text: string }[]
+}
+
+export interface VaultSecret {
+  key: string
+  description: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Interaction {
@@ -287,6 +296,7 @@ export const api = {
 
   fsInfo: () => request<{ root: string; rootName: string }>("GET", "/api/fs/info"),
   list: (path: string) => request<{ path: string; entries: FsEntry[] }>("GET", `/api/fs/list?${q({ path })}`),
+  saveText: (path: string, content: string, mtime?: number) => request<{ path: string; size: number; mtime: number }>("PUT", "/api/fs/text", { path, content, mtime }),
   stat: (path: string) => request<{ path: string; size: number; mtime: number; mime: string; type: string }>("GET", `/api/fs/stat?${q({ path })}`),
   mkdir: (path: string) => request("POST", "/api/fs/mkdir", { path }),
   upload: (dir: string, files: File[]) => {
@@ -296,6 +306,12 @@ export const api = {
   },
   rawUrl: (path: string) => tenantUrl(`/api/fs/raw?${q({ path })}`),
   downloadUrl: (path: string) => tenantUrl(`/api/fs/download?${q({ path })}`),
+
+  vaultStatus: () => request<{ configured: boolean; reachable: boolean }>("GET", "/api/vault/status"),
+  vaultSecrets: () => request<{ secrets: VaultSecret[] }>("GET", "/api/vault/secrets"),
+  vaultSecret: (key: string) => request<VaultSecret & { value: string }>("GET", `/api/vault/secrets/${enc(key)}`),
+  saveVaultSecret: (key: string, body: { value?: string; description: string }) => request<VaultSecret>("PUT", `/api/vault/secrets/${enc(key)}`, body),
+  deleteVaultSecret: (key: string) => request("DELETE", `/api/vault/secrets/${enc(key)}`),
 
   harnesses: () => request<{ harnesses: Harness[] }>("GET", "/api/harnesses"),
   models: (harness: string) => request<{ models: ModelInfo[] }>("GET", `/api/harnesses/${enc(harness)}/models`),
@@ -312,6 +328,7 @@ export const api = {
   chatSince: (id: string, after: number, check: number[]) =>
     request<{ messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}/messages?${q({ after: String(after), check: check.join(",") })}`),
   sendChat: (id: string, text: string, config?: { model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages`, { text, ...config }),
+  deleteChatMessage: (id: string, messageId: number) => request<{ ok: true; queued: boolean }>("DELETE", `/api/chats/${enc(id)}/messages/${messageId}`),
   editChat: (id: string, messageId: number, text: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages/${messageId}/edit`, { text }),
   reactChat: (id: string, messageId: number, emoji: string) => request<{ message: ChatMessage }>("POST", `/api/chats/${enc(id)}/messages/${messageId}/reactions`, { emoji }),
   readChat: (id: string, upTo: number) => request("POST", `/api/chats/${enc(id)}/read`, { upTo }),
@@ -343,6 +360,7 @@ export const api = {
   prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
   /** Edit a message of a session whose agent is not running; `expect` is its current text. */
+  deleteMessage: (key: string, target: { index: number; timestamp?: number; expect: string }) => request<{ queued: boolean }>("POST", `/api/sessions/${enc(key)}/messages/delete`, target),
   editMessage: (key: string, edit: { index: number; timestamp?: number; expect: string; text: string }) => request("POST", `/api/sessions/${enc(key)}/messages/edit`, edit),
   abort: (key: string) => request("POST", `/api/sessions/${enc(key)}/abort`),
   setModel: (key: string, provider: string, id: string) => request("POST", `/api/sessions/${enc(key)}/model`, { provider, id }),

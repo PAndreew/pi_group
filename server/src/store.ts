@@ -57,6 +57,22 @@ export interface SessionMeta {
 	consolidatedAt?: string;
 	/** The master session that keeps the consolidated memory. */
 	memory?: boolean;
+	/** Messages to remove once the agent stops running; see sessions.ts. */
+	pendingDeletes?: PendingDelete[];
+}
+
+/**
+ * A deletion waiting for the run to end. A prompt is found by index/timestamp and its text; a chat
+ * message by the `needle` ("author: text") inside pi's transcript prompts, at its `nth` occurrence.
+ */
+export interface PendingDelete {
+	id: string;
+	userId: string;
+	index?: number;
+	timestamp?: number;
+	expect?: string;
+	needle?: string;
+	nth?: number;
 }
 
 /** A browser push subscription (one per device), delivering run notifications while the app is closed. */

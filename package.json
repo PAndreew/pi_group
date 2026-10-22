@@ -9,9 +9,11 @@
     "setup": "npm ci --prefix server && npm ci --prefix web",
     "build": "npm run build --prefix web && npm run build --prefix server",
     "start": "npm start --prefix server",
+    "start:vault": "npm start --prefix vault",
     "dev:server": "npm run dev --prefix server",
     "dev:web": "npm run dev --prefix web",
-    "user": "npm run user --prefix server --"
+    "user": "npm run user --prefix server --",
+    "test:vault": "npm test --prefix vault"
   },
   "engines": {
     "node": ">=22.19.0"

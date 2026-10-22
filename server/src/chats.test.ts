@@ -56,6 +56,9 @@ function fakeHarness() {
 		editMessage: async (id: string, _cwd: string, index: number, content: unknown) => {
 			sessions.get(id).state.messages[index] = { ...sessions.get(id).state.messages[index], content };
 		},
+		deleteMessage: async (id: string, _cwd: string, index: number) => {
+			sessions.get(id).state.messages.splice(index, 1);
+		},
 	} as unknown as HarnessAdapter;
 	return { adapter, prompts };
 }
@@ -184,6 +187,16 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal((await call("bob", "POST", `/chats/${chatId}/messages/${answer.id}/reactions`, { emoji: "👍" })).status, 400);
 		assert.notEqual((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "lol" })).status, 200, "only emoji are reactions");
 		assert.deepEqual((await call("bob", "GET", `/chats/${chatId}`)).body.messages[0].reactions, { "❤️": [anna.id] });
+
+		// Deleting: only your own words; they leave the chat and pi's transcript.
+		const note = queued.find((m: any) => m.message.content[0]?.text?.includes("ordinary note while working"));
+		assert.equal((await call("bob", "DELETE", `/chats/${chatId}/messages/${note.id}`)).status, 403);
+		await until(async () => !(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "pi to finish before deleting");
+		assert.equal((await call("anna", "DELETE", `/chats/${chatId}/messages/${note.id}`)).body.queued, false);
+		assert.ok(!(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.id === note.id));
+		const transcriptAfter = (adapter.live(meta.id)?.state.messages ?? (await adapter.readSession(meta.id, meta.cwd))!.messages) as any[];
+		assert.ok(!transcriptAfter.some((m) => m.role === "user" && JSON.stringify(m.content).includes("ordinary note while working")));
+		assert.ok(transcriptAfter.some((m) => m.role === "user" && JSON.stringify(m.content).includes("queued request one")));
 
 		// Only @pi: a plain session, in the chosen folder.
 		const solo = await call("anna", "POST", "/chats", { text: "summarise the API", pi: true, folder: "projects/api-server" });

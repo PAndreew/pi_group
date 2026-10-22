@@ -127,11 +127,15 @@ export function buildRuns(messages: AgentMessage[], live: Live): Run[] {
         break
       case "toolResult": {
         const step = byCall.get(m.toolCallId)
+        // Vault values stay off screen; the agent's own history still holds them.
+        const result = (step?.toolCall?.name ?? m.toolName) === "vault_get_secret" && !m.isError
+          ? { ...m, content: [{ type: "text", text: `•••••••• (value of ${step?.toolCall?.arguments?.key ?? "a vault secret"} hidden)` }] }
+          : m
         if (step) {
-          step.result = m
+          step.result = result
           step.status = m.isError ? "error" : "done"
         } else {
-          add({ kind: toolKind(m.toolName ?? ""), title: m.toolName ?? "tool", status: m.isError ? "error" : "done", result: m, timestamp: m.timestamp })
+          add({ kind: toolKind(m.toolName ?? ""), title: m.toolName ?? "tool", status: m.isError ? "error" : "done", result, timestamp: m.timestamp })
         }
         break
       }
