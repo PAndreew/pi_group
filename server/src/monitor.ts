@@ -121,6 +121,29 @@ async function dirBytes(dir: string, depth = 2): Promise<{ bytes: number; files:
 	return { bytes, files };
 }
 
+/** Busy and total CPU time of all cores; os.loadavg() is always zero on Windows, these work everywhere. */
+function cpuTimes() {
+	let busy = 0;
+	let total = 0;
+	for (const { times } of os.cpus()) {
+		const sum = times.user + times.nice + times.sys + times.irq + times.idle;
+		total += sum;
+		busy += sum - times.idle;
+	}
+	return { busy, total };
+}
+
+let lastSystemCpu = cpuTimes();
+
+/** Share of all cores busy since the previous refresh (since startup on the first). */
+function systemCpuPercent() {
+	const now = cpuTimes();
+	const total = now.total - lastSystemCpu.total;
+	const busy = now.busy - lastSystemCpu.busy;
+	lastSystemCpu = now;
+	return total > 0 ? (100 * busy) / total : undefined;
+}
+
 const loopDelay = monitorEventLoopDelay({ resolution: 20 });
 loopDelay.enable();
 
@@ -187,6 +210,7 @@ export function monitorRoutes(adapters: HarnessAdapter[]): Router {
 				platform: `${os.type()} ${os.release()} (${os.arch()})`,
 				uptimeSec: os.uptime(),
 				cpus: os.cpus().length,
+				cpuPercent: systemCpuPercent(),
 				loadAvg: process.platform === "win32" ? undefined : os.loadavg(),
 				memTotal: os.totalmem(),
 				memAvailable: availableMemory(),

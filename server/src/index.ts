@@ -16,6 +16,7 @@ import { sessionRoutes } from "./sessions.js";
 import { attachTerminal } from "./terminal.js";
 import { loadStore, saveNow } from "./store.js";
 import { tenantRoutes } from "./tenants.js";
+import { usageRoutes } from "./usage.js";
 import { vaultRoutes } from "./vault.js";
 
 loadStore();
@@ -42,6 +43,7 @@ api.use(fileRoutes());
 api.use(pushRoutes());
 api.use(vaultRoutes());
 api.use(monitorRoutes(adapters));
+api.use(usageRoutes(adapters));
 api.use(sessionRoutes(adapters));
 api.use((_req, res) => void res.status(404).json({ error: "Not found" }));
 app.use("/api", api);

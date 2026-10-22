@@ -152,6 +152,28 @@ export interface MonitorSession {
   cost?: number
 }
 
+/** Token totals of a group of model calls; `input` is the uncached part, cache hits are `cacheRead`. */
+export interface UsageTotals {
+  calls: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  cost: number
+}
+
+export interface UsageReport {
+  since: string
+  until: string
+  totals: UsageTotals
+  days: (UsageTotals & { date: string })[]
+  models: (UsageTotals & { provider?: string; model?: string })[]
+  sessions: (UsageTotals & { key: string; name: string; path: string; lastAt: number })[]
+  /** Harnesses whose sessions keep no per-call usage. */
+  untracked: string[]
+}
+
 export interface MonitorReport {
   at: string
   system: {
@@ -159,6 +181,8 @@ export interface MonitorReport {
     platform: string
     uptimeSec: number
     cpus: number
+    /** Share of all cores busy since the previous refresh. */
+    cpuPercent?: number
     loadAvg?: number[]
     memTotal: number
     memAvailable: number
@@ -319,6 +343,7 @@ export const api = {
   sessions: (path: string) => request<{ path: string; sessions: SessionSummary[] }>("GET", `/api/sessions?${q({ path })}`),
   sessionCounts: (path: string) => request<{ counts: Record<string, { total: number; running: number }> }>("GET", `/api/sessions/counts?${q({ path })}`),
   monitor: () => request<MonitorReport>("GET", "/api/monitor"),
+  usage: (days: number, scope: "visible" | "mine") => request<UsageReport>("GET", `/api/usage?${q({ days: String(days), scope, tzOffset: String(new Date().getTimezoneOffset()) })}`),
   chats: () => request<{ chats: ChatListItem[] }>("GET", "/api/chats"),
   /** Admins: fold every conversation not yet in memory into it now. */
   consolidateMemory: () => request<{ started: boolean; pending?: number; reason?: string }>("POST", "/api/memory/consolidate", { all: true }),

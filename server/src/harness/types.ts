@@ -125,6 +125,21 @@ export interface SessionUsage {
 	cost?: number;
 }
 
+/** One model call's token use, as the harness recorded it. */
+export interface UsageRecord {
+	timestamp: number;
+	provider?: string;
+	model?: string;
+	/** Input tokens not served from the prompt cache. */
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	/** Reasoning tokens, a subset of `output`, when the provider reports them. */
+	reasoning?: number;
+	cost: number;
+}
+
 export interface CreateOptions {
 	model?: { provider: string; id: string };
 	thinkingLevel?: string;
@@ -158,6 +173,8 @@ export interface HarnessAdapter {
 	inventory(id: string, cwd: string): Promise<SessionInventory>;
 	/** Resource use of a live session. */
 	usage(id: string, cwd: string): Promise<SessionUsage>;
+	/** Every model call of a session (all branches), for usage tracking; absent when the harness keeps no per-call usage. */
+	usageRecords?(id: string, cwd: string): Promise<UsageRecord[]>;
 	shutdown(): Promise<void>;
 }
 

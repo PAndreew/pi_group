@@ -2,6 +2,8 @@ import { Loader2, TriangleAlert } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UsagePanel } from "@/components/usage-panel"
 import { api, type MonitorReport, type MonitorSession } from "@/lib/api"
 import { cn, formatBytes, timeAgo } from "@/lib/utils"
 
@@ -79,13 +81,17 @@ function SessionName({ s, onOpen }: { s: MonitorSession; onOpen: (s: MonitorSess
   )
 }
 
-/** Live sessions, their memory/CPU/storage/tokens, and the health of the machine; refreshes while open. */
-export function ResourceMonitorDialog({ open, onOpenChange, onOpenSession }: { open: boolean; onOpenChange: (open: boolean) => void; onOpenSession: (s: MonitorSession) => void }) {
+/**
+ * Machine health (CPU, memory left, disk) and live sessions, refreshed while open, plus a tab with
+ * token usage over time.
+ */
+export function ResourceMonitorDialog({ open, onOpenChange, onOpenSession }: { open: boolean; onOpenChange: (open: boolean) => void; onOpenSession: (s: { key: string; path: string }) => void }) {
   const [report, setReport] = useState<MonitorReport>()
   const [error, setError] = useState<string>()
+  const [tab, setTab] = useState("resources")
 
   useEffect(() => {
-    if (!open) return
+    if (!open || tab !== "resources") return
     let alive = true
     const load = () =>
       api.monitor().then(
@@ -98,14 +104,14 @@ export function ResourceMonitorDialog({ open, onOpenChange, onOpenSession }: { o
       alive = false
       clearInterval(timer)
     }
-  }, [open])
+  }, [open, tab])
 
   const sessions = report?.sessions ?? []
   const running = sessions.filter((s) => s.running).length
   const sessionMemory = sessions.reduce((sum, s) => sum + (s.rssBytes ?? 0), 0)
   const processes = sessions.reduce((sum, s) => sum + (s.processes ?? 0), 0)
   const sys = report?.system
-  const openSession = (s: MonitorSession) => {
+  const openSession = (s: { key: string; path: string }) => {
     onOpenChange(false)
     onOpenSession(s)
   }
@@ -115,120 +121,133 @@ export function ResourceMonitorDialog({ open, onOpenChange, onOpenSession }: { o
       <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Resource monitor</DialogTitle>
-          <DialogDescription>{sys ? `${sys.hostname} · ${sys.platform} · up ${duration(sys.uptimeSec)}` : "Live sessions and machine health, refreshed every few seconds."}</DialogDescription>
+          <DialogDescription>{sys ? `${sys.hostname} · ${sys.platform} · up ${duration(sys.uptimeSec)}` : "Machine health, live sessions and token usage."}</DialogDescription>
         </DialogHeader>
-        <div className="-mx-2 grid min-h-0 gap-4 overflow-y-auto px-2 pb-1">
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {!report && !error && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
-          {report && sys && (
-            <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Tile label="Live sessions" value={String(sessions.length)} detail={`${running} running`} />
-                <Tile label="Session memory" value={sys.processInfo ? formatBytes(sessionMemory) : "n/a"} detail={sys.processInfo ? `${processes} processes` : "Not measurable on this OS"} />
-                <Tile label="Server memory" value={formatBytes(report.server.rssBytes)} detail={`heap ${formatBytes(report.server.heapUsedBytes)} · CPU ${percent(report.server.cpuPercent)}`} />
-                <Tile
-                  label="CPU load"
-                  value={sys.loadAvg ? sys.loadAvg[0].toFixed(2) : "n/a"}
-                  detail={sys.loadAvg ? `${sys.cpus} cores · 5m ${sys.loadAvg[1].toFixed(2)} · 15m ${sys.loadAvg[2].toFixed(2)}` : `${sys.cpus} cores`}
-                />
-              </div>
-
-              <div className="grid gap-3 rounded-lg border p-3">
-                <Meter label="System memory" used={sys.memTotal - sys.memAvailable} total={sys.memTotal} />
-                {sys.disk && <Meter label="Disk (data dir)" used={sys.disk.total - sys.disk.free} total={sys.disk.total} />}
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                  <span>
-                    pi session files: <span className="text-foreground">{formatBytes(report.storage.piSessions.bytes)}</span> in {report.storage.piSessions.files}
-                  </span>
-                  <span>
-                    pi durable storage: <span className="text-foreground">{formatBytes(report.storage.durable.bytes)}</span>
-                  </span>
-                  <span>
-                    event-loop lag (p99): <span className={cn("text-foreground", report.server.eventLoopLagMs > 100 && "font-medium")}>{report.server.eventLoopLagMs.toFixed(0)} ms</span>
-                  </span>
-                  <span>server up {duration(report.server.uptimeSec)} · node {report.server.node}</span>
+        <Tabs value={tab} onValueChange={setTab} className="min-h-0">
+          <TabsList>
+            <TabsTrigger value="resources">Resources</TabsTrigger>
+            <TabsTrigger value="usage">Token usage</TabsTrigger>
+          </TabsList>
+          <TabsContent value="usage" className="-mx-2 min-h-0 overflow-y-auto px-2 pb-1">
+            <UsagePanel onOpenSession={(key, path) => openSession({ key, path })} />
+          </TabsContent>
+          <TabsContent value="resources" className="-mx-2 grid min-h-0 gap-4 overflow-y-auto px-2 pb-1">
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {!report && !error && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
+            {report && sys && (
+              <>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Tile
+                    label="CPU"
+                    value={sys.cpuPercent === undefined ? "n/a" : percent(sys.cpuPercent)}
+                    detail={sys.loadAvg ? `${sys.cpus} cores · load ${sys.loadAvg.map((l) => l.toFixed(2)).join(" / ")}` : `${sys.cpus} cores`}
+                  />
+                  <Tile label="Memory left" value={formatBytes(sys.memAvailable)} detail={`${percent((100 * sys.memAvailable) / sys.memTotal)} of ${formatBytes(sys.memTotal)} free`} />
+                  <Tile
+                    label="Live sessions"
+                    value={String(sessions.length)}
+                    detail={`${running} running${sys.processInfo ? ` · ${formatBytes(sessionMemory)} in ${processes} processes` : ""}`}
+                  />
+                  <Tile label="Server" value={formatBytes(report.server.rssBytes)} detail={`heap ${formatBytes(report.server.heapUsedBytes)} · CPU ${percent(report.server.cpuPercent)}`} />
                 </div>
-              </div>
 
-              {sessions.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">No live sessions. Idle sessions without viewers are stopped automatically.</p>
-              ) : (
-                <>
-                  {/* Wide screens: one aligned table. */}
-                  <table className="hidden w-full text-sm sm:table">
-                    <thead>
-                      <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="py-1.5 font-normal">Session</th>
-                        <th className="py-1.5 text-right font-normal">Memory</th>
-                        <th className="py-1.5 text-right font-normal">CPU</th>
-                        <th className="py-1.5 text-right font-normal">Storage</th>
-                        <th className="py-1.5 text-right font-normal">Tokens · cost</th>
-                        <th className="py-1.5 text-right font-normal">Active</th>
-                      </tr>
-                    </thead>
-                    <tbody className="tabular-nums">
-                      {sessions.map((s) => (
-                        <tr key={s.key} className="border-b last:border-0">
-                          <td className="max-w-56 py-2 pr-2">
-                            <SessionName s={s} onOpen={openSession} />
-                            <div className="flex items-center gap-1 pl-3.5 text-[11px] text-muted-foreground">
-                              <Badge variant="outline" className="px-1 py-0 text-[10px] font-normal">
-                                {s.harness}
-                              </Badge>
-                              <span className="truncate">/{s.path}</span>
-                              <span>· {s.messages} msgs</span>
-                            </div>
-                          </td>
-                          <td className="py-2 text-right" title={s.processes ? `${s.processes} processes (pid ${s.pid})` : undefined}>
-                            {memoryOf(s)}
-                          </td>
-                          <td className="py-2 text-right">{s.cpuPercent === undefined ? dash : percent(s.cpuPercent)}</td>
-                          <td className="py-2 text-right" title={s.sharedStorage ? "Shared by all pi durable sessions of this folder" : undefined}>
-                            {s.storageBytes === undefined ? dash : formatBytes(s.storageBytes)}
-                            {s.sharedStorage && <span className="text-muted-foreground">*</span>}
-                          </td>
-                          <td className="py-2 text-right">{tokensOf(s)}</td>
-                          <td className="py-2 text-right text-xs text-muted-foreground">
-                            {timeAgo(s.lastActivity)}
-                            {s.viewers > 0 && <div>{s.viewers} viewing</div>}
-                          </td>
+                <div className="grid gap-3 rounded-lg border p-3">
+                  <Meter label="System memory" used={sys.memTotal - sys.memAvailable} total={sys.memTotal} />
+                  {sys.disk && <Meter label="Disk (data dir)" used={sys.disk.total - sys.disk.free} total={sys.disk.total} />}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>
+                      pi session files: <span className="text-foreground">{formatBytes(report.storage.piSessions.bytes)}</span> in {report.storage.piSessions.files}
+                    </span>
+                    <span>
+                      pi durable storage: <span className="text-foreground">{formatBytes(report.storage.durable.bytes)}</span>
+                    </span>
+                    <span>
+                      event-loop lag (p99): <span className={cn("text-foreground", report.server.eventLoopLagMs > 100 && "font-medium")}>{report.server.eventLoopLagMs.toFixed(0)} ms</span>
+                    </span>
+                    <span>server up {duration(report.server.uptimeSec)} · node {report.server.node}</span>
+                  </div>
+                </div>
+
+                {sessions.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">No live sessions. Idle sessions without viewers are stopped automatically.</p>
+                ) : (
+                  <>
+                    {/* Wide screens: one aligned table. */}
+                    <table className="hidden w-full text-sm sm:table">
+                      <thead>
+                        <tr className="border-b text-left text-xs text-muted-foreground">
+                          <th className="py-1.5 font-normal">Session</th>
+                          <th className="py-1.5 text-right font-normal">Memory</th>
+                          <th className="py-1.5 text-right font-normal">CPU</th>
+                          <th className="py-1.5 text-right font-normal">Storage</th>
+                          <th className="py-1.5 text-right font-normal">Tokens · cost</th>
+                          <th className="py-1.5 text-right font-normal">Active</th>
                         </tr>
+                      </thead>
+                      <tbody className="tabular-nums">
+                        {sessions.map((s) => (
+                          <tr key={s.key} className="border-b last:border-0">
+                            <td className="max-w-56 py-2 pr-2">
+                              <SessionName s={s} onOpen={openSession} />
+                              <div className="flex items-center gap-1 pl-3.5 text-[11px] text-muted-foreground">
+                                <Badge variant="outline" className="px-1 py-0 text-[10px] font-normal">
+                                  {s.harness}
+                                </Badge>
+                                <span className="truncate">/{s.path}</span>
+                                <span>· {s.messages} msgs</span>
+                              </div>
+                            </td>
+                            <td className="py-2 text-right" title={s.processes ? `${s.processes} processes (pid ${s.pid})` : undefined}>
+                              {memoryOf(s)}
+                            </td>
+                            <td className="py-2 text-right">{s.cpuPercent === undefined ? dash : percent(s.cpuPercent)}</td>
+                            <td className="py-2 text-right" title={s.sharedStorage ? "Shared by all pi durable sessions of this folder" : undefined}>
+                              {s.storageBytes === undefined ? dash : formatBytes(s.storageBytes)}
+                              {s.sharedStorage && <span className="text-muted-foreground">*</span>}
+                            </td>
+                            <td className="py-2 text-right">{tokensOf(s)}</td>
+                            <td className="py-2 text-right text-xs text-muted-foreground">
+                              {timeAgo(s.lastActivity)}
+                              {s.viewers > 0 && <div>{s.viewers} viewing</div>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {/* Phones: one card per session. */}
+                    <ul className="grid gap-2 sm:hidden">
+                      {sessions.map((s) => (
+                        <li key={s.key} className="grid gap-1.5 rounded-lg border p-3 text-sm">
+                          <SessionName s={s} onOpen={openSession} />
+                          <div className="text-[11px] text-muted-foreground">
+                            {s.harness} · /{s.path} · {s.messages} msgs · {timeAgo(s.lastActivity)}
+                            {s.viewers > 0 && ` · ${s.viewers} viewing`}
+                          </div>
+                          <dl className="grid grid-cols-4 gap-1 text-xs">
+                            {(
+                              [
+                                ["Memory", memoryOf(s)],
+                                ["CPU", s.cpuPercent === undefined ? dash : percent(s.cpuPercent)],
+                                ["Storage", s.storageBytes === undefined ? dash : formatBytes(s.storageBytes)],
+                                ["Tokens", tokensOf(s)],
+                              ] as const
+                            ).map(([label, value]) => (
+                              <div key={label} className="grid">
+                                <dt className="text-[10px] text-muted-foreground">{label}</dt>
+                                <dd className="truncate">{value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </li>
                       ))}
-                    </tbody>
-                  </table>
-                  {/* Phones: one card per session. */}
-                  <ul className="grid gap-2 sm:hidden">
-                    {sessions.map((s) => (
-                      <li key={s.key} className="grid gap-1.5 rounded-lg border p-3 text-sm">
-                        <SessionName s={s} onOpen={openSession} />
-                        <div className="text-[11px] text-muted-foreground">
-                          {s.harness} · /{s.path} · {s.messages} msgs · {timeAgo(s.lastActivity)}
-                          {s.viewers > 0 && ` · ${s.viewers} viewing`}
-                        </div>
-                        <dl className="grid grid-cols-4 gap-1 text-xs">
-                          {(
-                            [
-                              ["Memory", memoryOf(s)],
-                              ["CPU", s.cpuPercent === undefined ? dash : percent(s.cpuPercent)],
-                              ["Storage", s.storageBytes === undefined ? dash : formatBytes(s.storageBytes)],
-                              ["Tokens", tokensOf(s)],
-                            ] as const
-                          ).map(([label, value]) => (
-                            <div key={label} className="grid">
-                              <dt className="text-[10px] text-muted-foreground">{label}</dt>
-                              <dd className="truncate">{value}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </li>
-                    ))}
-                  </ul>
-                  {sessions.some((s) => s.sharedStorage) && <p className="text-[11px] text-muted-foreground">* pi durable keeps one database per folder, shared by its sessions; they also run inside the server process.</p>}
-                </>
-              )}
-            </>
-          )}
-        </div>
+                    </ul>
+                    {sessions.some((s) => s.sharedStorage) && <p className="text-[11px] text-muted-foreground">* pi durable keeps one database per folder, shared by its sessions; they also run inside the server process.</p>}
+                  </>
+                )}
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )

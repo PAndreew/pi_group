@@ -9,7 +9,7 @@ import { StringDecoder } from "node:string_decoder";
 import { config } from "../config.js";
 import { expireInteractions, interactionEnvironment } from "../interactions.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
-import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage, ToolInfo } from "./types.js";
+import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage, ToolInfo, UsageRecord } from "./types.js";
 
 type RpcRecord = Record<string, any>;
 type Any = any;
@@ -456,6 +456,7 @@ export class PiRpcAdapter implements HarnessAdapter {
 	private sessions = new Map<string, PiLiveSession>();
 	private starting = new Map<string, Promise<PiLiveSession>>();
 	private files = new Map<string, ParsedFile>();
+	private usageCache = new Map<string, { mtime: number; size: number; records: UsageRecord[] }>();
 	private modelCache?: { at: number; models: ModelInfo[] };
 	private version?: string;
 
@@ -695,6 +696,35 @@ export class PiRpcAdapter implements HarnessAdapter {
 		const tokens = stats?.tokens && typeof stats.tokens === "object" ? stats.tokens : undefined;
 		const cost = typeof stats?.cost === "number" ? stats.cost : typeof stats?.cost?.total === "number" ? stats.cost.total : undefined;
 		return { pid: live?.rpc.pid, storageBytes, tokens, cost };
+	}
+
+	/** Usage of every assistant message in the session file, abandoned branches included: those calls were paid for too. */
+	async usageRecords(id: string, cwd: string): Promise<UsageRecord[]> {
+		const file = await this.fileOf(id, cwd);
+		if (!file) return [];
+		const stat = await fs.stat(file);
+		const cached = this.usageCache.get(file);
+		if (cached && cached.mtime === stat.mtimeMs && cached.size === stat.size) return cached.records;
+		const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+		const records: UsageRecord[] = [];
+		for (const r of await readJsonl(file)) {
+			const m = r.type === "message" ? r.message : undefined;
+			if (m?.role !== "assistant" || !m.usage) continue;
+			const u = m.usage;
+			records.push({
+				timestamp: num(m.timestamp) || Date.parse(r.timestamp) || stat.mtimeMs,
+				provider: m.provider,
+				model: m.responseModel ?? m.model,
+				input: num(u.input),
+				output: num(u.output),
+				cacheRead: num(u.cacheRead),
+				cacheWrite: num(u.cacheWrite),
+				reasoning: typeof u.reasoning === "number" ? u.reasoning : undefined,
+				cost: num(u.cost?.total),
+			});
+		}
+		this.usageCache.set(file, { mtime: stat.mtimeMs, size: stat.size, records });
+		return records;
 	}
 
 	async shutdown() {
