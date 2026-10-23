@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Router } from "express";
@@ -6,35 +6,12 @@ import multer from "multer";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { config } from "./config.js";
+import { platform } from "./ports/index.js";
 
-/** Relative, slash-separated path under FS_ROOT for display and APIs. */
-export const toRel = (abs: string) => path.relative(config.fsRoot, abs).split(path.sep).join("/");
+import { HttpError, resolveSafe, toRel } from "./paths.js";
 
-/**
- * Resolve a client path against FS_ROOT and refuse anything that escapes it,
- * including escapes through symlinks of existing path prefixes.
- */
-export function resolveSafe(rel: unknown): string {
-	const input = typeof rel === "string" ? rel : "";
-	const abs = path.resolve(config.fsRoot, input.replace(/^[/\\]+/, ""));
-	const inside = (p: string) => p === config.fsRoot || p.startsWith(config.fsRoot + path.sep);
-	if (!inside(abs)) throw new HttpError(403, "Path is outside the shared root");
-	let probe = abs;
-	while (!existsSync(probe) && probe !== config.fsRoot) probe = path.dirname(probe);
-	const real = realpathSync(probe);
-	const realRoot = realpathSync(config.fsRoot);
-	if (real !== realRoot && !real.startsWith(realRoot + path.sep)) throw new HttpError(403, "Path is outside the shared root");
-	return abs;
-}
-
-export class HttpError extends Error {
-	constructor(
-		readonly status: number,
-		message: string,
-	) {
-		super(message);
-	}
-}
+// Other modules import these from here.
+export { HttpError, resolveSafe, toRel };
 
 const MIME: Record<string, string> = {
 	".html": "text/html",
@@ -77,6 +54,15 @@ const MAX_EDIT_BYTES = 3 * 1024 * 1024;
 
 const sanitize = (name: string) => path.basename(name).replace(/[\u0000-\u001f<>:"|?*]/g, "_").slice(0, 200) || "upload";
 
+const queryPath = (value: unknown) => (typeof value === "string" ? value : "");
+
+/** Streaming and uploads work on local files; storage without them (object storage) needs its own routes. */
+function localFile(value: unknown) {
+	const storage = platform().storage;
+	if (!storage.localPath) throw new HttpError(501, "This storage cannot serve files directly");
+	return storage.localPath(queryPath(value));
+}
+
 export function fileRoutes(): Router {
 	const router = express.Router();
 	router.use("/fs", requireAuth);
@@ -86,39 +72,17 @@ export function fileRoutes(): Router {
 	});
 
 	router.get("/fs/list", async (req, res) => {
-		const dir = resolveSafe(req.query.path);
-		const dirents = await fs.readdir(dir, { withFileTypes: true });
-		const entries = await Promise.all(
-			dirents.map(async (d) => {
-				const full = path.join(dir, d.name);
-				try {
-					const stat = await fs.stat(full);
-					return {
-						name: d.name,
-						path: toRel(full),
-						type: stat.isDirectory() ? ("dir" as const) : ("file" as const),
-						symlink: d.isSymbolicLink(),
-						size: stat.size,
-						mtime: stat.mtimeMs,
-					};
-				} catch {
-					return { name: d.name, path: toRel(full), type: "file" as const, symlink: d.isSymbolicLink(), size: 0, mtime: 0, broken: true };
-				}
-			}),
-		);
-		entries.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true }) : a.type === "dir" ? -1 : 1));
-		res.json({ path: toRel(dir), entries });
+		res.json(await platform().storage.list(queryPath(req.query.path)));
 	});
 
 	router.get("/fs/stat", async (req, res) => {
-		const file = resolveSafe(req.query.path);
-		const stat = await fs.stat(file);
-		res.json({ path: toRel(file), size: stat.size, mtime: stat.mtimeMs, type: stat.isDirectory() ? "dir" : "file", mime: mimeFor(file) });
+		const stat = await platform().storage.stat(queryPath(req.query.path));
+		res.json({ ...stat, mime: mimeFor(stat.path) });
 	});
 
 	/** Inline content for the in-app viewers. Served sandboxed so user HTML/SVG can never run with the app's origin. */
 	router.get("/fs/raw", async (req, res) => {
-		const file = resolveSafe(req.query.path);
+		const file = localFile(req.query.path);
 		const stat = await fs.stat(file);
 		if (!stat.isFile()) throw new HttpError(400, "Not a file");
 		const mime = mimeFor(file);
@@ -132,7 +96,7 @@ export function fileRoutes(): Router {
 	});
 
 	router.get("/fs/download", async (req, res) => {
-		const file = resolveSafe(req.query.path);
+		const file = localFile(req.query.path);
 		const stat = await fs.stat(file);
 		if (!stat.isFile()) throw new HttpError(400, "Not a file");
 		res.download(file, path.basename(file), { dotfiles: "allow" });
@@ -141,28 +105,12 @@ export function fileRoutes(): Router {
 	/** Save a text file from the in-app editor; `mtime` from the load refuses to overwrite someone else's newer save. */
 	router.put("/fs/text", async (req, res) => {
 		const body = z.object({ path: z.string().min(1), content: z.string().max(MAX_EDIT_BYTES), mtime: z.number().optional() }).parse(req.body);
-		const requested = resolveSafe(body.path);
-		const stat = await fs.stat(requested).catch(() => undefined);
-		// Write through symlinks instead of replacing them; resolveSafe already checked their target.
-		const file = stat ? realpathSync(requested) : requested;
-		if (stat && !stat.isFile()) throw new HttpError(400, "Not a file");
-		if (stat && body.mtime !== undefined && Math.abs(stat.mtimeMs - body.mtime) > 1) throw new HttpError(409, "The file changed on disk since you opened it; reload to see the new version");
-		// Same directory, then rename: readers (and the agent) never see a half-written file.
-		const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
-		await fs.writeFile(temp, body.content, { mode: stat?.mode });
-		await fs.rename(temp, file).catch(async (error) => {
-			await fs.rm(temp, { force: true });
-			throw error;
-		});
-		const saved = await fs.stat(file);
-		res.json({ path: toRel(requested), size: saved.size, mtime: saved.mtimeMs });
+		res.json(await platform().storage.writeText(body.path, body.content, body.mtime));
 	});
 
 	router.post("/fs/mkdir", async (req, res) => {
 		const body = z.object({ path: z.string().min(1) }).parse(req.body);
-		const dir = resolveSafe(body.path);
-		await fs.mkdir(dir, { recursive: true });
-		res.json({ path: toRel(dir) });
+		res.json({ path: await platform().storage.mkdir(body.path) });
 	});
 
 	const upload = multer({
@@ -170,14 +118,14 @@ export function fileRoutes(): Router {
 		storage: multer.diskStorage({
 			destination: (req, _file, cb) => {
 				try {
-					const dir = resolveSafe(req.query.path);
+					const dir = localFile(req.query.path);
 					fs.mkdir(dir, { recursive: true }).then(() => cb(null, dir), (error) => cb(error, dir));
 				} catch (error) {
 					cb(error as Error, "");
 				}
 			},
 			filename: (req, file, cb) => {
-				const dir = resolveSafe(req.query.path);
+				const dir = localFile(req.query.path);
 				// Browsers send multipart filenames as latin1; recover UTF-8 names.
 				const name = sanitize(Buffer.from(file.originalname, "latin1").toString("utf8"));
 				uniqueName(dir, name).then((n) => cb(null, n), (error) => cb(error, name));

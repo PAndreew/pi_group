@@ -1,5 +1,4 @@
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -7,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { config } from "../config.js";
+import { platform, type SandboxProcess } from "../ports/index.js";
 import { expireInteractions, interactionEnvironment } from "../interactions.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
 import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage, ToolInfo, UsageRecord } from "./types.js";
@@ -23,19 +23,20 @@ function piCommand(args: string[]) {
 export function runPi(args: string[], cwd: string, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
 	return new Promise((resolve) => {
 		const { command, argv, shell } = piCommand(args);
-		const child = spawn(command, argv, { cwd, env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" }, stdio: ["ignore", "pipe", "pipe"], shell });
+		const child = platform().sandbox.spawn(command, argv, { cwd, env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" }, shell });
+		child.end();
 		let stdout = "";
 		let stderr = "";
-		child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
-		child.stderr.on("data", (chunk: Buffer) => (stderr = (stderr + chunk.toString("utf8")).slice(-4000)));
+		child.onStdout((chunk) => (stdout += chunk.toString("utf8")));
+		child.onStderr((chunk) => (stderr = (stderr + chunk.toString("utf8")).slice(-4000)));
 		const timer = setTimeout(() => {
 			stderr += `
 pi ${args.join(" ")} timed out`;
 			child.kill();
 		}, timeoutMs);
-		child.on("error", (error) => (stderr += `
+		child.onError((error) => (stderr += `
 ${error.message}`));
-		child.on("close", (code) => {
+		child.onClose((code) => {
 			clearTimeout(timer);
 			resolve({ code, stdout, stderr });
 		});
@@ -63,7 +64,7 @@ function declaredTools(records: RpcRecord[]): ToolInfo[] | undefined {
  * (Node's readline would also split on U+2028/U+2029, which are valid inside JSON strings).
  */
 class RpcProcess {
-	private child: ChildProcessWithoutNullStreams;
+	private child: SandboxProcess;
 	private pending = new Map<string, { resolve: (data: any) => void; reject: (error: Error) => void }>();
 	private buffer = "";
 	private decoder = new StringDecoder("utf8");
@@ -80,27 +81,25 @@ class RpcProcess {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
 		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("vault.mjs")];
 		const { command, argv, shell } = piCommand(args);
-		this.child = spawn(command, argv, {
+		this.child = platform().sandbox.spawn(command, argv, {
 			cwd,
 			env: { ...process.env, PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) },
-			stdio: ["pipe", "pipe", "pipe"],
 			shell,
 		});
-		this.child.stdout.on("data", (chunk: Buffer) => this.read(this.decoder.write(chunk)));
-		this.child.stderr.on("data", (chunk: Buffer) => {
+		this.child.onStdout((chunk) => this.read(this.decoder.write(chunk)));
+		this.child.onStderr((chunk) => {
 			this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-4000);
 		});
-		this.child.on("error", (error) => {
+		this.child.onError((error) => {
 			this.stderrTail += `\n${error.message}`;
 		});
-		this.child.on("exit", (code) => {
+		this.child.onExit((code) => {
 			if (sessionKey) expireInteractions(sessionKey);
 			this.exited = true;
 			for (const { reject } of this.pending.values()) reject(new Error(`pi exited (${code}): ${this.stderrTail.trim().slice(-500)}`));
 			this.pending.clear();
 			this.onExit(code);
 		});
-		this.child.stdin.on("error", () => {});
 	}
 
 	private read(text: string) {
@@ -134,7 +133,7 @@ class RpcProcess {
 
 	write(record: RpcRecord) {
 		if (this.exited) throw new Error("pi process is not running");
-		this.child.stdin.write(`${JSON.stringify(record)}\n`);
+		this.child.write(`${JSON.stringify(record)}\n`);
 	}
 
 	send<T = any>(command: RpcRecord, timeoutMs = 60_000): Promise<T> {
@@ -167,13 +166,13 @@ class RpcProcess {
 	/** Closing stdin asks pi to shut down cleanly; kill if it does not. */
 	async close() {
 		if (this.exited) return;
-		this.child.stdin.end();
+		this.child.end();
 		await new Promise<void>((resolve) => {
 			const timer = setTimeout(() => {
 				this.child.kill("SIGTERM");
 				resolve();
 			}, 5000);
-			this.child.once("exit", () => {
+			this.child.onExit(() => {
 				clearTimeout(timer);
 				resolve();
 			});

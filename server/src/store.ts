@@ -1,10 +1,9 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { config } from "./config.js";
 import type { SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 import type { Interaction } from "./interactions.js";
 import type { Job } from "./jobs.js";
+import { platform } from "./ports/index.js";
 import { tenantId, type Tenant } from "./tenant-context.js";
 
 export type Role = "admin" | "member";
@@ -95,17 +94,11 @@ interface Data {
 	jobs: Job[];
 }
 
-const file = path.join(config.dataDir, "db.json");
 let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {
-	mkdirSync(config.dataDir, { recursive: true });
-	try {
-		data = { ...data, ...JSON.parse(readFileSync(file, "utf8")) };
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-	}
+	data = { ...data, ...(platform().documents.load("db") as Partial<Data> | undefined) };
 	data.logins = data.logins.filter((login) => login.expiresAt > Date.now());
 	// Idempotent migration: legacy app data belongs to Work, never to a new tenant.
 	if (!data.tenants.length) {
@@ -117,9 +110,7 @@ export function loadStore() {
 
 function flush() {
 	saveTimer = undefined;
-	const tmp = `${file}.tmp`;
-	writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
-	renameSync(tmp, file);
+	platform().documents.save("db", data);
 }
 
 /** Persist soon; many small changes in a burst produce one write. */

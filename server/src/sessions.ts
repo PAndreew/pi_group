@@ -10,6 +10,7 @@ import { mcpReport, piResources } from "./inventory.js";
 import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountMemory } from "./memory.js";
+import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
 import { config } from "./config.js";
@@ -79,9 +80,13 @@ const messageText = (m: AgentMessage) => contentText(m.content) || (typeof m.con
 
 const firstLine = (text: string) => text.trim().split("\n")[0].slice(0, 200);
 
+/** An event on a user's stream, delivered to their streams that have `tenantId` selected. */
+type UserEnvelope = { tenantId: string; event: unknown };
+
 /** Fans one live session's events out to every SSE client watching it. */
 class Hub {
-	private clients = new Map<string, Set<Response>>();
+	/** Each viewer's subscription, to end it when the viewer leaves. */
+	private viewers = new Map<Response, () => void>();
 
 	state(key: string, state: SessionState): SessionState {
 		const pendingDeletes = this.pendingDeletes(key);
@@ -99,7 +104,6 @@ class Hub {
 	}
 	private attached = new Map<string, { live: LiveSession; unsubscribe: () => void }>();
 	private running = new Map<string, boolean>();
-	private watchers = new Set<{ user: User; res: Response; tenantId: string }>();
 	private runListeners = new Set<(key: string, outcome: RunOutcome) => void>();
 	/** Sessions whose outcomes are reported elsewhere (a chat posts pi's reply), so no run notification. */
 	quiet: (key: string) => boolean = () => false;
@@ -110,10 +114,14 @@ class Hub {
 		return () => this.runListeners.delete(listener);
 	}
 
-	/** Send an event on one user's stream (every open tab or device). */
+	/** Send an event on one user's stream (every open tab or device that has its tenant selected). */
 	sendTo(userId: string, event: unknown) {
 		const id = (event as { tenantId?: string })?.tenantId ?? tenantId();
-		for (const { user, res, tenantId: selected } of this.watchers) if (user.id === userId && selected === id && isTenantMember(user.id, id)) send(res, event);
+		if (isTenantMember(userId, id)) this.toUser(userId, id, event);
+	}
+
+	private toUser(userId: string, tenant: string, event: unknown) {
+		platform().realtime.publish(`user:${userId}`, { tenantId: tenant, event } satisfies UserEnvelope);
 	}
 
 	private finish(key: string, outcome: RunOutcome) {
@@ -123,24 +131,23 @@ class Hub {
 
 	/** Per-user stream of run outcomes (finished / failed) for browser notifications. */
 	watch(user: User, res: Response) {
-		const watcher = { user, res, tenantId: tenantId() };
-		this.watchers.add(watcher);
-		return () => this.watchers.delete(watcher);
+		const selected = tenantId();
+		return platform().realtime.subscribe(`user:${user.id}`, (message) => {
+			const { tenantId: tenant, event } = message as UserEnvelope;
+			if (tenant === selected) send(res, event);
+		});
 	}
 
 	private announce(key: string, kind: RunNotice["kind"], text: string) {
 		const meta = store.session(key);
 		if (!meta) return;
 		const notice: RunNotice = { type: "run", kind, key, path: toRel(meta.cwd), name: meta.name || meta.firstMessage || "Untitled session", text: plainText(text).slice(0, 300) };
-		for (const { user, res, tenantId: selected } of this.watchers) {
-			if (selected !== (meta.tenantId ?? "work")) continue;
-			// Re-read the user: roles and sharing may have changed since the stream opened.
-			const current = store.userById(user.id);
-			if (current && involved(current, meta)) send(res, notice);
-		}
-		// Push reaches devices whose app is closed or frozen; the service worker skips it when the app is in front.
+		// Current roles and sharing decide, not those when a stream opened. Push reaches devices whose
+		// app is closed or frozen; the service worker skips it when the app is in front.
 		for (const user of store.data.users) {
-			if (involved(user, meta)) void pushToUser(user.id, { ...notice, tenantId: meta.tenantId ?? "work" });
+			if (!involved(user, meta)) continue;
+			this.toUser(user.id, meta.tenantId ?? "work", notice);
+			void pushToUser(user.id, { ...notice, tenantId: meta.tenantId ?? "work" });
 		}
 	}
 
@@ -163,21 +170,21 @@ class Hub {
 	}
 
 	count(key: string) {
-		return this.clients.get(key)?.size ?? 0;
+		return platform().realtime.subscribers(key);
 	}
 
 	add(key: string, res: Response) {
-		let set = this.clients.get(key);
-		if (!set) this.clients.set(key, (set = new Set()));
-		set.add(res);
+		this.viewers.get(res)?.();
+		this.viewers.set(res, platform().realtime.subscribe(key, (event) => send(res, event)));
 	}
 
-	remove(key: string, res: Response) {
-		this.clients.get(key)?.delete(res);
+	remove(_key: string, res: Response) {
+		this.viewers.get(res)?.();
+		this.viewers.delete(res);
 	}
 
 	broadcast(key: string, event: SessionEvent | { type: string; [k: string]: unknown }) {
-		for (const res of this.clients.get(key) ?? []) send(res, event);
+		platform().realtime.publish(key, event);
 	}
 
 	/** Relay a live session's events; the subscription itself delivers the current state first. */
@@ -884,14 +891,14 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	});
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
-	setInterval(() => {
+	platform().scheduler.every(5_000, () => {
 		for (const adapter of adapters) for (const live of adapter.liveSessions()) hub.attach(`${adapter.id}:${live.id}`, live);
 		if (forwards.length) void deliverForwards();
 		for (const meta of Object.values(store.data.sessions)) if (meta.pendingDeletes?.length) void drainDeletes(meta.key);
-	}, 5_000).unref();
+	});
 
 	// Stop idle runtimes: not running, nobody watching, not pinned, quiet for IDLE_TIMEOUT_MIN.
-	setInterval(() => {
+	platform().scheduler.every(60_000, () => {
 		const cutoff = Date.now() - config.idleTimeoutMin * 60_000;
 		for (const adapter of adapters) {
 			for (const live of adapter.liveSessions()) {
@@ -900,7 +907,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				void live.close();
 			}
 		}
-	}, 60_000).unref();
+	});
 
 	return router;
 }

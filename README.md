@@ -102,7 +102,7 @@ Edit `.env` and restart Beezy. See [`.env.example`](.env.example) for all option
 
 **Only invite people you trust with shell access to this machine.** Anyone who can prompt the agent can ask it to run commands with the server user’s permissions. `FS_ROOT` limits the file browser, not the agent.
 
-Service setup, updates and development commands: [Operations](docs/operations.md).
+Service setup, updates and development commands: [Operations](docs/operations.md). How it fits together, and how a deployment swaps the storage and runtime underneath: [Architecture](docs/architecture.md).
 
 ## Tenants
 
@@ -114,4 +114,4 @@ Keep API tokens and passwords in the **Secret vault** (user menu). Agents see ea
 
 ## License
 
-[MIT](LICENSE)
+[GNU AGPL-3.0](LICENSE). You may use, change and self-host Beezy freely; if you offer a modified version to others over a network, you must publish your changes under the same license.

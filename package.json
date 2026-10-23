@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Mobile-first, multi-user web UI for agent harnesses (pi coding agent, pi-durable).",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "deploy": "bash deploy/deploy.sh",
     "setup": "npm ci --prefix server && npm ci --prefix web",

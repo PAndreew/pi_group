@@ -5,6 +5,7 @@ import { type ChatDeps, type ChatMessage, chatMessages, chatOfSession, chatTitle
 import { config } from "./config.js";
 import { toRel } from "./files.js";
 import type { AgentMessage } from "./harness/types.js";
+import { platform } from "./ports/index.js";
 import type { RunOutcome } from "./sessions.js";
 import { type SessionMeta, store } from "./store.js";
 import { inTenant, tenantId } from "./tenant-context.js";
@@ -140,8 +141,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 		const tick = () => {
 			for (const tenant of store.data.tenants) void inTenant(tenant, () => consolidate(cutoff()));
 		};
-		setTimeout(tick, 2 * 60_000).unref();
-		setInterval(tick, 60 * 60_000).unref();
+		platform().scheduler.every(60 * 60_000, tick, 2 * 60_000);
 	}
 
 	router.get("/memory", async (_req, res) => {

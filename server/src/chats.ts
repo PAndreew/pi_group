@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import type { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
@@ -9,6 +8,7 @@ import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
 import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, PromptInput } from "./harness/types.js";
+import { platform, type SqlDatabase } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type Rewrite, type RunOutcome } from "./sessions.js";
 import { type PendingDelete, type SessionMeta, store, type User } from "./store.js";
@@ -68,11 +68,10 @@ CREATE INDEX IF NOT EXISTS messages_by_chat ON messages (chat_id, id);
 CREATE INDEX IF NOT EXISTS chats_by_session ON chats (session_key);
 `;
 
-let db: DatabaseSync | undefined;
+let db: SqlDatabase | undefined;
 function database() {
 	if (!db) {
-		mkdirSync(config.dataDir, { recursive: true });
-		db = new DatabaseSync(path.join(config.dataDir, "chats.sqlite"));
+		db = platform().openSql("chats");
 		db.exec("PRAGMA journal_mode = WAL");
 		db.exec(SCHEMA);
 		const columns = (db.prepare("PRAGMA table_info(messages)").all() as Row[]).map((c) => String(c.name));
@@ -130,7 +129,7 @@ export function getChat(id: string) {
 
 export function chatOfSession(key: string) {
 	// Asked on every finished run: no need to create the database before the first chat.
-	if (!db && !existsSync(path.join(config.dataDir, "chats.sqlite"))) return undefined;
+	if (!db && !platform().sqlExists("chats")) return undefined;
 	const row = database().prepare("SELECT * FROM chats WHERE session_key = ?").get(key) as Row | undefined;
 	return row && toChat(row);
 }

@@ -2,6 +2,7 @@
   "name": "beezy-vault",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Standalone secret vault for Beezy: encrypted key/value secrets behind a token-protected HTTP API.",
   "type": "module",
   "main": "src/index.mjs",

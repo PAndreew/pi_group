@@ -1,23 +1,23 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import express, { type Router } from "express";
 import webpush from "web-push";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { config } from "./config.js";
+import { platform } from "./ports/index.js";
 import { save, store, type PushSubscriptionRecord } from "./store.js";
 
 /** VAPID keys identify this server to the browsers' push services; made once and kept in the data dir. */
 function vapidKeys(): { publicKey: string; privateKey: string } {
 	if (config.vapidPublicKey && config.vapidPrivateKey) return { publicKey: config.vapidPublicKey, privateKey: config.vapidPrivateKey };
-	const file = path.join(config.dataDir, "vapid.json");
 	try {
-		return JSON.parse(readFileSync(file, "utf8"));
+		const saved = platform().documents.load("vapid") as { publicKey: string; privateKey: string } | undefined;
+		if (saved) return saved;
 	} catch {
-		const keys = webpush.generateVAPIDKeys();
-		writeFileSync(file, JSON.stringify(keys, null, 2), { mode: 0o600 });
-		return keys;
+		// Unreadable: make new keys (devices then subscribe again).
 	}
+	const keys = webpush.generateVAPIDKeys();
+	platform().documents.save("vapid", keys);
+	return keys;
 }
 
 let keys: ReturnType<typeof vapidKeys> | undefined;

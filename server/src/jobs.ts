@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { statSync } from "node:fs";
@@ -8,6 +7,7 @@ import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { HttpError, toRel } from "./files.js";
 import { bridgeCredentialValid } from "./interactions.js";
+import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { checkSchedule, nextRun } from "./schedule.js";
 import type { RunOutcome } from "./sessions.js";
@@ -132,32 +132,23 @@ function scriptEnv(job: Job) {
 
 function runScript(job: Job, step: Extract<JobStep, { type: "script" }>, input = "") {
 	return new Promise<string>((resolve, reject) => {
-		const windows = process.platform === "win32";
 		// Its own process group, so a timeout stops everything the shell started.
-		const child = spawn(step.command, { cwd: job.cwd, env: scriptEnv(job), shell: true, detached: !windows, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+		const child = platform().sandbox.spawn(step.command, [], { cwd: job.cwd, env: scriptEnv(job), shell: true, group: true });
 		let output = "";
 		let timedOut = false;
 		const add = (chunk: Buffer) => (output = (output + chunk.toString("utf8")).slice(-MAX_OUTPUT));
-		child.stdout.on("data", add);
-		child.stderr.on("data", add);
-		child.stdin.on("error", () => {});
-		child.stdin.end(input);
+		child.onStdout(add);
+		child.onStderr(add);
+		child.end(input);
 		const timer = setTimeout(() => {
 			timedOut = true;
-			if (windows) spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
-			else {
-				try {
-					process.kill(-child.pid!, "SIGKILL");
-				} catch {
-					child.kill("SIGKILL");
-				}
-			}
+			child.kill("tree");
 		}, step.timeoutSec * 1000);
-		child.on("error", (error) => {
+		child.onError((error) => {
 			clearTimeout(timer);
 			reject(error);
 		});
-		child.on("close", (code) => {
+		child.onClose((code) => {
 			clearTimeout(timer);
 			if (timedOut) reject(new Error(`Timed out after ${step.timeoutSec} s\n${output}`));
 			else if (code !== 0) reject(new Error(`Exited with code ${code}\n${output}`));
@@ -327,8 +318,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			void runJob(job);
 		}
 	};
-	setTimeout(tick, 5_000).unref();
-	setInterval(tick, 20_000).unref();
+	platform().scheduler.every(20_000, tick, 5_000);
 
 	const view = (job: Job, user: User) => {
 		const session = job.sessionKey ? store.session(job.sessionKey) : undefined;
