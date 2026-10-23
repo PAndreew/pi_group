@@ -7,6 +7,8 @@ Agents get two tools:
 - `vault_list_secrets` returns the session owner's keys and descriptions, never values.
 - `vault_get_secret` returns one value by its key.
 
+Exception: a key configured as `CLOUDFLARE_VAULT_KEY` is reserved for [server-side Cloudflare assistance](cloudflare-assistance.md). It is hidden from agent listings and cannot be read through the agent bridge. Users can still manage it in the vault UI. Assistance resolves the initiating user's key in the run's tenant, rather than using the session owner's credential.
+
 The UI hides values returned by `vault_get_secret`, but the agent's session history still contains them. Anyone the session is shared with can read that history, so share sessions that use secrets only with people who may see those secrets.
 
 ## Who can see which secrets

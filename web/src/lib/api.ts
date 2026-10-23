@@ -17,6 +17,8 @@ export interface AssistanceSettings {
 }
 export interface AssistanceStatus {
   configured: boolean
+  credentialSource?: "environment" | "vault" | "none"
+  vaultKey?: string
   supportedHarnesses: string[]
   settings: AssistanceSettings
   meter?: { day: string; cost: number; calls: number }

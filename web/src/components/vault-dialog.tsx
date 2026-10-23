@@ -66,7 +66,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         <DialogHeader>
           <DialogTitle>Secret vault</DialogTitle>
           <DialogDescription>
-            Your agents see each secret’s key and description and can read its value by key. Values the agent reads become part of that session’s history, which everyone it is shared with can see.
+            Agents see ordinary secret keys and descriptions and can read their values by key. Reserved server credentials, such as the configured Cloudflare assistance key, are hidden from agent tools. Values an agent reads become part of that session’s history, which everyone it is shared with can see.
           </DialogDescription>
         </DialogHeader>
 

@@ -8,13 +8,15 @@ import { bridgeCredentialValid } from "./interactions.js";
 import { assistanceDefaults, type AssistanceSettings } from "./preferences.js";
 import { saveNow, store, type SessionMeta, type User } from "./store.js";
 import { isTenantMember } from "./tenants.js";
+import { platform } from "./ports/index.js";
+import { tenantId } from "./tenant-context.js";
 
 // Byte bound plus wrapper/schema allowance stays below Clef's 65,536-token
 // window even for unusually token-dense text; Clef may otherwise silently truncate.
 const MAX_BYTES = 56_000;
 const rates = { clef: 0.24, clairic: 0.10 };
 export function cloudflareConfigured() {
-	return Boolean(config.cloudflareAccountId && config.cloudflareApiToken);
+	return Boolean(config.cloudflareAccountId && (config.cloudflareApiToken || (config.cloudflareVaultKey && platform().secrets.configured())));
 }
 /** Never pass the auxiliary provider credential to agent subprocesses. */
 export function agentEnvironment(env: NodeJS.ProcessEnv = process.env) {
@@ -22,13 +24,38 @@ export function agentEnvironment(env: NodeJS.ProcessEnv = process.env) {
 	return rest;
 }
 
+export interface CloudflareCredential { accountId: string; apiToken: string }
+
+/** Resolve per request, so revocation/rotation takes effect without persisting or caching values. */
+export async function resolveCloudflareCredential(userId: string, tenant: string): Promise<CloudflareCredential> {
+	if (!cloudflareConfigured()) throw new Error("Cloudflare assistance is not configured");
+	if (config.cloudflareApiToken) return { accountId: config.cloudflareAccountId, apiToken: config.cloudflareApiToken };
+	if (!isTenantMember(userId, tenant)) throw new Error("Cloudflare vault credential unavailable");
+	try {
+		const secret = await platform().secrets.get(`${tenant}.${userId}`, config.cloudflareVaultKey);
+		if (!secret.value) throw new Error("Empty credential");
+		return { accountId: config.cloudflareAccountId, apiToken: secret.value };
+	} catch {
+		// Vault responses may contain sensitive metadata; only expose a safe explanation.
+		throw new Error("Cloudflare vault credential unavailable. Add the configured key to your vault in this tenant, or check the vault service.");
+	}
+}
+
+async function credentialAvailable(userId: string, tenant: string) {
+	if (!cloudflareConfigured()) return false;
+	if (config.cloudflareApiToken) return true;
+	try { return (await platform().secrets.list(`${tenant}.${userId}`)).some(secret => secret.key === config.cloudflareVaultKey); }
+	catch { return false; }
+}
+
 export class CloudflareClient {
 	constructor(private request: typeof fetch = (input, init) => fetch(input, init)) {}
-	async run(model: keyof typeof rates, body: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
-		if (!cloudflareConfigured()) throw new Error("Cloudflare assistance is not configured");
-		const response = await this.request(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.cloudflareAccountId)}/ai/run/@cf/cloudflare/${model}`, {
+	async run(model: keyof typeof rates, body: Record<string, unknown>, signal?: AbortSignal, credential?: CloudflareCredential): Promise<any> {
+		const auth = credential ?? { accountId: config.cloudflareAccountId, apiToken: config.cloudflareApiToken };
+		if (!auth.accountId || !auth.apiToken) throw new Error("Cloudflare assistance is not configured");
+		const response = await this.request(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(auth.accountId)}/ai/run/@cf/cloudflare/${model}`,  {
 			method: "POST", redirect: "error",
-			headers: { Authorization: `Bearer ${config.cloudflareApiToken}`, "Content-Type": "application/json" },
+			headers: { Authorization: `Bearer ${auth.apiToken}`, "Content-Type": "application/json" },
 			body: JSON.stringify({ model, ...body }),
 			signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000),
 		});
@@ -47,6 +74,7 @@ interface Run {
 	id: string;
 	userId: string;
 	sessionKey: string;
+	tenantId: string;
 	settings: AssistanceSettings;
 	calls: number;
 	createdAt: number;
@@ -75,17 +103,24 @@ export function prepareAssistance(meta: SessionMeta, user: User, busy: boolean):
 		return previous;
 	}
 	if (enabled(settings) && meta.harness !== "pi") throw new HttpError(400, "Cloudflare assistance currently supports the pi harness only. Disable it to use another harness.");
-	if (enabled(settings) && !cloudflareConfigured()) throw new HttpError(400, "Configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN before enabling Cloudflare assistance");
+	if (enabled(settings) && !cloudflareConfigured()) throw new HttpError(400, "Configure CLOUDFLARE_ACCOUNT_ID and either CLOUDFLARE_VAULT_KEY or CLOUDFLARE_API_TOKEN before enabling Cloudflare assistance");
 	// Idle sessions can be numerous; run bindings have no persistent content.
 	for (const [key, run] of runs) if (Date.now() - run.createdAt > 7 * 86400_000) runs.delete(key);
-	const run = { id: randomUUID(), userId: user.id, sessionKey: meta.key, settings, calls: 0, createdAt: Date.now() };
+	const run = { id: randomUUID(), userId: user.id, sessionKey: meta.key, tenantId: meta.tenantId ?? "work", settings, calls: 0, createdAt: Date.now() };
 	runs.set(meta.key, run);
 	return run;
 }
 
+const purposeEnabled = (settings: AssistanceSettings, purpose: string) => purpose.startsWith("injection:") ? settings.injectionChecks : purpose === "extract" ? settings.contextExtraction : purpose === "select-tools" && settings.toolSelection;
+
 async function call(run: Run, model: keyof typeof rates, purpose: string, body: Record<string, unknown>, signal?: AbortSignal) {
+	if (!purposeEnabled(effectiveSettings(run), purpose)) throw new Error("Cloudflare assistance is off");
+	// Resolve before reserving cost: a missing vault key never incurs an estimated charge.
+	signal?.throwIfAborted();
+	const credential = await resolveCloudflareCredential(run.userId, run.tenantId);
+	signal?.throwIfAborted();
 	const settings = effectiveSettings(run);
-	if (!enabled(settings)) throw new Error("Cloudflare assistance is off");
+	if (!purposeEnabled(settings, purpose)) throw new Error("Cloudflare assistance is off");
 	const user = store.userById(run.userId);
 	if (!user) throw new Error("Initiating user no longer exists");
 	const bytes = Buffer.byteLength(JSON.stringify({ model, ...body }));
@@ -105,7 +140,7 @@ async function call(run: Run, model: keyof typeof rates, purpose: string, body: 
 	saveNow();
 	const started = Date.now();
 	try {
-		const result = await client.run(model, body, signal);
+		const result = await client.run(model, body, signal, credential);
 		const actual = result.usage.input_tokens * rates[model] / 1e6;
 		meter.cost = Math.max(0, meter.cost + actual - reserved);
 		record.cost = actual;
@@ -178,9 +213,9 @@ export function mountAssistance(router: Router, canUse: (user: User, meta: Sessi
 		res.once("close", () => controller.abort());
 		return controller.signal;
 	};
-	router.get("/assistance/status", requireAuth, (req, res) => {
+	router.get("/assistance/status", requireAuth, async (req, res) => {
 		res.setHeader("Cache-Control", "no-store");
-		res.json({ configured: cloudflareConfigured(), supportedHarnesses: ["pi"], settings: req.user!.assistance ?? assistanceDefaults, meter: req.user!.assistanceMeter, records: req.user!.assistanceRecords ?? [] });
+		res.json({ configured: await credentialAvailable(req.user!.id, tenantId()), credentialSource: config.cloudflareApiToken ? "environment" : config.cloudflareVaultKey ? "vault" : "none", vaultKey: config.cloudflareVaultKey || undefined, supportedHarnesses: ["pi"], settings: req.user!.assistance ?? assistanceDefaults, meter: req.user!.assistanceMeter, records: req.user!.assistanceRecords ?? [] });
 	});
 	router.use("/assistance-bridge/:key", (req, _res, next) => {
 		const key = String(req.params.key);

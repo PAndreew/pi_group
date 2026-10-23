@@ -64,6 +64,8 @@ export const config = {
 	/** Auxiliary models share one server-only Workers AI credential. */
 	cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
 	cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN ?? "",
+	/** Optional key reference in the initiating user's per-tenant vault; never a token value. */
+	cloudflareVaultKey: process.env.CLOUDFLARE_VAULT_KEY ?? "",
 	webDist: path.resolve(env("WEB_DIST", path.join(import.meta.dirname, "..", "..", "web", "dist"))),
 };
 

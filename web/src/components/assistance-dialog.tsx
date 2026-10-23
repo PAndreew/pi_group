@@ -36,7 +36,8 @@ export function AssistanceDialog({ open, onOpenChange }: { open: boolean; onOpen
           <DialogTitle>Cloudflare assistance</DialogTitle>
           <DialogDescription>Optional, paid features for the pi harness. All off by default. Enabled features send relevant prompts, tool descriptions or tool results to Cloudflare. Do not enable for sensitive work unless this is acceptable.</DialogDescription>
         </DialogHeader>
-        {status && !status.configured && <p className="rounded border border-amber-500/40 p-3 text-sm">Not configured. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN on the server. One Workers AI token serves both models. No API calls have been made to check connectivity.</p>}
+        {status && !status.configured && <p className="rounded border border-amber-500/40 p-3 text-sm">Not configured. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_VAULT_KEY on the server, then add that key to your vault in this tenant. Alternatively configure CLOUDFLARE_API_TOKEN on the server. One Workers AI token serves both models. No API calls have been made to check connectivity.</p>}
+        {status?.configured && status.credentialSource === "vault" && <p className="text-xs text-muted-foreground">Using vault key {status.vaultKey} from your vault in this tenant. Its value is read server-side only and is hidden from agent vault tools.</p>}
         {settings && <>
           <div className="space-y-5">
             {features.map(feature => <div key={feature.key} className="flex items-start gap-3">

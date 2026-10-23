@@ -11,6 +11,7 @@ test("Cloudflare assistance admission, billing, validation and scoped bridge (no
 	const dir = mkdtempSync(path.join(os.tmpdir(), "beezy-assistance-"));
 	process.env.DATA_DIR = dir;
 	process.env.CLOUDFLARE_ACCOUNT_ID = "test-account";
+	process.env.CLOUDFLARE_VAULT_KEY = "";
 	process.env.CLOUDFLARE_API_TOKEN = "test-token";
 	const { assistanceDefaults, assistanceSettingsSchema } = await import("./preferences.js");
 	const { loadStore, saveNow, store } = await import("./store.js");

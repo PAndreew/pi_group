@@ -1,6 +1,7 @@
 import express, { type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
+import { config } from "./config.js";
 import { HttpError } from "./files.js";
 import { bridgeCredentialValid } from "./interactions.js";
 import { platform } from "./ports/index.js";
@@ -59,11 +60,14 @@ export function vaultRoutes(): Router {
 		return namespaceOf(tenant, meta.ownerId);
 	};
 	router.get("/vault-bridge/:key", async (req, res) => {
-		res.json({ secrets: await platform().secrets.list(ownerNamespace(String(req.params.key), req.headers.authorization)) });
+		const secrets = await platform().secrets.list(ownerNamespace(String(req.params.key), req.headers.authorization));
+		res.json({ secrets: secrets.filter(secret => secret.key !== config.cloudflareVaultKey) });
 	});
 	router.get("/vault-bridge/:key/:secret", async (req, res) => {
 		const namespace = ownerNamespace(String(req.params.key), req.headers.authorization);
-		const { key, value } = await platform().secrets.get(namespace, keySchema.parse(req.params.secret));
+		const requested = keySchema.parse(req.params.secret);
+		if (requested === config.cloudflareVaultKey) throw new HttpError(403, "This credential is reserved for server-side Cloudflare assistance");
+		const { key, value } = await platform().secrets.get(namespace, requested);
 		res.setHeader("Cache-Control", "no-store");
 		res.json({ key, value });
 	});

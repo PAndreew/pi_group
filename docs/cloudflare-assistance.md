@@ -12,18 +12,20 @@ These are paid, experimental aids, not permission controls or a security boundar
 
 Both models use **one Cloudflare account and one API token**. In the Cloudflare dashboard create an account-scoped token with **Workers AI: Read**, restricted to the intended account. The account must have Workers AI available and any required billing enabled. Use the account ID, not a zone ID.
 
-Configure these server-side values in the private `.env` file or service environment:
+Preferred: keep the token in your **Secret vault**, under `CLOUDFLARE_WORKER_KEY`, and configure only its reference and the non-secret account ID in the private `.env` file or service environment:
 
 ```dotenv
 CLOUDFLARE_ACCOUNT_ID=your-account-id
-CLOUDFLARE_API_TOKEN=your-workers-ai-token
+CLOUDFLARE_VAULT_KEY=CLOUDFLARE_WORKER_KEY
 ```
 
-Do not put this token in chat, frontend code, user preferences, a scheduled job, or the agent's secret vault. One token serves `@cf/cloudflare/clef` and `@cf/cloudflare/clairic`; separate model keys are unnecessary. Beezy keeps these two values in server configuration and removes them from the inherited process environment used by agents, terminals and job scripts. This is not OS-level isolation: a trusted shell-capable agent can still access files as its OS user.
+Beezy reads this key from the **initiating user's vault in the run's tenant**, never another user's or another tenant's vault. Other users/tenants need their own key under the same name. Values are fetched server-side on demand, not cached or copied to app storage, and rotation/revocation applies to subsequent calls. A missing/unreachable credential fails without a model request or cost reservation. The configured key is hidden from agent vault listings and denied by the agent's vault read endpoint; users can still manage it in their own vault UI.
+
+Alternatively, set `CLOUDFLARE_API_TOKEN` in the server environment for one shared server credential. This explicitly takes precedence over the vault reference. Keep it out of chat, frontend code, user preferences and scheduled jobs. One token serves `@cf/cloudflare/clef` and `@cf/cloudflare/clairic`; separate model keys are unnecessary. Beezy keeps direct credentials in server configuration and removes them from the inherited process environment used by agents, terminals and job scripts. This is not OS-level isolation: a trusted shell-capable agent can still access files as its OS user.
 
 Wrangler is not required: the server calls the Workers AI HTTPS API directly. Wrangler was not installed in the implementation environment. An existing Wrangler login does not automatically configure this integration, and no token was created or Cloudflare account modified during implementation.
 
-When an operator later chooses to release this change, the configured server must be rebuilt/restarted in the normal way, and existing Pi child processes reopened so they load the new extension. **Implementation itself does not require deployment or enabling any switch.** Merely opening settings checks configuration presence, not token validity, and makes no Cloudflare request.
+When an operator later chooses to release this change, the configured server must be rebuilt/restarted in the normal way, and existing Pi child processes reopened so they load the new extension. **Implementation itself does not require deployment or enabling any switch.** Opening settings checks configuration and, for vault mode, the caller's vault-key metadata. It does not read the token value or validate it against Cloudflare, and makes no Cloudflare request.
 
 ## Settings and spending
 
@@ -88,7 +90,7 @@ Include benign quoted attacks, direct user instructions, hostile retrieved pages
 ```bash
 npm --prefix server run typecheck
 cd server
-npx tsx --test src/assistance.test.ts src/assistance-extension.test.ts
+npx tsx --test src/assistance.test.ts src/assistance-extension.test.ts src/assistance-vault.test.ts
 cd ../web
 npx tsc -b
 npx vite build --outDir /tmp/beezy-assistance-web-build
