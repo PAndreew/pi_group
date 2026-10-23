@@ -123,12 +123,12 @@ export function ResourceMonitorDialog({ open, onOpenChange, onOpenSession }: { o
           <DialogTitle>Resource monitor</DialogTitle>
           <DialogDescription>{sys ? `${sys.hostname} · ${sys.platform} · up ${duration(sys.uptimeSec)}` : "Machine health, live sessions and token usage."}</DialogDescription>
         </DialogHeader>
-        <Tabs value={tab} onValueChange={setTab} className="min-h-0">
+        <Tabs value={tab} onValueChange={setTab} className="min-h-0 min-w-0">
           <TabsList>
             <TabsTrigger value="resources">Resources</TabsTrigger>
             <TabsTrigger value="usage">Token usage</TabsTrigger>
           </TabsList>
-          <TabsContent value="usage" className="-mx-2 min-h-0 overflow-y-auto px-2 pb-1">
+          <TabsContent value="usage" className="-mx-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-2 pb-1">
             <UsagePanel onOpenSession={(key, path) => openSession({ key, path })} />
           </TabsContent>
           <TabsContent value="resources" className="-mx-2 grid min-h-0 gap-4 overflow-y-auto px-2 pb-1">
