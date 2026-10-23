@@ -7,6 +7,7 @@ import { requireAuth } from "./auth.js";
 import { creationOptions } from "./preferences.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
+import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
 import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountMemory } from "./memory.js";
@@ -273,6 +274,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 
 	mountInteractions(router, load);
+	mountAssistance(router, (user, meta) => canWrite(accessOf(user, meta)));
 
 	const ensureLive = async (meta: SessionMeta, adapter: HarnessAdapter) => {
 		const live = await adapter.open(meta.id, meta.cwd);
@@ -304,9 +306,15 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 
 	/** Send a prompt as `user`, starting the runtime if needed; while a run is going it is queued as a follow-up unless a mode is given. */
-	const promptSession = async (meta: SessionMeta, user: User, body: PromptInput) => {
+	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const live = await ensureLive(meta, adapterOf(meta.harness));
+		const run = prepareAssistance(meta, user, live.state.running);
+		if (run.settings.injectionChecks || run.settings.contextExtraction || run.settings.toolSelection) {
+			if (!live.verifyAssistance) throw new HttpError(400, "This runtime does not support Cloudflare assistance");
+			await live.verifyAssistance();
+		}
+		await guardPrompt(run, body.text, Boolean(body.images?.length));
 		const input = { ...body, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
@@ -321,6 +329,17 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		}
 		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(input.text), updatedAt: new Date().toISOString() });
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
+	};
+
+	// Serialize admission (including asynchronous Clef checks), otherwise two shared
+	// submissions could replace one another's initiating user/settings before acceptance.
+	const submissions = new Map<string, Promise<void>>();
+	const promptSession = (meta: SessionMeta, user: User, body: PromptInput) => {
+		const prior = submissions.get(meta.key) ?? Promise.resolve();
+		const next = prior.catch(() => {}).then(() => submitPrompt(meta, user, body));
+		submissions.set(meta.key, next);
+		void next.finally(() => { if (submissions.get(meta.key) === next) submissions.delete(meta.key); }).catch(() => {});
+		return next;
 	};
 
 	const isRunning = (key?: string) => {

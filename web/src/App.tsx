@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
+import { AssistanceDialog } from "@/components/assistance-dialog"
 import { VaultDialog } from "@/components/vault-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
 import { useAppViewport } from "@/hooks/use-app-viewport"
@@ -130,6 +131,7 @@ function Workspace() {
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [vaultOpen, setVaultOpen] = useState(false)
+  const [assistanceOpen, setAssistanceOpen] = useState(false)
 
   const nav: Nav = useMemo(
     () => ({
@@ -211,6 +213,9 @@ function Workspace() {
               <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
                 <Users /> Profile picture
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAssistanceOpen(true)}>
+                <Brain /> Cloudflare assistance
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVaultOpen(true)}>
                 <Vault /> Secret vault
               </DropdownMenuItem>
@@ -272,6 +277,7 @@ function Workspace() {
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
         <VaultDialog open={vaultOpen} onOpenChange={setVaultOpen} />
+        <AssistanceDialog open={assistanceOpen} onOpenChange={setAssistanceOpen} />
       </div>
     </NavContext.Provider>
   )

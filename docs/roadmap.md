@@ -1,5 +1,9 @@
 # Roadmap
 
+## Optional runtime assistance
+
+The first, independent runtime integration is implemented for Pi RPC: per-user, off-by-default switches for Clef prompt-injection checks and Clairic tool-result extraction/tool discovery, with auxiliary usage accounting and spending guards. See [Cloudflare assistance](cloudflare-assistance.md) for setup and limitations. This does not implement the proactive pipeline below; pi-durable, multimodal support, a dedicated remote MCP catalogue broker and live accuracy/cost evaluation remain future work.
+
 ## Proactive, event-driven agent
 
 Every new piece of data becomes an event: chat messages, uploads, finished agent runs, scheduled job output, and webhooks, mail or RSS. Each one gets a one-line `emit()` call where it already enters the app, and feeds a persistent SQLite queue. A pipeline on the Raspberry Pi then normalizes it (ffmpeg turns video into audio and keyframes), transcribes audio with Whisper (local whisper.cpp or Workers AI), and extracts metadata from text and images with Clairic. The results go into versioned SQLite items with a full-text index. Items only point to their source, and permissions are checked through the existing access functions at query time.

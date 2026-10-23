@@ -8,12 +8,28 @@ export interface SessionDefaults {
   thinkingLevel: string
 }
 
+export interface AssistanceSettings {
+  injectionChecks: boolean
+  contextExtraction: boolean
+  toolSelection: boolean
+  dailyBudgetUsd: number
+  maxCallsPerRun: number
+}
+export interface AssistanceStatus {
+  configured: boolean
+  supportedHarnesses: string[]
+  settings: AssistanceSettings
+  meter?: { day: string; cost: number; calls: number }
+  records: { runId: string; sessionKey: string; model: string; purpose: string; timestamp: string; inputTokens?: number; cost: number; latencyMs: number; status: string }[]
+}
+
 export interface User {
   id: string
   username: string
   role: Role
   createdAt: string
   sessionDefaults?: SessionDefaults
+  assistance?: AssistanceSettings
 }
 
 export interface Harness {
@@ -300,6 +316,8 @@ const enc = encodeURIComponent
 export const api = {
   interactions: (key: string) => request<{ interactions: Interaction[] }>("GET", `/api/sessions/${enc(key)}/interactions`),
   answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
+  assistanceStatus: () => request<AssistanceStatus>("GET", "/api/assistance/status"),
+  saveAssistance: (settings: AssistanceSettings) => request<{ user: User }>("PUT", "/api/auth/assistance", settings),
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User; tenantId?: string }>("GET", "/api/auth/me"),
   tenants: () => request<{ active: string; tenants: { id: string; name: string }[] }>("GET", "/api/tenants"),

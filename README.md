@@ -112,6 +112,10 @@ Use the home toolbar's **Tenant** selector to keep Work and Family conversations
 
 Keep API tokens and passwords in the **Secret vault** (user menu). Agents see each secret's key and description, and read a value only when a task needs it. The vault runs as a separate service (`npm run start:vault`). See [secret vault](docs/vault.md).
 
+## Optional Cloudflare assistance
+
+User menu → **Cloudflare assistance** offers independent, off-by-default switches for Clef prompt-injection checks, Clairic tool-result extraction, and Clairic tool discovery. These cost money and send relevant content to Cloudflare. One account-scoped Workers AI token serves both models. Currently supports the Pi RPC harness only. See [configuration, limits and comparison guidance](docs/cloudflare-assistance.md).
+
 ## License
 
 [GNU AGPL-3.0](LICENSE). You may use, change and self-host Beezy freely; if you offer a modified version to others over a network, you must publish your changes under the same license.

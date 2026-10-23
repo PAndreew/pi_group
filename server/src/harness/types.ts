@@ -84,6 +84,8 @@ export interface LiveSession {
 	readonly lastActivity: number;
 	subscribe(listener: (event: SessionEvent) => void): () => void;
 	prompt(input: PromptInput): Promise<void>;
+	/** Verify runtime interception is loaded before enabling paid assistance. */
+	verifyAssistance?(): Promise<void>;
 	abort(): Promise<void>;
 	setModel(provider: string, modelId: string): Promise<void>;
 	setThinkingLevel(level: string): Promise<void>;

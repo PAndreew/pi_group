@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { agentEnvironment } from "../assistance.js";
 import { config } from "../config.js";
 import { platform, type SandboxProcess } from "../ports/index.js";
 import { expireInteractions, interactionEnvironment } from "../interactions.js";
@@ -23,7 +24,7 @@ function piCommand(args: string[]) {
 export function runPi(args: string[], cwd: string, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
 	return new Promise((resolve) => {
 		const { command, argv, shell } = piCommand(args);
-		const child = platform().sandbox.spawn(command, argv, { cwd, env: { ...process.env, PI_SKIP_VERSION_CHECK: "1" }, shell });
+		const child = platform().sandbox.spawn(command, argv, { cwd, env: { ...agentEnvironment(), PI_SKIP_VERSION_CHECK: "1" }, shell });
 		child.end();
 		let stdout = "";
 		let stderr = "";
@@ -79,11 +80,11 @@ class RpcProcess {
 
 	constructor(args: string[], cwd: string, sessionKey?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
-		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("vault.mjs")];
+		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("vault.mjs"), ...extension("cloudflare-assistance.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		this.child = platform().sandbox.spawn(command, argv, {
 			cwd,
-			env: { ...process.env, PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) },
+			env: { ...agentEnvironment(), PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) },
 			shell,
 		});
 		this.child.onStdout((chunk) => this.read(this.decoder.write(chunk)));
@@ -310,6 +311,9 @@ class PiLiveSession extends LiveSessionBase {
 				break;
 			case "extension_error":
 				this.notice("warn", `Extension error: ${record.error}`);
+				// Pi normally logs extension exceptions and continues. A failed context
+				// guard must not silently send the unfiltered result to the provider.
+				if (String(record.extensionPath ?? "").endsWith("cloudflare-assistance.mjs")) this.rpc.write({ type: "abort" });
 				break;
 		}
 	}
@@ -342,6 +346,11 @@ class PiLiveSession extends LiveSessionBase {
 	answerDialog(id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean }) {
 		this.rpc.write({ type: "extension_ui_response", id, ...answer });
 		this.dropDialog(id);
+	}
+
+	async verifyAssistance() {
+		const { commands } = await this.rpc.send({ type: "get_commands" });
+		if (!commands?.some((c: Any) => c.name === "beezy-assistance-ready")) throw new Error("Cloudflare runtime extension is unavailable. Reopen the session with a compatible pi version.");
 	}
 
 	async prompt(input: PromptInput) {

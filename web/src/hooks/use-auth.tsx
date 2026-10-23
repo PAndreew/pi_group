@@ -1,7 +1,7 @@
 import { toast } from "sonner"
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { unsubscribePush } from "@/hooks/use-run-notifications"
-import { ApiError, api, type User, type SessionDefaults } from "@/lib/api"
+import { ApiError, api, type User, type SessionDefaults, type AssistanceSettings } from "@/lib/api"
 import { clearStates } from "@/lib/state-cache"
 import { activeTenant, setActiveTenant } from "@/lib/tenant"
 
@@ -11,6 +11,7 @@ interface AuthValue {
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   saveDefaults: (defaults: SessionDefaults) => Promise<void>
+  saveAssistance: (settings: AssistanceSettings) => Promise<void>
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
@@ -107,7 +108,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(user)
   }, [])
 
-  return <AuthContext.Provider value={{ user, loading, login, logout, saveDefaults }}>{children}</AuthContext.Provider>
+  const saveAssistance = useCallback(async (settings: AssistanceSettings) => {
+    const { user } = await api.saveAssistance(settings)
+    setUser(user)
+  }, [])
+
+  return <AuthContext.Provider value={{ user, loading, login, logout, saveDefaults, saveAssistance }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
