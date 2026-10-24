@@ -1,4 +1,4 @@
-import { Bot, Clock, FolderOpen, Gauge, Hammer, Paperclip, SquareTerminal } from "lucide-react"
+import { Clock, FolderOpen, Gauge, Hammer, Paperclip, SquareTerminal } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { ExplorerDialog } from "@/components/explorer-dialog"
 import { JobsDialog } from "@/components/jobs-dialog"
@@ -22,14 +22,11 @@ export function ComposerTools({
   sessionKey,
   folder,
   onAttach,
-  onModel,
   onInsert,
 }: {
   sessionKey?: string
   folder: string
   onAttach?: () => void
-  /** Defaults to the saved session defaults when there is no session. */
-  onModel?: () => void
   onInsert?: (text: string) => void
 }) {
   const { user } = useAuth()
@@ -37,7 +34,7 @@ export function ComposerTools({
   const [panel, setPanel] = useState<Panel>()
   const pendingJobs = usePendingJobs()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
-  const icon = (name: Panel | "attach" | "model", label: string, node: React.ReactNode, onClick: () => void) => (
+  const icon = (name: Panel | "attach", label: string, node: React.ReactNode, onClick: () => void) => (
     <Button key={name} variant="ghost" size="icon" className="composer-icon size-10 [&_svg]:size-[22px]" data-active={panel === name} onClick={onClick} aria-label={label} title={label}>
       {node}
     </Button>
@@ -47,7 +44,6 @@ export function ComposerTools({
     <>
       <div className="flex items-center justify-center gap-0.5">
         {onAttach && icon("attach", "Attach files", <Paperclip className="size-[22px]" />, onAttach)}
-        {icon("model", sessionKey ? "Provider, model and thinking" : "Defaults for new sessions", <Bot className="size-[22px]" />, onModel ?? nav.openDefaults)}
         {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal className="size-[22px]" />, () => setPanel("terminal"))}
         {icon("tools", "Tools, skills, commands and MCP servers", <Hammer className="size-[22px]" />, () => setPanel("tools"))}
         {icon(

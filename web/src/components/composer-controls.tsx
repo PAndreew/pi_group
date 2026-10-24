@@ -1,4 +1,4 @@
-import { Brain, Camera } from "lucide-react"
+import { Brain, Camera, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
@@ -23,6 +23,14 @@ export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled 
     }, (error) => toast.error(`Cannot load providers: ${error.message}`))
   }, [sessionKey, user?.sessionDefaults?.harness])
   const [models, setModels] = useState<ModelInfo[]>([])
+  // New settings start the draft over, so it picks up the saved runtime, model and reasoning.
+  const savedDefaults = JSON.stringify(user?.sessionDefaults ?? null)
+  const lastDefaults = useRef(savedDefaults)
+  useEffect(() => {
+    if (lastDefaults.current === savedDefaults) return
+    lastDefaults.current = savedDefaults
+    if (!sessionKey) onDraftChange?.({})
+  }, [savedDefaults, sessionKey, onDraftChange])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
@@ -86,9 +94,9 @@ export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled 
     <div className="shrink-0">
       <button ref={reasoning} type="button" className="composer-icon flex h-11 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} data-active={open} disabled={disabled || locked || busy || levels.length < 2} onPointerDown={(e) => e.preventDefault()} onClick={() => setOpen((current) => !current)}><Brain className="size-6" /><span className="text-xs">{short[level] ?? level}</span></button>
       {open && createPortal(<div role="dialog" aria-label="Reasoning settings" style={popupPosition} className="fixed z-50 rounded border bg-popover p-3 text-popover-foreground shadow" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false) }}>
-        <div className="mb-2 flex justify-between text-xs"><span>Reasoning: {level}</span><button type="button" aria-label="Close reasoning" onClick={() => setOpen(false)}>×</button></div>
-        <input aria-label="Reasoning level" aria-valuetext={level} type="range" min={0} max={levels.length - 1} step={1} value={Math.max(0, levels.indexOf(level))} disabled={busy} className="w-full" onChange={(e) => { const thinkingLevel = levels[Number(e.target.value)]; if (sessionKey) void change(() => api.setThinking(sessionKey, thinkingLevel)); else onDraftChange?.({ ...draft, thinkingLevel }) }} />
-        <div className="flex justify-between text-[10px]">{levels.map((l) => <span key={l}>{short[l] ?? l}</span>)}</div>
+        <div className="-mt-1 -mr-1 flex items-center justify-between text-sm"><span>Reasoning: {level}</span><button type="button" aria-label="Close reasoning" className="grid size-11 place-items-center rounded hover:bg-accent" onClick={() => setOpen(false)}><X className="size-6" /></button></div>
+        <input aria-label="Reasoning level" aria-valuetext={level} type="range" min={0} max={levels.length - 1} step={1} value={Math.max(0, levels.indexOf(level))} disabled={busy} className="reasoning-range" onChange={(e) => { const thinkingLevel = levels[Number(e.target.value)]; if (sessionKey) void change(() => api.setThinking(sessionKey, thinkingLevel)); else onDraftChange?.({ ...draft, thinkingLevel }) }} />
+        <div className="flex justify-between text-xs">{levels.map((l) => <span key={l}>{short[l] ?? l}</span>)}</div>
       </div>, document.body)}
     </div>
     <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onCamera(Array.from(e.target.files ?? [])); e.target.value = "" }} />

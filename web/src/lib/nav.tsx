@@ -8,8 +8,6 @@ export interface Nav {
   openFile: (path: string) => void
   /** Start a session in a folder with the saved defaults (or ask for them first). */
   newSession: (folder: string) => void
-  /** Saved provider, model and thinking for new sessions. */
-  openDefaults: () => void
 }
 
 export const NavContext = createContext<Nav | null>(null)

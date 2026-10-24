@@ -28,15 +28,15 @@ import { ImageGallery } from "@/components/image-gallery"
 import { EditPreview, MessageActions } from "@/components/message-actions"
 import { imageRefs, uploadDir } from "@/lib/attachments"
 import { MessageBody } from "@/components/message-body"
-import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
+import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
+import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
-import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
 import { StepStrip } from "@/components/step-strip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -229,7 +229,7 @@ function RunView({
   return (
     <div className="space-y-2" id={sourceId}>
       {user && (
-        <div>
+        <div {...replySource(userText)}>
           <div className={cn(pendingDelete && "opacity-50")}>
             <UserBubble message={user} folder={folder} />
           </div>
@@ -248,7 +248,7 @@ function RunView({
         </div>
       )}
       {(run.steps.length > 0 || run.running || answerText || question || answered?.length) && (
-        <div>
+        <div {...(answerText ? replySource(answerText) : {})}>
           <AgentBubble run={run} onOpen={onOpen} question={question} onAnswer={onAnswer} answered={answered} interactions={interactions} folder={folder} />
           {answerText && !run.running && (
             <MessageActions
@@ -284,13 +284,13 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
-  const [modelOpen, setModelOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [answered, setAnswered] = useState<Answered[]>([])
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
+  const jumper = useJumpToBottom(scroller, stick)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const refresh = useCallback(() => {
@@ -512,10 +512,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
 
       <div
         ref={scroller}
-        onScroll={(e) => {
-          const el = e.currentTarget
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-        }}
+        onScroll={jumper.onScroll}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <div className="mx-auto max-w-3xl space-y-5 px-3 py-4 sm:px-4">
@@ -551,7 +548,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
         </div>
       </div>
 
-      <div data-chat-composer className="shrink-0 border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
+      <div data-chat-composer className="relative shrink-0 border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
+        <JumpToBottom show={jumper.away} onClick={jumper.jump} />
         <div className="mx-auto max-w-3xl space-y-2">
           {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}
           {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
@@ -630,7 +628,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 </ComposerBox>
                 </div>
               </div>
-              <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()} onModel={() => setModelOpen(true)} onInsert={setText} />
+              <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()} onInsert={setText} />
               {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
             </>
           ) : (
@@ -641,13 +639,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
         </div>
       </div>
 
-      <Dialog open={modelOpen} onOpenChange={setModelOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Provider, model & thinking</DialogTitle><DialogDescription>Change this session’s configuration without starting a new session.</DialogDescription></DialogHeader>
-          <ModelPicker models={models} value={state?.model} disabled={!canWrite} onChange={(m) => act(() => api.setModel(sessionKey, m.provider, m.id))} />
-          <ThinkingPicker value={state?.thinkingLevel} disabled={!canWrite} onChange={(level) => act(() => api.setThinking(sessionKey, level))} />
-        </DialogContent>
-      </Dialog>
       <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />

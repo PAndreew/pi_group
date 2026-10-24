@@ -3,19 +3,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { type ModelInfo, THINKING_LEVELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-/** Provider picker (only when more than one provider is configured) plus model picker. */
+/** Provider picker (only when more than one provider is configured, unless `showProvider`) plus model picker. */
 export function ModelPicker({
   models,
   value,
   onChange,
   disabled,
   compact,
+  showProvider,
 }: {
   models: ModelInfo[]
   value?: { provider: string; id: string }
   onChange: (model: { provider: string; id: string }) => void
   disabled?: boolean
   compact?: boolean
+  showProvider?: boolean
 }) {
   const providers = useMemo(() => [...new Set(models.map((m) => m.provider))].sort(), [models])
   const provider = value?.provider && providers.includes(value.provider) ? value.provider : providers[0]
@@ -33,7 +35,7 @@ export function ModelPicker({
 
   return (
     <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5">
-      {providers.length > 1 && (
+      {(providers.length > 1 || showProvider) && (
         <Select
           value={provider}
           disabled={disabled}
@@ -70,14 +72,14 @@ export function ModelPicker({
   )
 }
 
-export function ThinkingPicker({ value, onChange, disabled, compact }: { value?: string; onChange: (v: string) => void; disabled?: boolean; compact?: boolean }) {
+export function ThinkingPicker({ value, onChange, disabled, compact, levels = THINKING_LEVELS }: { value?: string; onChange: (v: string) => void; disabled?: boolean; compact?: boolean; levels?: readonly string[] }) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger size={compact ? "sm" : "default"} className={cn("w-auto", compact && "text-xs")} aria-label="Thinking level">
         <SelectValue placeholder="thinking" />
       </SelectTrigger>
       <SelectContent>
-        {THINKING_LEVELS.map((l) => (
+        {levels.map((l) => (
           <SelectItem key={l} value={l}>
             think: {l}
           </SelectItem>

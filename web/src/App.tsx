@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Bell, BellOff, Bot, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Sun, Users, Vault } from "lucide-react"
+import { Activity, ArrowLeft, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Settings, Sun, Users, Vault } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { ChatList } from "@/components/chat-list"
@@ -8,6 +8,7 @@ import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
+import { SettingsDialog } from "@/components/settings-dialog"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -125,7 +126,7 @@ function Workspace() {
   const [route, setRoute] = useRoute()
   const notifications = useRunNotifications(route.session, route.chat)
   const [newFolder, setNewFolder] = useState<string>()
-  const [defaultsOpen, setDefaultsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -140,7 +141,6 @@ function Workspace() {
       openSession: (key, folder) => setRoute({ session: key, chat: undefined, file: undefined, ...(folder !== undefined ? { folder } : {}) }),
       openFile: (path) => setRoute({ file: path, chat: undefined, session: undefined }),
       newSession: (folder) => setNewFolder(folder),
-      openDefaults: () => setDefaultsOpen(true),
     }),
     [setRoute],
   )
@@ -207,8 +207,8 @@ function Workspace() {
                 {notifications.enabled ? <Bell /> : <BellOff />}
                 {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : notificationsUnavailable()}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDefaultsOpen(true)}>
-                <Bot /> Session defaults
+              <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                <Settings /> Settings
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
                 <Users /> Profile picture
@@ -272,7 +272,7 @@ function Workspace() {
             nav.openSession(s.key, s.path)
           }}
         />
-        <NewSessionDialog folder={route.folder} open={defaultsOpen} onOpenChange={setDefaultsOpen} onCreated={() => {}} defaultsOnly />
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />

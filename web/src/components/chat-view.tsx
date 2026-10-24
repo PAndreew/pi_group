@@ -9,7 +9,8 @@ import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
 import { MessageBody } from "@/components/message-body"
-import { focusComposer, ReplyPreview, ReplyStack, selectReply } from "@/components/message-reply"
+import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
+import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
@@ -118,6 +119,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
+  const jumper = useJumpToBottom(scroller, stick)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const latest = useRef<ChatMessage[]>(undefined)
@@ -283,10 +285,7 @@ export function ChatView({ chatId }: { chatId: string }) {
         )}
       </header>
 
-      <div ref={scroller} onScroll={(event) => {
-        const el = event.currentTarget
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-      }} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      <div ref={scroller} onScroll={jumper.onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {!messages && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         <div className="mx-auto grid max-w-3xl gap-2">
           {messages?.map((m, i) => {
@@ -301,14 +300,14 @@ export function ChatView({ chatId }: { chatId: string }) {
               const actions = content && m.status !== "working" ? (
                 <MessageActions copy={content} onReply={onReply} onShare={() => setForwarding(content)} onEdit={() => startEdit(m, content)} editBlocked={piWorking ? "Wait until Beezy has finished" : m.status !== "done" ? "Only finished replies can be edited" : undefined} />
               ) : null
-              return <div key={m.id} id={sourceId}><PiMessage m={m} folder={chat?.folder} onWatch={watch} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
+              return <div key={m.id} id={sourceId} {...replySource(content)}><PiMessage m={m} folder={chat?.folder} onWatch={watch} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
             const own = authorId === user?.id
             const align = own ? "end" : "start"
             return (
-              <div key={m.id} id={sourceId}>
+              <div key={m.id} id={sourceId} {...replySource(content)}>
                 <HumanMessage m={m} own={own} showName={authorId !== previous} folder={chat?.folder} />
                 <div className={cn(!own && "pl-10")}>
                   <Reactions reactions={m.reactions} selfId={user?.id} names={nameOf} align={align} onReact={(emoji) => void react(m, emoji)} />
@@ -330,7 +329,8 @@ export function ChatView({ chatId }: { chatId: string }) {
         </div>
       </div>
 
-      <div data-chat-composer className={cn("mx-auto grid w-full max-w-3xl shrink-0 gap-1 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3", !chat && "pointer-events-none opacity-60")}>
+      <div data-chat-composer className={cn("relative mx-auto grid w-full max-w-3xl shrink-0 gap-1 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3", !chat && "pointer-events-none opacity-60")}>
+        <JumpToBottom show={jumper.away} onClick={jumper.jump} />
         {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}
         {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
         <input
@@ -361,7 +361,6 @@ export function ChatView({ chatId }: { chatId: string }) {
             sessionKey={chat.sessionKey}
             folder={chat.folder}
             onAttach={() => fileInput.current?.click()}
-            onModel={watch}
             onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}@pi ${command}`)}
           />
         )}

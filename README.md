@@ -100,6 +100,13 @@ Edit `.env` and restart Beezy. See [`.env.example`](.env.example) for all option
 | `ADMIN_PASSWORD` | Initial admin password; change existing passwords in the app. |
 | `PI_BIN` | Which pi executable to use. |
 
+### Agent runtimes
+
+Each person picks their runtime, provider, model and reasoning level under user menu → **Settings**; new sessions and chats start with them, and a session's model and reasoning can still be switched under its message box.
+
+- **pi** (default): pi over RPC, with Beezy's agent tools (secret vault, scheduled jobs, questions, file links).
+- **pi durable**: runs inside the server and survives restarts.
+
 **Only invite people you trust with shell access to this machine.** Anyone who can prompt the agent can ask it to run commands with the server user’s permissions. `FS_ROOT` limits the file browser, not the agent.
 
 Service setup, updates and development commands: [Operations](docs/operations.md). How it fits together, and how a deployment swaps the storage and runtime underneath: [Architecture](docs/architecture.md).

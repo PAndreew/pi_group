@@ -15,10 +15,8 @@ export function NewSessionDialog({
   open,
   onOpenChange,
   onCreated,
-  defaultsOnly = false,
 }: {
   folder: string
-  defaultsOnly?: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated: (session: SessionSummary) => void
@@ -82,15 +80,15 @@ export function NewSessionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="grid-cols-[minmax(0,1fr)]">
         <DialogHeader>
-          <DialogTitle>{defaultsOnly ? "Session defaults" : "New session"}</DialogTitle>
-          <DialogDescription className="min-w-0 break-words">{defaultsOnly ? "Your default provider, model and thinking level, saved across devices." : `in /${folder}`}</DialogDescription>
+          <DialogTitle>New session</DialogTitle>
+          <DialogDescription className="min-w-0 break-words">in /{folder}</DialogDescription>
         </DialogHeader>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-            <Label>Harness</Label>
+            <Label>Runtime</Label>
             <Select value={harness} onValueChange={setHarness}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Harness" />
+                <SelectValue placeholder="Runtime" />
               </SelectTrigger>
               <SelectContent>
                 {harnesses.map((h) => (
@@ -109,29 +107,28 @@ export function NewSessionDialog({
             {loadingModels ? <Loader2 className="size-4 animate-spin" /> : <ModelPicker models={models} value={model} onChange={setModel} />}
           </div>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-            <Label>Thinking</Label>
+            <Label>Reasoning</Label>
             <ThinkingPicker value={thinking} onChange={setThinking} />
           </div>
-          {!defaultsOnly && <div className="grid gap-2">
+          <div className="grid gap-2">
             <Label htmlFor="session-name">Name (optional)</Label>
             <Input id="session-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. refactor auth" />
-          </div>}
+          </div>
           <Button variant="outline" disabled={!harness || !model || !thinking || loadingModels} onClick={async () => {
             try {
               await saveDefaults({ harness: harness!, model: model!, thinkingLevel: thinking! })
-              toast.success("Default provider, model and thinking level saved")
-              if (defaultsOnly) onOpenChange(false)
+              toast.success("Saved to your settings")
             } catch (error) { toast.error((error as Error).message) }
-          }}>Save as my defaults</Button>
+          }}>Save to my settings</Button>
           <p className="text-xs text-muted-foreground">New sessions are private. Share them from the session menu.</p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          {!defaultsOnly && <Button onClick={create} disabled={!harness || creating || loadingModels}>
+          <Button onClick={create} disabled={!harness || creating || loadingModels}>
             {creating && <Loader2 className="animate-spin" />} Create
-          </Button>}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

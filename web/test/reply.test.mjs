@@ -29,3 +29,12 @@ test('editing a reply keeps its quote and replaces only the new text', () => {
   assert.ok(replaceReplyBody(sent, 'Thank you!').startsWith('@pi Replying to Beezy:'))
   assert.equal(replaceReplyBody('Hello', 'Hi'), 'Hi')
 })
+test('a quote card finds the nearest earlier message with its text', async () => {
+  const { findReplySource } = await import('../src/lib/reply.ts')
+  const sources = ['Hello', 'Answer\n\nwith  spacing', 'Hello', 'Replying to Bob:\n> Hello\n\nThanks']
+  assert.equal(findReplySource(sources, 'Hello'), 2)
+  assert.equal(findReplySource(sources, 'Answer\nwith spacing'), 1, 'whitespace differences do not matter')
+  assert.equal(findReplySource(['Answer, later edited'], 'Answer, later\nmore'), 0, 'an edited original still matches by its first line')
+  assert.equal(findReplySource(sources, 'Never said'), -1)
+  assert.equal(findReplySource(sources, ''), -1)
+})
