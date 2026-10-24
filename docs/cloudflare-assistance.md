@@ -81,6 +81,8 @@ Limits of this first version:
 
 ## Compare benefit against cost
 
+A ready-to-use [Clairic A/B test pack](../benchmarks/clairic/README.md) provides deterministic fixtures, prompts, answer/citation grading, local usage collection and paired reporting without starting paid runs. Runtime `beezy-assistance-extraction` custom entries record only run/tool IDs and source/context character counts, so the pack can verify that context replacement actually happened. These audits are not sent to the main model, contain no source text, and do not claim character counts are token savings.
+
 Use fresh sessions with the same main model, task and fixtures. Test baseline (all off), Clef alone, extraction alone, routing alone, then combinations. Record task completion/correctness, false-positive warnings, missed injections, omitted facts, recovery calls, irrelevant tool selections, agent tokens, total cost and elapsed time. Auxiliary telemetry alone cannot establish task success or net savings.
 
 Include benign quoted attacks, direct user instructions, hostile retrieved pages, large logs, pagination, empty/null extracts, Unicode source spans, schema failures, provider timeouts and budget exhaustion. No replay/benchmark should send private production content without consent.

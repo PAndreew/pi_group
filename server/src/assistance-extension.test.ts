@@ -77,7 +77,13 @@ test("runtime filtering preserves originals, defers tools, handles revocation an
 		assert.match(filtered.messages[1].content[0].text, /Untrusted excerpts/);
 		assert.equal(filtered.messages[1].content[0].text.includes("irrelevant"), false);
 		assert.equal(original.content[0].text.includes("irrelevant"), true, "saved original must not be mutated");
+		const audit = entries.find(e => typeof e.sourceCharacters === "number");
+		assert.equal(audit.applied, true);
+		assert.equal(audit.sourceCharacters, original.content[0].text.length);
+		assert.equal(audit.contextCharacters, filtered.messages[1].content[0].text.length);
+		assert.equal(JSON.stringify(audit).includes("relevant source passage"), false, "audit must not persist task/source text");
 		await handlers.context({ messages }, ctx);
+		assert.equal(entries.filter(e => typeof e.sourceCharacters === "number").length, 1, "audit is deduplicated per result/task");
 		assert.equal(extractCalls, 1, "same task/result should use cache");
 		await handlers.context({ messages: [{ role: "user", content: "different task" }, original] }, ctx);
 		assert.equal(extractCalls, 2, "new task must invalidate extraction cache");
