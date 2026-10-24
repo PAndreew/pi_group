@@ -49,6 +49,19 @@ test("ambiguous identical queued prompts are not falsely attributed", () => {
 	assert.deepEqual(attributeMessages(data, [message("same"), message("same", 2)]).map((m) => m.author), [undefined, undefined]);
 });
 
+test("summary messages without content do not prevent subsequent prompts or lose authors", () => {
+	const data = ledger();
+	const history = [
+		{ role: "compactionSummary", summary: "Earlier conversation", tokensBefore: 1000 },
+		{ role: "branchSummary", summary: "Other branch" },
+	];
+	registerPrompt(data, history, { text: "continue" }, alice);
+	const messages = [...history, message("continue")];
+	assert.deepEqual(attributeMessages(data, messages)[2].author, alice);
+	assert.deepEqual(attributeMessages(JSON.parse(JSON.stringify(data)), messages)[2].author, alice);
+	assert.deepEqual(messages.slice(0, 2), history);
+});
+
 test("string content and image prompts are supported", () => {
 	const data = ledger();
 	registerPrompt(data, [], { text: "plain" }, alice);

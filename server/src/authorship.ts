@@ -7,7 +7,8 @@ export interface Authorship {
 	pending: { id: string; content: string; author: Author; existing: string[] }[];
 }
 
-const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** Summary/custom harness messages may legitimately have no content. Preserve existing hashes for defined values. */
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value) ?? "undefined").digest("hex");
 const contentKey = (content: unknown) => {
 	const blocks = typeof content === "string" ? [{ type: "text", text: content }] : content;
 	return hash(Array.isArray(blocks) ? blocks.map((block) => {
