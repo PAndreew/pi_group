@@ -3,6 +3,7 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { authenticate, authRoutes, ensureAdmin } from "./auth.js";
+import { attachBrowser, browserRoutes, closeBrowsers } from "./browser.js";
 import { capabilityRoutes } from "./capabilities.js";
 import { closeChats } from "./chats.js";
 import { config } from "./config.js";
@@ -46,6 +47,7 @@ api.use(pushRoutes());
 api.use(vaultRoutes());
 api.use(monitorRoutes(adapters));
 api.use(usageRoutes(adapters));
+api.use(browserRoutes());
 api.use(sessionRoutes(adapters));
 api.use((_req, res) => void res.status(404).json({ error: "Not found" }));
 app.use("/api", api);
@@ -88,6 +90,11 @@ const server = app.listen(config.port, config.host, () => {
 	console.log(`  pi:         ${config.piBin} (sessions in ${config.piSessionsDir})`);
 });
 attachTerminal(server);
+attachBrowser(server);
+server.on("upgrade", (req, socket) => {
+	const { pathname } = new URL(req.url ?? "/", "http://localhost");
+	if (pathname !== "/api/terminal" && pathname !== "/api/browser") socket.destroy();
+});
 
 // Adapters load in the background so the UI is reachable at once (pi-ai's model catalog is large).
 void Promise.all(adapters.map((a) => a.init().catch((error) => console.error(`${a.id} init failed:`, error))));
@@ -98,7 +105,7 @@ async function shutdown() {
 	stopping = true;
 	console.log("Shutting down…");
 	server.close();
-	await Promise.allSettled(adapters.map((a) => a.shutdown()));
+	await Promise.allSettled([...adapters.map((a) => a.shutdown()), closeBrowsers()]);
 	saveNow();
 	closeChats();
 	process.exit(0);

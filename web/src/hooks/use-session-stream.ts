@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react"
 import { toast } from "sonner"
-import { api, type SessionState } from "@/lib/api"
+import { api, type BrowserStatus, type SessionState } from "@/lib/api"
 import { liveStream } from "@/lib/live-stream"
 import { cachedState, loadState, saveState } from "@/lib/state-cache"
 
@@ -15,6 +15,7 @@ type Event =
   | { type: "pending_deletes"; pendingDeletes: NonNullable<SessionState["pendingDeletes"]> }
   | { type: "reset"; cached?: SessionState }
   | { type: "cached"; state: SessionState }
+  | ({ type: "browser" } & BrowserStatus)
 
 function reduce(state: SessionState | null, event: Event): SessionState | null {
   switch (event.type) {
@@ -51,12 +52,15 @@ export function useSessionStream(key: string | undefined) {
   const [state, dispatch] = useReducer(reduce, null)
   const [connected, setConnected] = useState(false)
   const [deletedBy, setDeletedBy] = useState<string>()
+  /** The session's shared browser, once it opens or closes while we watch. */
+  const [browser, setBrowser] = useState<BrowserStatus>()
   const live = useRef(false)
 
   useEffect(() => {
     live.current = false
     dispatch({ type: "reset", cached: key ? cachedState(key) : undefined })
     setDeletedBy(undefined)
+    setBrowser(undefined)
     if (!key) return
     void loadState(key).then((cached) => cached && dispatch({ type: "cached", state: cached }))
     const close = liveStream(api.eventsUrl(key), {
@@ -68,6 +72,10 @@ export function useSessionStream(key: string | undefined) {
           if (event.silent) return
           if (event.level === "error") toast.error(event.text)
           else if (event.level === "warn") toast.warning(event.text)
+          return
+        }
+        if (event.type === "browser") {
+          setBrowser({ open: event.open, url: event.url, title: event.title })
           return
         }
         if (event.type === "deleted") {
@@ -99,5 +107,5 @@ export function useSessionStream(key: string | undefined) {
     }
   }, [key, state])
 
-  return { state, connected, deletedBy }
+  return { state, connected, deletedBy, browser }
 }

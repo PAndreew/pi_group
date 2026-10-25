@@ -10,6 +10,7 @@ Run Beezy on your computer or Raspberry Pi, then use it from a browser or phone.
 
 - Human-only chats, private agent chats, or both in the same conversation.
 - Choose a working folder, browse files, and preview the agent’s output.
+- A [shared browser](docs/browser.md) per session: see your app live together and pick elements to ask about.
 - Pick your model, reply to messages, and steer or stop an agent.
 - Separate accounts for your group; an installable mobile web app.
 
@@ -104,7 +105,7 @@ Edit `.env` and restart Beezy. See [`.env.example`](.env.example) for all option
 
 Each person picks their runtime, provider, model and reasoning level under user menu → **Settings**; new sessions and chats start with them, and a session's model and reasoning can still be switched under its message box.
 
-- **pi** (default): pi over RPC, with Beezy's agent tools (secret vault, scheduled jobs, questions, file links).
+- **pi** (default): pi over RPC, with Beezy's agent tools (secret vault, scheduled jobs, questions, file links, shared browser).
 - **pi durable**: runs inside the server and survives restarts.
 
 **Only invite people you trust with shell access to this machine.** Anyone who can prompt the agent can ask it to run commands with the server user’s permissions. `FS_ROOT` limits the file browser, not the agent.

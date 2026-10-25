@@ -1,4 +1,4 @@
-import { Clock, FolderOpen, Gauge, Hammer, Paperclip, SquareTerminal } from "lucide-react"
+import { Clock, FolderOpen, Gauge, Globe, Hammer, Paperclip, SquareTerminal } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { ExplorerDialog } from "@/components/explorer-dialog"
 import { JobsDialog } from "@/components/jobs-dialog"
@@ -23,11 +23,14 @@ export function ComposerTools({
   folder,
   onAttach,
   onInsert,
+  browser,
 }: {
   sessionKey?: string
   folder: string
   onAttach?: () => void
   onInsert?: (text: string) => void
+  /** The session's shared browser: whether it runs, whether its panel shows, and showing or hiding it. */
+  browser?: { live: boolean; shown: boolean; toggle: () => void }
 }) {
   const { user } = useAuth()
   const nav = useNav()
@@ -57,6 +60,14 @@ export function ComposerTools({
         )}
         {icon("monitor", "Resource monitor", <Gauge className="size-[22px]" />, () => setPanel("monitor"))}
         {icon("explorer", "Folders and files", <FolderOpen className="size-[22px]" />, () => setPanel("explorer"))}
+        {browser && (
+          <Button variant="ghost" size="icon" className="composer-icon size-10 [&_svg]:size-[22px]" data-active={browser.shown} onClick={browser.toggle} aria-label="Shared browser" title="Shared browser: open your app or any page, pick elements to reference">
+            <span className="relative">
+              <Globe className="size-[22px]" />
+              {browser.live && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-green-500" />}
+            </span>
+          </Button>
+        )}
       </div>
       <ToolsDialog
         sessionKey={sessionKey}

@@ -117,7 +117,7 @@ async function openPty(cwd: string, cols: number, rows: number): Promise<Pty> {
 const size = (value: unknown, fallback: number, max: number) => Math.min(Math.max(Number(value) || fallback, 2), max);
 
 /** WebSockets cannot carry the X-Pi-Group header, so cross-site use is blocked by checking Origin. */
-function sameOrigin(req: IncomingMessage) {
+export function sameOrigin(req: IncomingMessage) {
 	const origin = req.headers.origin;
 	if (!origin) return false;
 	const host = new URL(origin).host;
@@ -135,7 +135,7 @@ export function attachTerminal(server: Server) {
 
 	server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
 		const url = new URL(req.url ?? "/", "http://localhost");
-		if (url.pathname !== "/api/terminal") return void socket.destroy();
+		if (url.pathname !== "/api/terminal") return;
 		const request = req as Request;
 		authenticate(request, {} as Response, () => {
 		const refuse = (status: string) => {

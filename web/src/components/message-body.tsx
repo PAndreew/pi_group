@@ -3,6 +3,7 @@ import { ImageGallery } from "@/components/image-gallery"
 import { Markdown } from "@/components/markdown"
 import { api } from "@/lib/api"
 import { imageRefs, withoutAttachmentList } from "@/lib/attachments"
+import { withoutRefDetails } from "@/lib/element-refs"
 import { linkify, parseShared } from "@/lib/shared"
 import { cn } from "@/lib/utils"
 
@@ -36,7 +37,7 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
     return (
       <>
         <div className="whitespace-pre-wrap break-words">
-          <Linkified text={withoutAttachmentList(text)} />
+          <Linkified text={withoutRefDetails(withoutAttachmentList(text))} />
         </div>
         <ImageGallery images={images} />
       </>

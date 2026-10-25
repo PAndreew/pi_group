@@ -312,6 +312,13 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return data as T
 }
 
+/** A session's shared browser, as the server reports it. */
+export interface BrowserStatus {
+  open: boolean
+  url?: string
+  title?: string
+}
+
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString()
 const enc = encodeURIComponent
 
@@ -402,6 +409,8 @@ export const api = {
   /** A session's folder, or a plain folder when there is no session yet. */
   terminalUrl: (target: { key?: string; path?: string }, cols: number, rows: number) =>
     tenantUrl(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ ...(target.key ? { key: target.key } : { path: target.path ?? "" }), cols: String(cols), rows: String(rows) })}`),
+  browserUrl: (key: string) => tenantUrl(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/browser?${q({ key })}`),
+  browserStatus: (key: string) => request<BrowserStatus>("GET", `/api/sessions/${enc(key)}/browser`),
   prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
   /** Edit a message of a session whose agent is not running; `expect` is its current text. */
