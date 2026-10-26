@@ -394,7 +394,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			};
 		});
 		const sessions = Object.values(store.data.sessions)
-			.filter((meta) => !linked.has(meta.key) && involved(user, meta))
+			.filter((meta) => !linked.has(meta.key) && !meta.applet && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
 				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };

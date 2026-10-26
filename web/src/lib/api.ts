@@ -286,6 +286,65 @@ export interface Job {
 
 export type JobInput = Pick<Job, "name" | "schedule" | "steps" | "enabled">
 
+interface AppletInput {
+  id: string
+  label: string
+  help?: string
+  optional?: boolean
+}
+/** One part of an applet's form; the server checks the same closed set. */
+export type AppletField =
+  | { type: "markdown"; text: string }
+  | (AppletInput & { type: "text" | "textarea"; placeholder?: string; default?: string })
+  | (AppletInput & { type: "number"; min?: number; max?: number; step?: number; default?: number })
+  | (AppletInput & { type: "select"; options: string[]; multiple?: boolean; default?: string | string[] })
+  | (AppletInput & { type: "radio"; options: string[]; default?: string })
+  | { type: "checkbox"; id: string; label: string; help?: string; default?: boolean }
+  | (AppletInput & { type: "file"; accept?: string[]; multiple?: boolean })
+  | (AppletInput & { type: "folder" })
+
+export interface AppletSpec {
+  slug: string
+  title: string
+  description: string
+  fields: AppletField[]
+  actions: { id: string; label: string; prompt: string }[]
+}
+
+/** A form an agent designed: each button starts a new session with its filled-in prompt, once approved. */
+export interface Applet {
+  id: string
+  slug: string
+  title: string
+  description: string
+  folder: string
+  owner: string
+  version: number
+  approved: boolean
+  approvedBy?: string
+  approvedAt?: string
+  /** A change waiting for approval while the approved version keeps running. */
+  hasDraft: boolean
+  canManage: boolean
+  note?: string
+  proposedIn?: JobSessionRef
+  createdAt: string
+  updatedAt: string
+  spec?: AppletSpec
+  draft?: AppletSpec
+}
+
+export interface AppletRun {
+  id: string
+  action: string
+  values: Record<string, string | number | boolean | string[]>
+  status: "running" | "finished" | "error" | "aborted"
+  output?: string
+  startedAt: string
+  finishedAt?: string
+  session?: { key: string; folder: string }
+}
+
 import { activeTenant, tenantUrl } from "@/lib/tenant"
 
 export class ApiError extends Error {
@@ -399,6 +458,12 @@ export const api = {
   approveJob: (id: string) => request<{ job: Job }>("POST", `/api/jobs/${enc(id)}/approve`),
   runJob: (id: string) => request<{ job: Job }>("POST", `/api/jobs/${enc(id)}/run`),
   deleteJob: (id: string) => request("DELETE", `/api/jobs/${enc(id)}`),
+  applets: () => request<{ applets: Applet[] }>("GET", "/api/applets"),
+  applet: (ref: string) => request<{ applet: Applet & { spec: AppletSpec }; runs: AppletRun[] }>("GET", `/api/applets/${enc(ref)}`),
+  approveApplet: (id: string, version: number) => request<{ applet: Applet }>("POST", `/api/applets/${enc(id)}/approve`, { version }),
+  discardAppletDraft: (id: string) => request<{ applet: Applet }>("DELETE", `/api/applets/${enc(id)}/draft`),
+  runApplet: (id: string, action: string, values: Record<string, unknown>) => request<{ run: AppletRun }>("POST", `/api/applets/${enc(id)}/run`, { action, values }),
+  deleteApplet: (id: string) => request("DELETE", `/api/applets/${enc(id)}`),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>

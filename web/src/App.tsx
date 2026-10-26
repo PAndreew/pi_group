@@ -1,6 +1,7 @@
 import { Activity, ArrowLeft, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Settings, Sun, Users, Vault } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Toaster, toast } from "sonner"
+import { AppletView } from "@/components/applet-view"
 import { ChatList } from "@/components/chat-list"
 import { TenantPicker } from "@/components/tenant-picker"
 import { ChatView } from "@/components/chat-view"
@@ -45,11 +46,15 @@ interface Route {
   chat?: string
   session?: string
   file?: string
+  /** An applet's slug; /apps/<slug> links land here too. */
+  app?: string
 }
 
 function readRoute(): Route {
+  const slug = /^\/apps\/([a-z0-9-]+)\/?$/.exec(window.location.pathname)?.[1]
+  if (slug) window.history.replaceState(null, "", `/#app=${slug}`)
   const params = new URLSearchParams(window.location.hash.slice(1))
-  return { folder: params.get("f") ?? "", chat: params.get("c") ?? undefined, session: params.get("s") ?? undefined, file: params.get("file") ?? undefined }
+  return { folder: params.get("f") ?? "", chat: params.get("c") ?? undefined, session: params.get("s") ?? undefined, file: params.get("file") ?? undefined, app: params.get("app") ?? undefined }
 }
 
 function writeRoute(route: Route) {
@@ -58,6 +63,7 @@ function writeRoute(route: Route) {
   if (route.chat) params.set("c", route.chat)
   if (route.session) params.set("s", route.session)
   if (route.file) params.set("file", route.file)
+  if (route.app) params.set("app", route.app)
   const hash = `#${params.toString()}`
   if (hash !== window.location.hash) window.history.pushState(null, "", hash)
 }
@@ -136,10 +142,11 @@ function Workspace() {
 
   const nav: Nav = useMemo(
     () => ({
-      home: () => setRoute({ chat: undefined, session: undefined, file: undefined }),
-      openChat: (id) => setRoute({ chat: id, session: undefined, file: undefined }),
-      openSession: (key, folder) => setRoute({ session: key, chat: undefined, file: undefined, ...(folder !== undefined ? { folder } : {}) }),
-      openFile: (path) => setRoute({ file: path, chat: undefined, session: undefined }),
+      home: () => setRoute({ chat: undefined, session: undefined, file: undefined, app: undefined }),
+      openChat: (id) => setRoute({ chat: id, session: undefined, file: undefined, app: undefined }),
+      openSession: (key, folder) => setRoute({ session: key, chat: undefined, file: undefined, app: undefined, ...(folder !== undefined ? { folder } : {}) }),
+      openFile: (path) => setRoute({ file: path, chat: undefined, session: undefined, app: undefined }),
+      openApplet: (slug) => setRoute({ app: slug, chat: undefined, session: undefined, file: undefined }),
       newSession: (folder) => setNewFolder(folder),
     }),
     [setRoute],
@@ -171,7 +178,7 @@ function Workspace() {
       <ArrowLeft />
     </Button>
   )
-  const inside = Boolean(route.chat || route.session || route.file)
+  const inside = Boolean(route.chat || route.session || route.file || route.app)
 
   return (
     <NavContext.Provider value={nav}>
@@ -257,6 +264,8 @@ function Workspace() {
                   <FileViewer path={route.file} />
                 </div>
               </div>
+            ) : route.app ? (
+              <AppletView key={route.app} slug={route.app} header={back} />
             ) : (
               <Home />
             )}

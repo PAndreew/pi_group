@@ -38,6 +38,7 @@ export function interactionEnvironment(key: string) {
   return {
     BEEZY_INTERACTION_URL: `${base}/interaction-bridge/${encodeURIComponent(key)}`,
     BEEZY_JOBS_URL: `${base}/job-bridge/${encodeURIComponent(key)}`,
+    BEEZY_APPLETS_URL: `${base}/applet-bridge/${encodeURIComponent(key)}`,
     BEEZY_BROWSER_URL: `${base}/browser-bridge/${encodeURIComponent(key)}`,
     BEEZY_ASSISTANCE_URL: `${base}/assistance-bridge/${encodeURIComponent(key)}`,
     BEEZY_INTERACTION_TOKEN: tokenFor(key),

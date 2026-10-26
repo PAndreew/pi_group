@@ -105,7 +105,7 @@ Edit `.env` and restart Beezy. See [`.env.example`](.env.example) for all option
 
 Each person picks their runtime, provider, model and reasoning level under user menu → **Settings**; new sessions and chats start with them, and a session's model and reasoning can still be switched under its message box.
 
-- **pi** (default): pi over RPC, with Beezy's agent tools (secret vault, scheduled jobs, questions, file links, shared browser).
+- **pi** (default): pi over RPC, with Beezy's agent tools (secret vault, scheduled jobs, applets, questions, file links, shared browser).
 - **pi durable**: runs inside the server and survives restarts.
 
 **Only invite people you trust with shell access to this machine.** Anyone who can prompt the agent can ask it to run commands with the server user’s permissions. `FS_ROOT` limits the file browser, not the agent.

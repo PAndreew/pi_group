@@ -6,6 +6,7 @@ export interface Nav {
   openChat: (id: string) => void
   openSession: (key: string, folder?: string) => void
   openFile: (path: string) => void
+  openApplet: (slug: string) => void
   /** Start a session in a folder with the saved defaults (or ask for them first). */
   newSession: (folder: string) => void
 }

@@ -1,3 +1,4 @@
+import type { Applet, AppletRun } from "./applets.js";
 import { config } from "./config.js";
 import type { AssistanceSettings, SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
@@ -60,6 +61,8 @@ export interface SessionMeta {
 	consolidatedAt?: string;
 	/** The master session that keeps the consolidated memory. */
 	memory?: boolean;
+	/** The applet whose run started this session; it is listed under the applet, not with the chats. */
+	applet?: string;
 	/** Messages to remove once the agent stops running; see sessions.ts. */
 	pendingDeletes?: PendingDelete[];
 }
@@ -96,9 +99,11 @@ interface Data {
 	pushSubscriptions: PushSubscriptionRecord[];
 	interactions: Interaction[];
 	jobs: Job[];
+	applets: Applet[];
+	appletRuns: AppletRun[];
 }
 
-let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [] };
+let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [], applets: [], appletRuns: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {
@@ -110,6 +115,7 @@ export function loadStore() {
 	}
 	for (const meta of Object.values(data.sessions)) meta.tenantId ??= "work";
 	for (const job of data.jobs) job.tenantId ??= "work";
+	for (const applet of data.applets) applet.tenantId ??= "work";
 }
 
 function flush() {

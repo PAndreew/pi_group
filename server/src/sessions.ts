@@ -10,6 +10,7 @@ import { mcpReport, piResources } from "./inventory.js";
 import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
 import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
+import { mountApplets } from "./applets.js";
 import { mountMemory } from "./memory.js";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
@@ -908,6 +909,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		isQuiet: (key) => hub.quiet(key),
 		canWrite: (user, meta) => canWrite(accessOf(user, meta)),
 	});
+	mountApplets(router, chatDeps);
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
 	platform().scheduler.every(5_000, () => {
