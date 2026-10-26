@@ -139,11 +139,44 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
   )
 }
 
+function ShareProjectDialog({ project, onClose }: { project: Project; onClose: () => void }) {
+  const { reload } = useProjects()
+  const [users, setUsers] = useState<{ id: string; username: string }[]>([])
+  const [members, setMembers] = useState(project.memberIds)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { void api.directory().then(r => setUsers(r.users), error => toast.error(error.message)) }, [])
+  const save = async () => {
+    setBusy(true)
+    try {
+      await api.shareProject(project.id, members)
+      reload()
+      onClose()
+    } catch (error) { toast.error((error as Error).message) }
+    finally { setBusy(false) }
+  }
+  return <Dialog open onOpenChange={open => !open && onClose()}>
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Share project with…</DialogTitle>
+        <DialogDescription>Share “{project.name}” and its linked folders. No sessions are shared automatically, including earlier sessions. Share conversations separately from their session menu.</DialogDescription>
+      </DialogHeader>
+      <div className="grid max-h-64 gap-2 overflow-y-auto">
+        {users.map(user => <label key={user.id} className="flex items-center gap-2">
+          <input type="checkbox" checked={members.includes(user.id)} onChange={e => setMembers(e.target.checked ? [...members, user.id] : members.filter(id => id !== user.id))} />
+          {user.username}
+        </label>)}
+      </div>
+      <DialogFooter><Button disabled={busy} onClick={() => void save()}>Save sharing</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>
+}
+
 /** The secondary navbar: General, every other project, then +. The active project's menu edits or deletes it. */
 export function ProjectBar({ className, onSelect }: { className?: string; onSelect?: () => void }) {
   const { projects, active, setActive, reload } = useProjects()
   const [editing, setEditing] = useState<Project>()
   const [creating, setCreating] = useState(false)
+  const [sharing, setSharing] = useState<Project>()
   const [confirmDelete, setConfirmDelete] = useState<Project>()
 
   const remove = async (project: Project) => {
@@ -184,6 +217,9 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">/{project.folder}</DropdownMenuLabel>
+                  <DropdownMenuItem onSelect={() => setSharing(project)}>
+                    Share project with…
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setEditing(project)}>
                     <Pencil /> Rename or link folders
                   </DropdownMenuItem>
@@ -200,6 +236,7 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
       <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => setCreating(true)} aria-label="New project" title="New project">
         <Plus />
       </Button>
+      {sharing && <ShareProjectDialog project={sharing} onClose={() => setSharing(undefined)} />}
       <ProjectDialog open={creating} onOpenChange={setCreating} />
       <ProjectDialog project={editing} open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(undefined)} />
       <Dialog open={Boolean(confirmDelete)} onOpenChange={(open) => !open && setConfirmDelete(undefined)}>

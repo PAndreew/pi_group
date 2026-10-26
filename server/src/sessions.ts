@@ -686,7 +686,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				projectId: z.string().optional(),
 			})
 			.parse(req.body);
-		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path), projectId: checkProject(body.projectId) });
+		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path), projectId: checkProject(body.projectId, req.user!) });
 		res.json({ session: summary(meta, req.user!) });
 	});
 

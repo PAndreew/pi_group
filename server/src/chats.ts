@@ -349,7 +349,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		const body = z
 			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional(), projectId: z.string().optional() })
 			.parse(req.body);
-		const projectId = checkProject(body.projectId);
+		const projectId = checkProject(body.projectId, req.user!);
 		const project = projectId ? tenantProjects().find((p) => p.id === projectId) : undefined;
 		if (body.userIds.some(id => !isTenantMember(id))) throw new HttpError(400, "Cannot add members from another tenant");
 		const others = [...new Set(body.userIds)].filter((id) => id !== user.id && store.userById(id));

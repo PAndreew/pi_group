@@ -255,6 +255,7 @@ export interface Project {
   links: string[]
   general: boolean
   canManage: boolean
+  memberIds: string[]
   createdAt: string
 }
 
@@ -466,6 +467,7 @@ export const api = {
   chats: (project?: string) => request<{ chats: ChatListItem[] }>("GET", `/api/chats${project ? `?${q({ project })}` : ""}`),
   projects: () => request<{ projects: Project[] }>("GET", "/api/projects"),
   createProject: (body: { name: string; links?: string[] }) => request<{ project: Project }>("POST", "/api/projects", body),
+  shareProject: (id: string, memberIds: string[]) => request<{ project: Project }>("PUT", `/api/projects/${enc(id)}/shares`, { memberIds }),
   updateProject: (id: string, body: { name?: string; links?: string[] }) => request<{ project: Project }>("PATCH", `/api/projects/${enc(id)}`, body),
   deleteProject: (id: string) => request("DELETE", `/api/projects/${enc(id)}`),
   moveToProject: (kind: "session" | "chat", id: string, to: string) => request<{ moved: boolean; request?: MoveRequest }>("POST", "/api/projects/move", { kind, id, to }),

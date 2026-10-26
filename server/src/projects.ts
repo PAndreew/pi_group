@@ -33,6 +33,8 @@ export interface Project {
 	links?: string[];
 	general?: boolean;
 	createdBy: string;
+	/** Explicit project access; never grants access to conversations. */
+	memberIds?: string[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -85,9 +87,13 @@ export function projectIdOf(cwd: string, explicit?: string, tenant = tenantId())
 }
 
 /** Check a project ID a client sent for the active tenant. */
-export function checkProject(id: string | undefined) {
+export function canAccessProject(user: User, project: Project) {
+	return tenantAccess(user, project) && (Boolean(project.general) || project.createdBy === user.id || Boolean(project.memberIds?.includes(user.id)));
+}
+
+export function checkProject(id: string | undefined, user?: User) {
 	if (id === undefined) return undefined;
-	if (!tenantProjects().some((p) => p.id === id)) throw new HttpError(400, "No such project");
+	if (!tenantProjects().some((p) => p.id === id && (!user || canAccessProject(user, p)))) throw new HttpError(400, "No such project");
 	return id;
 }
 
@@ -109,19 +115,20 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		folder: toRel(project.cwd),
 		links: (project.links ?? []).map(toRel),
 		general: Boolean(project.general),
-		canManage: !project.general && (user.role === "admin" || user.id === project.createdBy),
+		canManage: !project.general && user.id === project.createdBy,
+		memberIds: project.memberIds ?? [],
 		createdAt: project.createdAt,
 	});
 
 	const find = (req: Request) => {
 		const project = tenantProjects().find((p) => p.id === req.params.id);
-		if (!project) throw new HttpError(404, "Project not found");
+		if (!project || !canAccessProject(req.user!, project)) throw new HttpError(404, "Project not found");
 		return project;
 	};
 	const manage = (req: Request) => {
 		const project = find(req);
 		if (project.general) throw new HttpError(400, "General cannot be changed");
-		if (req.user!.role !== "admin" && req.user!.id !== project.createdBy) throw new HttpError(403, "Only the project's creator or an admin can change it");
+		if (req.user!.id !== project.createdBy) throw new HttpError(403, "Only the project's creator can change it");
 		return project;
 	};
 
@@ -177,7 +184,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 
 	router.get("/projects", (req, res) => {
 		const user = req.user!;
-		const projects = tenantProjects().sort((a, b) => Number(Boolean(b.general)) - Number(Boolean(a.general)) || a.createdAt.localeCompare(b.createdAt));
+		const projects = tenantProjects().filter((p) => canAccessProject(user, p)).sort((a, b) => Number(Boolean(b.general)) - Number(Boolean(a.general)) || a.createdAt.localeCompare(b.createdAt));
 		res.json({ projects: projects.map((p) => view(p, user)) });
 	});
 
@@ -194,6 +201,18 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		saveNow();
 		changed(tenantId());
 		res.json({ project: view(project, user) });
+	});
+
+	// Folder membership is deliberately independent of session shares and chat membership.
+	router.put("/projects/:id/shares", (req, res) => {
+		const project = manage(req);
+		const { memberIds } = z.object({ memberIds: z.array(z.string()).max(100) }).strict().parse(req.body);
+		if (memberIds.some((id) => !store.userById(id) || !isTenantMember(id))) throw new HttpError(400, "Share only with members of this tenant");
+		project.memberIds = [...new Set(memberIds)].filter((id) => id !== project.createdBy);
+		project.updatedAt = new Date().toISOString();
+		saveNow();
+		changed(tenantId());
+		res.json({ project: view(project, req.user!) });
 	});
 
 	router.patch("/projects/:id", (req, res) => {
@@ -226,7 +245,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 	router.post("/projects/move", (req, res) => {
 		const user = req.user!;
 		const body = z.object({ kind: z.enum(["session", "chat"]), id: z.string().min(1), to: z.string().min(1) }).strict().parse(req.body);
-		const to = checkProject(body.to)!;
+		const to = checkProject(body.to, user)!;
 		const item = subject(body.kind, body.id, user);
 		if (item.from === to) throw new HttpError(400, "It is already in that project");
 		store.data.moveRequests = store.data.moveRequests.filter((m) => !(m.kind === body.kind && m.itemId === body.id));

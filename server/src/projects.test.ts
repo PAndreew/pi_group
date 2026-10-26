@@ -74,8 +74,18 @@ test("projects sort sessions in, move them, and ask the people in them first", a
 		projects = (await asOwner("GET", "/projects")).body.projects;
 		assert.deepEqual(projects.map((p: { name: string }) => p.name), ["General", "Apps", "Beezy", "Holiday 2027"]);
 		assert.equal(projects[1].canManage, true);
+		assert.equal((await asFriend("GET", "/projects")).body.projects.length, 1);
+		assert.equal((await asFriend("PATCH", `/projects/${apps.id}`, { name: "Mine" })).status, 404);
+		assert.equal((await asFriend("PUT", `/projects/${apps.id}/shares`, { memberIds: [friend.id] })).status, 404);
+		const before = JSON.stringify(store.data.sessions);
+		assert.equal((await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: [friend.id, friend.id] })).status, 200);
+		assert.equal(JSON.stringify(store.data.sessions), before, "Project sharing must not change any session permissions");
 		assert.equal((await asFriend("GET", "/projects")).body.projects[1].canManage, false);
 		assert.equal((await asFriend("PATCH", `/projects/${apps.id}`, { name: "Mine" })).status, 403);
+		assert.equal((await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: ["missing"] })).status, 400);
+		await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: [] });
+		assert.equal((await asFriend("GET", "/projects")).body.projects.length, 1);
+		await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: [friend.id] });
 		assert.equal((await asOwner("DELETE", `/projects/${general}`)).status, 400);
 
 		// Alone in it: the move happens at once, and the working folder stays.

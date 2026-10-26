@@ -8,7 +8,22 @@ A project is the unit that sessions and chats are grouped by, inside a tenant. T
   - **Everything uploaded in the project lands in `<project folder>/uploads`.** That includes composer attachments, the camera, and chat files, even for a session that works in a linked folder. The agent is given the path relative to its own working folder.
 - **Linked folders:** you can link existing folders, such as a git repo, when creating the project or later from its "⋯" menu. Home offers linked folders first as starting points.
 - **Membership:** an item with no explicit project belongs to the project whose own or linked folder contains its working folder most specifically, or to General if none does. Linking a folder therefore picks up the sessions already working in it. Items started inside a project, or moved into one, record that project explicitly.
-- **Deleting a project** deletes no files and no conversations. Its folder stays on disk, and its items go back to the project that contains their folder, or to General. Only the project's creator or an admin can rename it, change its links, or delete it.
+- **Deleting a project** deletes no files and no conversations. Its folder stays on disk, and its items go back to the project that contains their folder, or to General. Only the project's creator can rename it, change its links, share it, or delete it.
+
+## Explicit sharing (first implementation slice)
+
+The project menu has **Share project with…**. The creator chooses existing members of the active tenant. Non-General projects appear only for their creator and explicitly selected members; tenant membership alone does not list them. Existing projects without `memberIds` become creator-only. General remains tenant-wide for now.
+
+Project membership never modifies session shares or chat membership. Earlier and future private sessions are not automatically shared. Sharing a conversation still uses the existing session sharing/forwarding controls. Revoking project membership does not revoke separately shared conversations.
+
+**This is not yet a filesystem or agent security boundary.** The existing tenant-wide file API, terminal and local agent processes remain unchanged. Administrators also retain existing session access. Do not rely on project membership to isolate untrusted collaborators yet.
+
+Remaining work before the complete privacy model can be deployed:
+- Enforce allowed project/linked roots consistently in file routes, folder search, terminal, jobs, agent tools and subprocesses, including symlinks and overlapping roots.
+- Personal General is the butler: user-authorized cross-space reads, with writes delegated to a scoped project agent. Group General reads only the group space.
+- Add explicit tenant invitations/sharing without implicit project grants.
+- Preserve private transcript isolation even from project agents; selected-turn sharing must publish only those turns.
+- Resolve moved conversations whose working directories lie outside the destination project, and invitation/revocation for their participants.
 
 ## Moving
 
@@ -23,7 +38,8 @@ Swipe a row left to show **Move** next to **Delete**. For a chat with other peop
 
 | Route | |
 |---|---|
-| `GET /api/projects` | The tenant's projects, General first |
+| `GET /api/projects` | Explicitly accessible projects, General first |
+| `PUT /api/projects/:id/shares` `{memberIds}` | Creator replaces project membership; sessions unchanged |
 | `POST /api/projects` `{name, links?}` | New project with a new folder of its own |
 | `PATCH /api/projects/:id` `{name?, links?}` | Rename, or replace the linked folders |
 | `DELETE /api/projects/:id` | Delete; items fall back as described above |
