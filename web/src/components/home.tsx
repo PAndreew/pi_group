@@ -10,14 +10,17 @@ import { useOverlayOpen } from "@/hooks/use-overlay-open"
 import { uploadDir } from "@/lib/attachments"
 import { api } from "@/lib/api"
 import { useNav } from "@/lib/nav"
+import { useProjects } from "@/lib/projects"
 
 /**
- * Home: earlier chats, and a message box that starts a new one. Mention @pi, one or more people,
- * or both; add #folder to pick where pi works (the shared chat folder otherwise).
+ * Home: the active project's chats, and a message box that starts a new one in it. Mention @pi, one
+ * or more people, or both; add #folder to pick where pi works (the project's folder otherwise; for
+ * General, the shared chat folder).
  */
 export function Home() {
   const { user } = useAuth()
   const nav = useNav()
+  const { active: project } = useProjects()
   const [text, setText] = useState("")
   const [busy, setBusy] = useState(false)
   const [agent, setAgent] = useState(false)
@@ -31,20 +34,23 @@ export function Home() {
     api.searchFolders("").then((r) => setChatFolder(r.chatFolder), () => {})
   }, [])
 
-  // The last three folders chats or sessions worked in (not the shared chat folder), to start there again.
+  const base = project && !project.general ? project.folder : chatFolder
+
+  // The project's last three folders chats or sessions worked in (not its own folder), to start there again.
   useEffect(() => {
-    api.chats().then(({ chats }) => {
-      const used = chats.filter((c) => c.folder && c.folder !== chatFolder && (c.kind === "session" || c.pi)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    if (!project) return
+    api.chats(project.id).then(({ chats }) => {
+      const used = chats.filter((c) => c.folder && c.folder !== base && (c.kind === "session" || c.pi)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       setRecent([...new Set(used.map((c) => c.folder))].slice(0, 3))
     }, () => {})
-  }, [chatFolder])
+  }, [base, project])
 
-  // The icons act on the #folder being typed, or the chat folder.
-  const folder = parseMessage(text, []).folder ?? chatFolder
+  // The icons act on the #folder being typed, or the project's folder.
+  const folder = parseMessage(text, []).folder ?? base
 
   return (
     <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col">
-      <ChatList className="min-h-0 flex-1" />
+      <ChatList key={project?.id} className="min-h-0 flex-1" requests />
       <div className="grid gap-1 border-t p-2 sm:p-3">
         {recent.length > 0 && !overlay && (
           <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-1" aria-label="Recent folders">
@@ -72,7 +78,7 @@ export function Home() {
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder="Start a chat: message, @someone, #folder…"
+          placeholder={project && !project.general ? `Start a chat in ${project.name}: message, @someone, #folder…` : "Start a chat: message, @someone, #folder…"}
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => {
@@ -89,10 +95,10 @@ export function Home() {
             if (!message.text) return void toast.info("Write a message too.")
             setBusy(true)
             try {
-              const started = await api.startChat({ text: message.text, pi: message.pi, userIds: message.people.map((p) => p.id), folder: message.folder, ...(message.pi ? composerConfig : {}) })
+              const started = await api.startChat({ text: message.text, pi: message.pi, userIds: message.people.map((p) => p.id), folder: message.folder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(message.pi ? composerConfig : {}) })
               setText("")
               if (started.chat) nav.openChat(started.chat)
-              else if (started.session) nav.openSession(started.session, message.folder ?? chatFolder)
+              else if (started.session) nav.openSession(started.session, message.folder ?? base)
             } catch (error) {
               toast.error((error as Error).message)
             } finally {

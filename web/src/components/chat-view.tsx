@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Folder, Loader2, TriangleAlert } from "lucide-react"
+import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, TriangleAlert } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -9,6 +9,7 @@ import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
 import { MessageBody } from "@/components/message-body"
+import { MoveDialog, type MoveTarget } from "@/components/project-move"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
@@ -260,6 +261,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   }
 
   const watch = chat?.sessionKey ? () => nav.openSession(chat.sessionKey!, chat.folder) : undefined
+  const [moving, setMoving] = useState<MoveTarget>()
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -283,6 +285,12 @@ export function ChatView({ chatId }: { chatId: string }) {
             <PiAvatar small /> Session
           </Button>
         )}
+        {chat && (
+          <Button variant="ghost" size="icon-sm" onClick={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })} aria-label="Move to project" title="Move to project">
+            <FolderInput />
+          </Button>
+        )}
+        <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} />
       </header>
 
       <div ref={scroller} onScroll={jumper.onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">

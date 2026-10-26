@@ -11,6 +11,7 @@ import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js
 import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountApplets } from "./applets.js";
+import { checkProject, mountProjects, projectIdOf } from "./projects.js";
 import { mountMemory } from "./memory.js";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
@@ -286,7 +287,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** Start a session for `user` in `cwd` with their saved defaults unless overridden. */
 	const createSession = async (
 		user: User,
-		input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"] },
+		input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"]; projectId?: string },
 	) => {
 		if (!isTenantMember(user.id)) throw new HttpError(403, "Tenant unavailable");
 		resolveSafe(toRel(input.cwd));
@@ -299,6 +300,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			cwd: input.cwd,
 			ownerId: user.id,
 			name: input.name || undefined,
+			projectId: input.projectId,
 			visibility: input.visibility ?? "private",
 			shares: (input.shares ?? []).filter((s) => s.userId !== user.id && isTenantMember(s.userId)),
 		});
@@ -526,6 +528,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			visibility: meta.visibility,
 			shares: meta.shares.map((s) => ({ ...s, username: store.userById(s.userId)?.username ?? "unknown" })),
 			access: accessOf(user, meta),
+			projectId: projectIdOf(meta.cwd, meta.projectId, meta.tenantId ?? "work"),
 		};
 	};
 
@@ -680,9 +683,10 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				thinkingLevel: z.string().optional(),
 				visibility: z.enum(["private", "shared"]).default("private"),
 				shares: shareSchema.default([]),
+				projectId: z.string().optional(),
 			})
 			.parse(req.body);
-		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path) });
+		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path), projectId: checkProject(body.projectId) });
 		res.json({ session: summary(meta, req.user!) });
 	});
 
@@ -910,6 +914,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		canWrite: (user, meta) => canWrite(accessOf(user, meta)),
 	});
 	mountApplets(router, chatDeps);
+	mountProjects(router, chatDeps);
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
 	platform().scheduler.every(5_000, () => {

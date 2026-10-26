@@ -9,6 +9,7 @@ import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
+import { ProjectBar } from "@/components/project-bar"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import { useAppViewport } from "@/hooks/use-app-viewport"
 import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
 import { api, type SessionSummary } from "@/lib/api"
 import { type Nav, NavContext } from "@/lib/nav"
+import { ProjectsProvider, useProjects } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 
 type Theme = "light" | "dark" | "system"
@@ -130,6 +132,7 @@ function Workspace() {
   const { user, logout } = useAuth()
   const [theme, setTheme] = useTheme()
   const [route, setRoute] = useRoute()
+  const { active: project } = useProjects()
   const notifications = useRunNotifications(route.session, route.chat)
   const [newFolder, setNewFolder] = useState<string>()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -159,10 +162,10 @@ function Workspace() {
     setNewFolder(undefined)
     setCreating(true)
     api
-      .createSession({ harness: user.sessionDefaults.harness, path: folder })
+      .createSession({ harness: user.sessionDefaults.harness, path: folder, projectId: project?.id })
       .then(({ session }) => nav.openSession(session.key, folder), (error) => toast.error(error.message))
       .finally(() => setCreating(false))
-  }, [newFolder, user, creating, nav])
+  }, [newFolder, user, creating, nav, project])
 
   const consolidate = async () => {
     try {
@@ -247,8 +250,10 @@ function Workspace() {
           </DropdownMenu>
         </header>
 
+        <ProjectBar className={inside ? "hidden md:flex" : "flex"} onSelect={nav.home} />
+
         <div className="flex min-h-0 flex-1">
-          {inside && <ChatList selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex" />}
+          {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex" />}
           <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
             {route.chat ? (
               <ChatView key={route.chat} chatId={route.chat} />
@@ -274,6 +279,7 @@ function Workspace() {
 
         <NewSessionDialog
           folder={newFolder ?? route.folder}
+          projectId={project?.id}
           open={newFolder !== undefined && !user?.sessionDefaults}
           onOpenChange={(open) => !open && setNewFolder(undefined)}
           onCreated={(s) => {
@@ -300,7 +306,13 @@ function Gate() {
         <Loader2 className="animate-spin text-muted-foreground" />
       </div>
     )
-  return user ? <Workspace /> : <Login />
+  return user ? (
+    <ProjectsProvider>
+      <Workspace />
+    </ProjectsProvider>
+  ) : (
+    <Login />
+  )
 }
 
 export default function App() {

@@ -12,11 +12,13 @@ import { api, type Harness, type ModelInfo, type SessionSummary } from "@/lib/ap
 
 export function NewSessionDialog({
   folder,
+  projectId,
   open,
   onOpenChange,
   onCreated,
 }: {
   folder: string
+  projectId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated: (session: SessionSummary) => void
@@ -65,7 +67,7 @@ export function NewSessionDialog({
     if (!harness) return
     setCreating(true)
     try {
-      const { session } = await api.createSession({ harness, path: folder, name: name.trim() || undefined, model, thinkingLevel: thinking })
+      const { session } = await api.createSession({ harness, path: folder, projectId, name: name.trim() || undefined, model, thinkingLevel: thinking })
       onCreated(session)
       onOpenChange(false)
     } catch (error) {

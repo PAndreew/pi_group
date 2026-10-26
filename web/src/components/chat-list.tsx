@@ -1,14 +1,16 @@
-import { Brain, Folder, Loader2, Search } from "lucide-react"
+import { Brain, Folder, FolderInput, Loader2, Search, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { PiAvatar } from "@/components/mention-composer"
-import { SwipeDelete } from "@/components/swipe-delete"
+import { MoveDialog, MoveRequests, type MoveTarget } from "@/components/project-move"
+import { SwipeActions, type SwipeAction } from "@/components/swipe-actions"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
 import { api, type ChatListItem, type SessionSummary } from "@/lib/api"
 import { useNav } from "@/lib/nav"
+import { useProjects } from "@/lib/projects"
 import { subscribeUserEvents } from "@/lib/user-stream"
 import { cn, timeAgo } from "@/lib/utils"
 
@@ -25,10 +27,16 @@ function Avatars({ item, selfId }: { item: ChatListItem; selfId?: string }) {
   )
 }
 
-/** Earlier chats, newest first; chats with pi working are on top. Refreshes on chat and run events. */
-export function ChatList({ selected, className }: { selected?: string; className?: string }) {
+/**
+ * The active project's chats and sessions, newest first; those with pi working are on top. Refreshes
+ * on chat, run and project events. Swiping a row left uncovers Move (to another project) and Delete.
+ */
+export function ChatList({ selected, className, requests }: { selected?: string; className?: string; requests?: boolean }) {
   const { user } = useAuth()
   const nav = useNav()
+  const { active } = useProjects()
+  const project = active?.id
+  const [moving, setMoving] = useState<MoveTarget>()
   const [items, setItems] = useState<ChatListItem[]>()
   const [query, setQuery] = useState("")
   const [swiped, setSwiped] = useState<string>()
@@ -36,11 +44,12 @@ export function ChatList({ selected, className }: { selected?: string; className
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
-    const load = () => api.chats().then(({ chats }) => setItems(chats), () => setItems((current) => current ?? []))
+    if (!project) return
+    const load = () => api.chats(project).then(({ chats }) => setItems(chats), () => setItems((current) => current ?? []))
     void load()
     const poll = setInterval(load, 20_000)
     const unsubscribe = subscribeUserEvents((event) => {
-      if (!["chat_message", "chat_update", "run", "stream_open"].includes(event.type)) return
+      if (!["chat_message", "chat_update", "run", "projects", "stream_open"].includes(event.type)) return
       clearTimeout(timer.current)
       timer.current = setTimeout(load, 300)
     })
@@ -52,7 +61,7 @@ export function ChatList({ selected, className }: { selected?: string; className
       unsubscribe()
       document.removeEventListener("visibilitychange", onVisible)
     }
-  }, [selected])
+  }, [selected, project])
 
   const q = query.trim().toLowerCase()
   const visible = items?.filter((i) => !q || i.title.toLowerCase().includes(q) || i.folder.toLowerCase().includes(q))
@@ -65,7 +74,8 @@ export function ChatList({ selected, className }: { selected?: string; className
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
-        {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : "No chats yet. Mention @pi or someone below to start one."}</p>}
+        {requests && <MoveRequests />}
+        {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : active && !active.general ? `Nothing in ${active.name} yet. Start a chat below, or move one here.` : "No chats yet. Mention @pi or someone below to start one."}</p>}
         {visible?.map((item) => {
           const row = (
           <button
@@ -92,25 +102,32 @@ export function ChatList({ selected, className }: { selected?: string; className
                     <span className="truncate">/{item.folder}</span>
                   </span>
                 )}
+                {item.moving && <span className="shrink-0 rounded-full border border-amber-500/50 px-1.5 text-[10px] text-amber-600 dark:text-amber-400" title="Waiting for the people in it to approve">→ {item.moving}</span>}
                 {item.kind === "chat" && item.unread > 0 && <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground tabular-nums">{item.unread}</span>}
               </span>
             </span>
           </button>
           )
-          if (item.kind !== "session" || !item.canDelete) return row
+          const actions: SwipeAction[] = []
+          if (item.canMove) actions.push({ label: `Move ${item.title} to another project`, icon: <FolderInput />, className: "bg-sky-600 hover:bg-sky-700", onClick: () => setMoving({ kind: item.kind, id: item.id, title: item.title, projectId: item.projectId }) })
+          if (item.kind === "session" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => void api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message)) })
+          if (!actions.length) return row
           return (
-            <SwipeDelete
-              key={item.id}
-              label={`Delete ${item.title}`}
-              open={swiped === item.id}
-              onOpenChange={(open) => setSwiped(open ? item.id : undefined)}
-              onDelete={() => api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message))}
-            >
+            <SwipeActions key={item.id} actions={actions} open={swiped === item.id} onOpenChange={(open) => setSwiped(open ? item.id : undefined)}>
               {row}
-            </SwipeDelete>
+            </SwipeActions>
           )
         })}
       </div>
+      <MoveDialog
+        item={moving}
+        onOpenChange={(open) => {
+          if (open) return
+          setMoving(undefined)
+          setSwiped(undefined)
+        }}
+        onMoved={() => project && void api.chats(project).then(({ chats }) => setItems(chats), () => {})}
+      />
       <DeleteSessionDialog
         session={deleting}
         onOpenChange={(open) => {

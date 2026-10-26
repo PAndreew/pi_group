@@ -4,6 +4,7 @@ import type { AssistanceSettings, SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 import type { Interaction } from "./interactions.js";
 import type { Job } from "./jobs.js";
+import type { MoveRequest, Project } from "./projects.js";
 import { platform } from "./ports/index.js";
 import { tenantId, type Tenant } from "./tenant-context.js";
 
@@ -61,6 +62,8 @@ export interface SessionMeta {
 	consolidatedAt?: string;
 	/** The master session that keeps the consolidated memory. */
 	memory?: boolean;
+	/** The project it was put in; without one it belongs to the project holding its folder (see projects.ts). */
+	projectId?: string;
 	/** The applet whose run started this session; it is listed under the applet, not with the chats. */
 	applet?: string;
 	/** Messages to remove once the agent stops running; see sessions.ts. */
@@ -101,9 +104,11 @@ interface Data {
 	jobs: Job[];
 	applets: Applet[];
 	appletRuns: AppletRun[];
+	projects: Project[];
+	moveRequests: MoveRequest[];
 }
 
-let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [], applets: [], appletRuns: [] };
+let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [], applets: [], appletRuns: [], projects: [], moveRequests: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {

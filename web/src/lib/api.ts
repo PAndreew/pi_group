@@ -79,6 +79,7 @@ export interface SessionSummary {
   owner?: string
   visibility: "private" | "shared"
   shares: { userId: string; username: string; access: Access }[]
+  projectId?: string
   access?: EffectiveAccess
 }
 
@@ -231,6 +232,7 @@ export interface Chat {
   id: string
   title: string
   folder: string
+  projectId?: string
   sessionKey?: string
   pi: boolean
   members: { id: string; username: string }[]
@@ -238,9 +240,37 @@ export interface Chat {
 }
 
 /** The home screen list: chats with people, and sessions shown as pi-only chats. */
+type ListedInProject = { projectId: string; canMove: boolean; /** The project a move waits to go to, for approval by the people in it. */ moving?: string }
 export type ChatListItem =
-  | { kind: "chat"; id: string; title: string; folder: string; pi: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } }
-  | { kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean }
+  | ({ kind: "chat"; id: string; title: string; folder: string; pi: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } } & ListedInProject)
+  | ({ kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean } & ListedInProject)
+
+/** What sessions and chats are grouped by within a tenant; General is the default. */
+export interface Project {
+  id: string
+  name: string
+  folder: string
+  general: boolean
+  canManage: boolean
+  createdAt: string
+}
+
+/** A move of a session or chat to another project, waiting for the people in it. */
+export interface MoveRequest {
+  id: string
+  kind: "session" | "chat"
+  itemId: string
+  title: string
+  from: string
+  to: string
+  toId: string
+  requestedBy: string
+  requestedById: string
+  approvedBy: string[]
+  waitingFor: string[]
+  waitingForIds: string[]
+  createdAt: string
+}
 
 /** A session or a chat with people, as the source or target of a shared message. */
 export type ShareRef = { kind: "session" | "chat"; id: string }
@@ -430,11 +460,19 @@ export const api = {
   sessionCounts: (path: string) => request<{ counts: Record<string, { total: number; running: number }> }>("GET", `/api/sessions/counts?${q({ path })}`),
   monitor: () => request<MonitorReport>("GET", "/api/monitor"),
   usage: (days: number, scope: "visible" | "mine") => request<UsageReport>("GET", `/api/usage?${q({ days: String(days), scope, tzOffset: String(new Date().getTimezoneOffset()) })}`),
-  chats: () => request<{ chats: ChatListItem[] }>("GET", "/api/chats"),
+  chats: (project?: string) => request<{ chats: ChatListItem[] }>("GET", `/api/chats${project ? `?${q({ project })}` : ""}`),
+  projects: () => request<{ projects: Project[] }>("GET", "/api/projects"),
+  createProject: (body: { name: string; folder: string; create?: boolean }) => request<{ project: Project }>("POST", "/api/projects", body),
+  updateProject: (id: string, body: { name?: string; folder?: string }) => request<{ project: Project }>("PATCH", `/api/projects/${enc(id)}`, body),
+  deleteProject: (id: string) => request("DELETE", `/api/projects/${enc(id)}`),
+  moveToProject: (kind: "session" | "chat", id: string, to: string) => request<{ moved: boolean; request?: MoveRequest }>("POST", "/api/projects/move", { kind, id, to }),
+  projectMoves: () => request<{ moves: MoveRequest[] }>("GET", "/api/projects/moves"),
+  answerMove: (id: string, approve: boolean) => request<{ moved: boolean }>("POST", `/api/projects/moves/${enc(id)}`, { approve }),
+  cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
   /** Admins: fold every conversation not yet in memory into it now. */
   consolidateMemory: () => request<{ started: boolean; pending?: number; reason?: string }>("POST", "/api/memory/consolidate", { all: true }),
   chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),
-  startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
+  startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string; projectId?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
   /** Messages after `after`, plus the current state of `check` (replies still shown as working). */
   chatSince: (id: string, after: number, check: number[]) =>
     request<{ messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}/messages?${q({ after: String(after), check: check.join(",") })}`),
@@ -466,7 +504,7 @@ export const api = {
   deleteApplet: (id: string) => request("DELETE", `/api/applets/${enc(id)}`),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
-  createSession: (body: { harness: string; path: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
+  createSession: (body: { harness: string; path: string; projectId?: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
     request<{ session: SessionSummary }>("POST", "/api/sessions", body),
   eventsUrl: (key: string) => tenantUrl(`/api/sessions/${enc(key)}/events`),
   tools: (key: string) => request<SessionTools>("GET", `/api/sessions/${enc(key)}/tools`),

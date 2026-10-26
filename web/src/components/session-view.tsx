@@ -6,6 +6,7 @@ import {
   Pin,
   PinOff,
   Power,
+  FolderInput,
   Share2,
   Trash2,
   TriangleAlert,
@@ -33,6 +34,7 @@ import { MessageBody } from "@/components/message-body"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
+import { MoveDialog, type MoveTarget } from "@/components/project-move"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
 import { StepStrip } from "@/components/step-strip"
@@ -291,6 +293,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [moving, setMoving] = useState<MoveTarget>()
   const [renameOpen, setRenameOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [answered, setAnswered] = useState<Answered[]>([])
@@ -515,6 +518,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setShareOpen(true)}>
                   <Share2 /> Access & sharing
                 </DropdownMenuItem>
+                <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setMoving({ kind: "session", id: sessionKey, title, projectId: summary.projectId })}>
+                  <FolderInput /> Move to project…
+                </DropdownMenuItem>
                 <DropdownMenuItem disabled={!canWrite} onSelect={() => act(async () => setSummary((await api.pin(sessionKey, !summary.pinned)).session))}>
                   {summary.pinned ? <PinOff /> : <Pin />} {summary.pinned ? "Allow idle shutdown" : "Keep running in background"}
                 </DropdownMenuItem>
@@ -696,6 +702,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
 
       <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
+      <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} onMoved={() => void api.session(sessionKey).then(({ session }) => setSummary(session), () => {})} />
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
       <ForwardDialog text={forwarding} from={{ kind: "session", id: sessionKey }} onOpenChange={(o) => !o && setForwarding(undefined)} />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

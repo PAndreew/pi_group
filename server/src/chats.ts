@@ -12,6 +12,7 @@ import { platform, type SqlDatabase } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type Rewrite, type RunOutcome } from "./sessions.js";
 import { type PendingDelete, type SessionMeta, store, type User } from "./store.js";
+import { checkProject, projectIdOf, tenantProjects } from "./projects.js";
 import { tenantId } from "./tenant-context.js";
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
 
@@ -51,6 +52,8 @@ export interface Chat {
 	/** Last message pi has seen; later human messages are sent as context with the next mention. */
 	piCursor: number;
 	consolidatedAt?: string;
+	/** Set when someone put the chat in a project; see projects.ts. */
+	projectId?: string;
 }
 
 const SCHEMA = `
@@ -79,6 +82,7 @@ function database() {
 		if (!columns.includes("reactions")) db.exec("ALTER TABLE messages ADD COLUMN reactions TEXT");
 		const chatColumns = (db.prepare("PRAGMA table_info(chats)").all() as Row[]).map(c => String(c.name));
 		if (!chatColumns.includes("tenant_id")) db.exec("ALTER TABLE chats ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'work'");
+		if (!chatColumns.includes("project_id")) db.exec("ALTER TABLE chats ADD COLUMN project_id TEXT");
 	}
 	return db;
 }
@@ -105,6 +109,7 @@ function toChat(row: Row): Chat {
 		updatedAt: String(row.updated_at),
 		piCursor: Number(row.pi_cursor),
 		consolidatedAt: str(row.consolidated_at),
+		projectId: str(row.project_id),
 	};
 }
 
@@ -132,6 +137,10 @@ export function chatOfSession(key: string) {
 	if (!db && !platform().sqlExists("chats")) return undefined;
 	const row = database().prepare("SELECT * FROM chats WHERE session_key = ?").get(key) as Row | undefined;
 	return row && toChat(row);
+}
+
+export function setChatProject(chatId: string, projectId: string) {
+	database().prepare("UPDATE chats SET project_id = ? WHERE id = ?").run(projectId, chatId);
 }
 
 export function memberIds(chatId: string) {
@@ -195,7 +204,7 @@ export function ensureChatFolder() {
 
 /** What the chat module needs from the session layer. */
 export interface ChatDeps {
-	createSession: (user: User, input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"] }) => Promise<SessionMeta>;
+	createSession: (user: User, input: { harness: string; cwd: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string; visibility?: SessionMeta["visibility"]; shares?: SessionMeta["shares"]; projectId?: string }) => Promise<SessionMeta>;
 	promptSession: (meta: SessionMeta, user: User, input: PromptInput) => Promise<void>;
 	/** Harness for a user's new sessions: their saved default if available, else the first that works. */
 	harnessFor: (user: User) => Promise<string>;
@@ -294,7 +303,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			if (!meta) {
 				const cwd = resolveSafe(chat.folder);
 				if (cwd === config.chatFolder) ensureChatFolder();
-				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, name: chatTitle({ ...chat, pi: true }) });
+				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, name: chatTitle({ ...chat, pi: true }), projectId: chat.projectId });
 				database().prepare("UPDATE chats SET session_key = ? WHERE id = ?").run(meta.key, chat.id);
 				chat = { ...chat, sessionKey: meta.key, pi: true };
 				addMembers(chat, []);
@@ -338,23 +347,25 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	router.post("/chats", async (req, res) => {
 		const user = req.user!;
 		const body = z
-			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional() })
+			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional(), projectId: z.string().optional() })
 			.parse(req.body);
+		const projectId = checkProject(body.projectId);
+		const project = projectId ? tenantProjects().find((p) => p.id === projectId) : undefined;
 		if (body.userIds.some(id => !isTenantMember(id))) throw new HttpError(400, "Cannot add members from another tenant");
 		const others = [...new Set(body.userIds)].filter((id) => id !== user.id && store.userById(id));
 		if (!body.pi && others.length === 0) throw new HttpError(400, "Mention @pi or at least one person");
-		const cwd = body.folder ? resolveSafe(body.folder) : ensureChatFolder();
+		const cwd = body.folder ? resolveSafe(body.folder) : project && !project.general ? project.cwd : ensureChatFolder();
 		if (!statSync(cwd).isDirectory()) throw new HttpError(400, "Not a folder");
 
 		if (others.length === 0) {
-			const meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, model: body.model, thinkingLevel: body.thinkingLevel });
+			const meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, model: body.model, thinkingLevel: body.thinkingLevel, projectId });
 			await deps.promptSession(meta, user, { text: body.text });
 			return void res.json({ session: meta.key });
 		}
 
 		const at = now();
 		const id = randomUUID();
-		database().prepare("INSERT INTO chats (id, folder, pi, created_by, created_at, updated_at, tenant_id) VALUES (?, ?, 0, ?, ?, ?, ?)").run(id, toRel(cwd), user.id, at, at, tenantId());
+		database().prepare("INSERT INTO chats (id, folder, pi, created_by, created_at, updated_at, tenant_id, project_id) VALUES (?, ?, 0, ?, ?, ?, ?, ?)").run(id, toRel(cwd), user.id, at, at, tenantId(), projectId ?? null);
 		const chat = getChat(id)!;
 		addMembers(chat, [user.id, ...others]);
 		const first = insert(id, { role: "user", content: [{ type: "text", text: body.text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
@@ -391,22 +402,30 @@ export function mountChats(router: Router, deps: ChatDeps) {
 				updatedAt: chat.updatedAt,
 				unread: Number(row.unread),
 				last: last && { author: authorName(last), text: textOf(last).slice(0, 200) },
+				projectId: projectIdOf(resolveSafe(chat.folder), chat.projectId),
+				canMove: true,
 			};
 		});
 		const sessions = Object.values(store.data.sessions)
 			.filter((meta) => !linked.has(meta.key) && !meta.applet && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
-				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
+				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: projectIdOf(meta.cwd, meta.projectId), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
 			});
-		const items = [...chats, ...sessions].sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
+		// ?project= narrows the list to one project; a pending move shows on the item.
+		const project = typeof req.query.project === "string" ? req.query.project : undefined;
+		const moving = new Map((store.data.moveRequests ?? []).map((m) => [`${m.kind}:${m.itemId}`, tenantProjects().find((p) => p.id === m.to)?.name]));
+		const items = [...chats, ...sessions]
+			.filter((item) => !project || item.projectId === project)
+			.map((item) => ({ ...item, moving: moving.get(`${item.kind}:${item.id}`) }))
+			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
 		res.json({ chats: items });
 	});
 
 	router.get("/chats/:id", (req, res) => {
 		const chat = membership(String(req.params.id), req.user!);
 		res.json({
-			chat: { ...chat, title: chatTitle(chat, req.user!.id), members: memberIds(chat.id).map((id) => ({ id, username: store.userById(id)?.username ?? "unknown" })) },
+			chat: { ...chat, projectId: projectIdOf(resolveSafe(chat.folder), chat.projectId), title: chatTitle(chat, req.user!.id), members: memberIds(chat.id).map((id) => ({ id, username: store.userById(id)?.username ?? "unknown" })) },
 			messages: chatMessages(chat.id),
 		});
 	});
