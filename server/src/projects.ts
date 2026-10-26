@@ -15,9 +15,10 @@ import { isTenantMember, tenantAccess, tenantOf } from "./tenants.js";
 
 /*
  * Projects: the context unit sessions and chats are grouped by, within a tenant. Each tenant has a
- * General project (its chat folder); others have a folder new sessions start in (or in a subfolder).
- * An item without an explicit project belongs to the project whose folder holds its working folder
- * most specifically, else General, so a project made from an existing folder adopts its history.
+ * General project (its chat folder). Every other project gets its own new folder, where new sessions
+ * start and uploads land, and can link existing folders (a git repo, say). An item without an
+ * explicit project belongs to the project whose own or linked folder holds its working folder most
+ * specifically, else General, so linking a folder adopts its history.
  * Moving an item keeps its working folder (pi finds transcripts by it); moving one other people
  * are in waits until each of them approves. See docs/projects.md.
  */
@@ -26,8 +27,10 @@ export interface Project {
 	tenantId?: string;
 	id: string;
 	name: string;
-	/** Absolute folder new sessions start in. */
+	/** Its own absolute folder: new sessions start here and uploads land here. */
 	cwd: string;
+	/** Existing absolute folders linked to it; sessions working in them belong to it. */
+	links?: string[];
 	general?: boolean;
 	createdBy: string;
 	createdAt: string;
@@ -73,8 +76,12 @@ export const tenantProjects = (tenant = tenantId()) => {
 export function projectIdOf(cwd: string, explicit?: string, tenant = tenantId()) {
 	const projects = tenantProjects(tenant);
 	if (explicit && projects.some((p) => p.id === explicit)) return explicit;
-	const holders = projects.filter((p) => !p.general && inside(p.cwd, cwd)).sort((a, b) => b.cwd.length - a.cwd.length);
-	return holders[0]?.id ?? generalProject(tenant).id;
+	let best: { id: string; length: number } | undefined;
+	for (const p of projects) {
+		if (p.general) continue;
+		for (const dir of [p.cwd, ...(p.links ?? [])]) if (inside(dir, cwd) && dir.length > (best?.length ?? -1)) best = { id: p.id, length: dir.length };
+	}
+	return best?.id ?? generalProject(tenant).id;
 }
 
 /** Check a project ID a client sent for the active tenant. */
@@ -100,6 +107,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		id: project.id,
 		name: project.name,
 		folder: toRel(project.cwd),
+		links: (project.links ?? []).map(toRel),
 		general: Boolean(project.general),
 		canManage: !project.general && (user.role === "admin" || user.id === project.createdBy),
 		createdAt: project.createdAt,
@@ -117,13 +125,24 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		return project;
 	};
 
-	/** A folder for a project: an existing one, or a new one made if asked. */
-	const folderOf = (rel: string, create: boolean) => {
-		const cwd = resolveSafe(rel);
-		if (create) mkdirSync(cwd, { recursive: true });
-		if (!statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) throw new HttpError(400, "Not a folder");
-		return cwd;
+	/** A new folder for a project, projects/<name>, numbered if taken. */
+	const newFolder = (name: string) => {
+		const slug = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project";
+		for (let n = 1; ; n++) {
+			const cwd = resolveSafe(`projects/${slug}${n > 1 ? `-${n}` : ""}`);
+			if (!statSync(cwd, { throwIfNoEntry: false })) {
+				mkdirSync(cwd, { recursive: true });
+				return cwd;
+			}
+		}
 	};
+	/** Existing folders to link, each once and none the project's own. */
+	const linksOf = (rels: string[], own?: string) => {
+		const dirs = [...new Set(rels.map((rel) => resolveSafe(rel)))].filter((dir) => dir !== own);
+		for (const dir of dirs) if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw new HttpError(400, `Not a folder: /${toRel(dir)}`);
+		return dirs;
+	};
+	const linksSchema = z.array(z.string().max(4000)).max(20);
 
 	/** What a move changes: who must agree, and what the item is called. */
 	const subject = (kind: "session" | "chat", id: string, user: User) => {
@@ -164,12 +183,13 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 
 	router.post("/projects", (req, res) => {
 		const user = req.user!;
-		const body = z.object({ name: z.string().trim().min(1).max(60), folder: z.string().max(4000), create: z.boolean().default(false) }).strict().parse(req.body);
+		const body = z.object({ name: z.string().trim().min(1).max(60), links: linksSchema.default([]) }).strict().parse(req.body);
 		const projects = tenantProjects();
 		if (projects.length >= MAX_PROJECTS) throw new HttpError(429, `A tenant has at most ${MAX_PROJECTS} projects`);
 		if (projects.some((p) => p.name.toLowerCase() === body.name.toLowerCase())) throw new HttpError(409, "A project with that name exists");
+		const links = linksOf(body.links);
 		const at = new Date().toISOString();
-		const project: Project = { tenantId: tenantId(), id: randomUUID(), name: body.name, cwd: folderOf(body.folder, body.create), createdBy: user.id, createdAt: at, updatedAt: at };
+		const project: Project = { tenantId: tenantId(), id: randomUUID(), name: body.name, cwd: newFolder(body.name), links, createdBy: user.id, createdAt: at, updatedAt: at };
 		store.data.projects.push(project);
 		saveNow();
 		changed(tenantId());
@@ -178,9 +198,9 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 
 	router.patch("/projects/:id", (req, res) => {
 		const project = manage(req);
-		const body = z.object({ name: z.string().trim().min(1).max(60).optional(), folder: z.string().max(4000).optional() }).strict().parse(req.body);
+		const body = z.object({ name: z.string().trim().min(1).max(60).optional(), links: linksSchema.optional() }).strict().parse(req.body);
 		if (body.name && tenantProjects().some((p) => p !== project && p.name.toLowerCase() === body.name!.toLowerCase())) throw new HttpError(409, "A project with that name exists");
-		Object.assign(project, { ...(body.name ? { name: body.name } : {}), ...(body.folder !== undefined ? { cwd: folderOf(body.folder, false) } : {}), updatedAt: new Date().toISOString() });
+		Object.assign(project, { ...(body.name ? { name: body.name } : {}), ...(body.links ? { links: linksOf(body.links, project.cwd) } : {}), updatedAt: new Date().toISOString() });
 		saveNow();
 		changed(tenantId());
 		res.json({ project: view(project, req.user!) });

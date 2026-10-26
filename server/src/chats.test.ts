@@ -227,6 +227,15 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.ok(memoryPrompts.some((p) => /anna: hello bob, the deploy failed/.test(p.text) && /pi: reply to f1/.test(p.text)));
 		const again = await call("chat-admin", "POST", "/memory/consolidate", { all: true });
 		assert.equal(again.body.pending, 0, "consolidated conversations are not repeated");
+
+		// Deleting a chat removes it for the one deleting; it is gone once the last member deletes it.
+		const doomed = (await call("anna", "POST", "/chats", { text: "temporary", userIds: [bob.id] })).body.chat;
+		assert.equal((await call("carol", "DELETE", `/chats/${doomed}`)).status, 404);
+		assert.equal((await call("anna", "DELETE", `/chats/${doomed}`)).body.deleted, false);
+		assert.equal((await call("anna", "GET", `/chats/${doomed}`)).status, 404);
+		assert.ok((await call("bob", "GET", "/chats")).body.chats.some((c: any) => c.id === doomed));
+		assert.equal((await call("bob", "DELETE", `/chats/${doomed}`)).body.deleted, true);
+		assert.equal((await import("./chats.js")).getChat(doomed), undefined);
 	} finally {
 		server.closeAllConnections();
 		await new Promise<void>((resolve) => server.close(() => resolve()));

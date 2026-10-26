@@ -48,7 +48,8 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
-import { cn, formatBytes } from "@/lib/utils"
+import { useProjects } from "@/lib/projects"
+import { cn, formatBytes, relativePath } from "@/lib/utils"
 
 const MAX_INLINE_IMAGE = 5 * 1024 * 1024
 
@@ -272,6 +273,7 @@ function RunView({
 
 export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: string; header?: React.ReactNode; onDeleted: (key: string) => void }) {
   const { user } = useAuth()
+  const { uploadFolder } = useProjects()
   const interactions = useInteractions(sessionKey)
   const { state, connected, deletedBy, browser } = useSessionStream(sessionKey)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -440,9 +442,10 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       let prompt = message
       let images: { data: string; mimeType: string }[] | undefined
       if (attached.length) {
-        const dir = uploadDir(summary.path)
+        // In a project, uploads land in the project's folder even when the session works elsewhere.
+        const dir = uploadDir(uploadFolder(summary.projectId) ?? summary.path)
         const uploaded = await api.upload(dir, attached)
-        const rel = uploaded.files.map((f) => (summary.path && f.path.startsWith(`${summary.path}/`) ? f.path.slice(summary.path.length + 1) : f.path))
+        const rel = uploaded.files.map((f) => relativePath(summary.path, f.path))
         prompt = `${message || "See the attached files."}\n\nAttached files (relative to the working directory):\n${rel.map((p) => `- ${p}`).join("\n")}`
         const model = models.find((m) => m.provider === state?.model?.provider && m.id === state?.model?.id)
         if (!model || model.input?.includes("image")) {

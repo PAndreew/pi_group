@@ -11,7 +11,7 @@ import type { AgentMessage, PromptInput } from "./harness/types.js";
 import { platform, type SqlDatabase } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type Rewrite, type RunOutcome } from "./sessions.js";
-import { type PendingDelete, type SessionMeta, store, type User } from "./store.js";
+import { type PendingDelete, saveNow, type SessionMeta, store, type User } from "./store.js";
 import { checkProject, projectIdOf, tenantProjects } from "./projects.js";
 import { tenantId } from "./tenant-context.js";
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
@@ -404,6 +404,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 				last: last && { author: authorName(last), text: textOf(last).slice(0, 200) },
 				projectId: projectIdOf(resolveSafe(chat.folder), chat.projectId),
 				canMove: true,
+				canDelete: true,
 			};
 		});
 		const sessions = Object.values(store.data.sessions)
@@ -420,6 +421,25 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			.map((item) => ({ ...item, moving: moving.get(`${item.kind}:${item.id}`) }))
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
 		res.json({ chats: items });
+	});
+
+	/** Delete a chat for the caller: they leave it. With nobody left, the chat and its messages are gone. */
+	router.delete("/chats/:id", (req, res) => {
+		const user = req.user!;
+		const chat = membership(String(req.params.id), user);
+		database().prepare("DELETE FROM members WHERE chat_id = ? AND user_id = ?").run(chat.id, user.id);
+		const left = memberIds(chat.id);
+		if (!left.length) {
+			database().prepare("DELETE FROM messages WHERE chat_id = ?").run(chat.id);
+			database().prepare("DELETE FROM chats WHERE id = ?").run(chat.id);
+		}
+		store.data.moveRequests = (store.data.moveRequests ?? []).filter((m) => !(m.kind === "chat" && m.itemId === chat.id && (!left.length || m.requestedBy === user.id)));
+		for (const m of store.data.moveRequests ?? []) if (m.kind === "chat" && m.itemId === chat.id) m.waitingFor = m.waitingFor.filter((id) => id !== user.id);
+		// Nobody left to ask: the requester can move it again, now at once.
+		store.data.moveRequests = (store.data.moveRequests ?? []).filter((m) => m.waitingFor.length);
+		saveNow();
+		for (const id of left) deps.sendTo(id, { type: "chat_members", tenantId: chat.tenantId ?? "work", chatId: chat.id });
+		res.json({ ok: true, deleted: !left.length });
 	});
 
 	router.get("/chats/:id", (req, res) => {

@@ -1,4 +1,4 @@
-import { Folder, Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react"
+import { Folder, Link2, Loader2, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 const slug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
 
 /** Existing folders matching what is typed, to pick one (a git repo, say) as the project's folder. */
-function FolderSuggestions({ query, onPick }: { query: string; onPick: (folder: string) => void }) {
+function FolderSuggestions({ query, exclude = [], onPick }: { query: string; exclude?: string[]; onPick: (folder: string) => void }) {
   const [folders, setFolders] = useState<string[]>([])
   useEffect(() => {
     let alive = true
@@ -23,7 +23,7 @@ function FolderSuggestions({ query, onPick }: { query: string; onPick: (folder: 
       clearTimeout(timer)
     }
   }, [query])
-  const shown = folders.filter((f) => f !== query)
+  const shown = folders.filter((f) => f !== query && !exclude.includes(f))
   if (!shown.length) return null
   return (
     <div className="flex flex-wrap gap-1">
@@ -37,31 +37,32 @@ function FolderSuggestions({ query, onPick }: { query: string; onPick: (folder: 
   )
 }
 
-/** A new project, or `project`'s name and folder. A new one gets a new folder named after it unless one is picked. */
+/** A new project (it gets a new folder of its own), or `project`'s name; either way, the existing folders linked to it. */
 function ProjectDialog({ project, open, onOpenChange }: { project?: Project; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { reload, setActive } = useProjects()
   const [name, setName] = useState("")
-  const [folder, setFolder] = useState("")
-  const [picked, setPicked] = useState(false)
+  const [links, setLinks] = useState<string[]>([])
+  const [adding, setAdding] = useState("")
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setName(project?.name ?? "")
-    setFolder(project?.folder ?? "")
-    setPicked(Boolean(project))
+    setLinks(project?.links ?? [])
+    setAdding("")
   }, [open, project])
 
-  const target = picked ? folder : `projects/${slug(name)}`
-  const pick = (value: string) => {
-    setPicked(true)
-    setFolder(value)
+  const link = (folder: string) => {
+    const clean = folder.trim().replace(/^\/+|\/+$/g, "")
+    if (clean && !links.includes(clean)) setLinks([...links, clean])
+    setAdding("")
   }
   const save = async () => {
     setBusy(true)
     try {
-      if (project) await api.updateProject(project.id, { name, folder: target })
-      else setActive((await api.createProject({ name, folder: target, create: !picked })).project.id)
+      const all = adding.trim() ? [...new Set([...links, adding.trim().replace(/^\/+|\/+$/g, "")])] : links
+      if (project) await api.updateProject(project.id, { name, links: all })
+      else setActive((await api.createProject({ name, links: all })).project.id)
       reload()
       onOpenChange(false)
     } catch (error) {
@@ -76,10 +77,10 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{project ? "Project settings" : "New project"}</DialogTitle>
-          <DialogDescription>Sessions and chats are grouped by project. New ones start in its folder or a subfolder; moved ones keep the folder they work in.</DialogDescription>
+          <DialogDescription>Sessions and chats are grouped by project. New ones and everything uploaded go to its own folder; linked folders bring the sessions working in them along.</DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-3"
+          className="grid gap-4"
           onSubmit={(e) => {
             e.preventDefault()
             void save()
@@ -87,16 +88,48 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
         >
           <div className="grid gap-1.5">
             <Label htmlFor="project-name">Name</Label>
-            <Input id="project-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Holiday, school project, my app…" autoFocus />
+            <Input id="project-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Holiday, school project, my app…" autoFocus={!project} />
+            <p className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+              <Folder className="size-3 shrink-0" />
+              <span className="truncate">{project ? `/${project.folder}` : `New folder: /projects/${slug(name) || "…"}`}</span>
+            </p>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="project-folder">Folder</Label>
-            <Input id="project-folder" value={target} onChange={(e) => pick(e.target.value)} className="font-mono text-sm" />
-            <FolderSuggestions query={picked ? folder : name} onPick={pick} />
-            <p className="text-[11px] text-muted-foreground">{picked ? "An existing folder, e.g. a git repo. Sessions already working in it join the project." : "A new folder; type or pick an existing one (a git repo, say) instead."}</p>
+            <Label htmlFor="project-link">Linked folders</Label>
+            {links.length > 0 && (
+              <ul className="grid gap-1">
+                {links.map((l) => (
+                  <li key={l} className="flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
+                    <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs">/{l}</span>
+                    <Button type="button" variant="ghost" size="icon-sm" className="size-6" onClick={() => setLinks(links.filter((x) => x !== l))} aria-label={`Unlink /${l}`}>
+                      <X className="size-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2">
+              <Input
+                id="project-link"
+                value={adding}
+                onChange={(e) => setAdding(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !adding.trim()) return
+                  e.preventDefault()
+                  link(adding)
+                }}
+                placeholder="Search folders, e.g. a git repo"
+                className="font-mono text-sm"
+              />
+              <Button type="button" variant="outline" disabled={!adding.trim()} onClick={() => link(adding)}>
+                Link
+              </Button>
+            </div>
+            <FolderSuggestions query={adding} exclude={[...links, ...(project ? [project.folder] : [])]} onPick={link} />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={busy || !name.trim() || !target.trim() || target === "projects/"}>
+            <Button type="submit" disabled={busy || !name.trim()}>
               {busy && <Loader2 className="animate-spin" />} {project ? "Save" : "Create"}
             </Button>
           </DialogFooter>
@@ -152,7 +185,7 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
                 <DropdownMenuContent align="start">
                   <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">/{project.folder}</DropdownMenuLabel>
                   <DropdownMenuItem onSelect={() => setEditing(project)}>
-                    <Pencil /> Rename or change folder
+                    <Pencil /> Rename or link folders
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(project)}>

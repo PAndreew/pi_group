@@ -10,6 +10,8 @@ export interface Projects {
   setActive: (id: string) => void
   moves: MoveRequest[]
   reload: () => void
+  /** Where uploads made in a project land: its own folder; undefined for General (they stay by the conversation). */
+  uploadFolder: (projectId?: string) => string | undefined
 }
 
 const ProjectsContext = createContext<Projects | null>(null)
@@ -34,10 +36,13 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     setActiveId(id)
   }, [])
 
-  const value = useMemo(
-    () => ({ projects, active: projects.find((p) => p.id === activeId) ?? projects.find((p) => p.general), setActive, moves, reload }),
-    [projects, activeId, setActive, moves, reload],
-  )
+  const value = useMemo(() => {
+    const uploadFolder = (projectId?: string) => {
+      const project = projects.find((p) => p.id === projectId)
+      return project && !project.general ? project.folder : undefined
+    }
+    return { projects, active: projects.find((p) => p.id === activeId) ?? projects.find((p) => p.general), setActive, moves, reload, uploadFolder }
+  }, [projects, activeId, setActive, moves, reload])
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>
 }
 

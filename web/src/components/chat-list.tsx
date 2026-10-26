@@ -6,6 +6,8 @@ import { DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { PiAvatar } from "@/components/mention-composer"
 import { MoveDialog, MoveRequests, type MoveTarget } from "@/components/project-move"
 import { SwipeActions, type SwipeAction } from "@/components/swipe-actions"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
 import { api, type ChatListItem, type SessionSummary } from "@/lib/api"
@@ -37,6 +39,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
   const { active } = useProjects()
   const project = active?.id
   const [moving, setMoving] = useState<MoveTarget>()
+  const [deletingChat, setDeletingChat] = useState<Extract<ChatListItem, { kind: "chat" }>>()
   const [items, setItems] = useState<ChatListItem[]>()
   const [query, setQuery] = useState("")
   const [swiped, setSwiped] = useState<string>()
@@ -111,6 +114,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
           const actions: SwipeAction[] = []
           if (item.canMove) actions.push({ label: `Move ${item.title} to another project`, icon: <FolderInput />, className: "bg-sky-600 hover:bg-sky-700", onClick: () => setMoving({ kind: item.kind, id: item.id, title: item.title, projectId: item.projectId }) })
           if (item.kind === "session" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => void api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message)) })
+          if (item.kind === "chat" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => setDeletingChat(item) })
           if (!actions.length) return row
           return (
             <SwipeActions key={item.id} actions={actions} open={swiped === item.id} onOpenChange={(open) => setSwiped(open ? item.id : undefined)}>
@@ -128,6 +132,35 @@ export function ChatList({ selected, className, requests }: { selected?: string;
         }}
         onMoved={() => project && void api.chats(project).then(({ chats }) => setItems(chats), () => {})}
       />
+      <Dialog
+        open={Boolean(deletingChat)}
+        onOpenChange={(open) => {
+          if (open) return
+          setDeletingChat(undefined)
+          setSwiped(undefined)
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete the chat with {deletingChat?.title}?</DialogTitle>
+            <DialogDescription>It disappears for you, and you leave it. The others keep it until they delete it too.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const chat = deletingChat!
+                setDeletingChat(undefined)
+                setSwiped(undefined)
+                api.deleteChat(chat.id).then(() => setItems((current) => current?.filter((i) => i.id !== chat.id)), (error) => toast.error(error.message))
+                if (selected === chat.id) nav.home()
+              }}
+            >
+              <Trash2 /> Delete chat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <DeleteSessionDialog
         session={deleting}
         onOpenChange={(open) => {

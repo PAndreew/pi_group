@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
@@ -49,13 +49,25 @@ test("projects sort sessions in, move them, and ask the people in them first", a
 		const general = projects[0].id;
 		assert.equal(projectIdOf(path.join(dir, "apps/beezy/server")), general);
 
-		// A project made from a folder adopts the sessions working in it, most specific folder first.
-		const apps = (await asOwner("POST", "/projects", { name: "Apps", folder: "apps" })).body.project;
-		const beezy = (await asOwner("POST", "/projects", { name: "Beezy", folder: "apps/beezy" })).body.project;
-		assert.equal((await asOwner("POST", "/projects", { name: "beezy", folder: "apps" })).status, 409);
-		assert.equal((await asOwner("POST", "/projects", { name: "Missing", folder: "nope" })).status, 400);
-		const holiday = (await asOwner("POST", "/projects", { name: "Holiday 2027", folder: "trips/2027", create: true })).body.project;
-		assert.equal(holiday.folder, "trips/2027");
+		// Each project gets a new folder of its own; linking a folder adopts the sessions working in it, most specific folder first.
+		const apps = (await asOwner("POST", "/projects", { name: "Apps", links: ["apps"] })).body.project;
+		assert.equal(apps.folder, "projects/apps");
+		assert.deepEqual(apps.links, ["apps"]);
+		const beezy = (await asOwner("POST", "/projects", { name: "Beezy" })).body.project;
+		assert.equal(projectIdOf(path.join(dir, "apps/beezy/server")), apps.id);
+		assert.deepEqual((await asOwner("PATCH", `/projects/${beezy.id}`, { links: ["apps/beezy", "apps/beezy"] })).body.project.links, ["apps/beezy"]);
+		assert.equal((await asOwner("POST", "/projects", { name: "beezy" })).status, 409);
+		assert.equal((await asOwner("POST", "/projects", { name: "Missing", links: ["nope"] })).status, 400);
+		assert.equal((await asOwner("POST", "/projects", { name: "Escape", links: ["../.."] })).status, 403);
+		const holiday = (await asOwner("POST", "/projects", { name: "Holiday 2027" })).body.project;
+		assert.equal(holiday.folder, "projects/holiday-2027");
+		assert.ok(statSync(path.join(dir, "projects/holiday-2027")).isDirectory());
+		await asOwner("DELETE", `/projects/${holiday.id}`);
+		const second = (await asOwner("POST", "/projects", { name: "Holiday 2027" })).body.project;
+		assert.equal(second.folder, "projects/holiday-2027-2");
+		await asOwner("DELETE", `/projects/${second.id}`);
+		const holidayNow = (await asOwner("POST", "/projects", { name: "Holiday 2027" })).body.project;
+		assert.equal(holidayNow.folder, "projects/holiday-2027-3");
 		assert.equal(projectIdOf(path.join(dir, "apps/beezy/server")), beezy.id);
 		assert.equal(projectIdOf(path.join(dir, "apps/clairic")), apps.id);
 		assert.equal(projectIdOf(path.join(dir, "holiday")), general);
@@ -67,14 +79,14 @@ test("projects sort sessions in, move them, and ask the people in them first", a
 		assert.equal((await asOwner("DELETE", `/projects/${general}`)).status, 400);
 
 		// Alone in it: the move happens at once, and the working folder stays.
-		assert.equal((await asOwner("POST", "/projects/move", { kind: "session", id: "fake:solo", to: holiday.id })).body.moved, true);
-		assert.equal(store.session("fake:solo")?.projectId, holiday.id);
+		assert.equal((await asOwner("POST", "/projects/move", { kind: "session", id: "fake:solo", to: holidayNow.id })).body.moved, true);
+		assert.equal(store.session("fake:solo")?.projectId, holidayNow.id);
 		assert.equal(store.session("fake:solo")?.cwd, path.join(dir, "apps/beezy/server"));
-		assert.equal((await asOwner("POST", "/projects/move", { kind: "session", id: "fake:solo", to: holiday.id })).status, 400);
+		assert.equal((await asOwner("POST", "/projects/move", { kind: "session", id: "fake:solo", to: holidayNow.id })).status, 400);
 		assert.equal((await asFriend("POST", "/projects/move", { kind: "session", id: "fake:solo", to: general })).status, 404);
 
 		// With someone else in it: it waits for them; a decline keeps it where it is.
-		const asked = (await asOwner("POST", "/projects/move", { kind: "session", id: "fake:shared", to: holiday.id })).body;
+		const asked = (await asOwner("POST", "/projects/move", { kind: "session", id: "fake:shared", to: holidayNow.id })).body;
 		assert.equal(asked.moved, false);
 		assert.deepEqual(asked.request.waitingFor, [friend.username]);
 		assert.equal((await asFriend("POST", "/projects/move", { kind: "session", id: "fake:shared", to: apps.id })).status, 403);
@@ -86,12 +98,12 @@ test("projects sort sessions in, move them, and ask the people in them first", a
 		assert.equal(store.session("fake:shared")?.projectId, undefined);
 		assert.deepEqual((await asOwner("GET", "/projects/moves")).body.moves, []);
 
-		const again = (await asOwner("POST", "/projects/move", { kind: "session", id: "fake:shared", to: holiday.id })).body.request;
+		const again = (await asOwner("POST", "/projects/move", { kind: "session", id: "fake:shared", to: holidayNow.id })).body.request;
 		assert.equal((await asFriend("POST", `/projects/moves/${again.id}`, { approve: true })).body.moved, true);
-		assert.equal(store.session("fake:shared")?.projectId, holiday.id);
+		assert.equal(store.session("fake:shared")?.projectId, holidayNow.id);
 
 		// Deleting a project returns its sessions to the project holding their folder.
-		assert.equal((await asOwner("DELETE", `/projects/${holiday.id}`)).status, 200);
+		assert.equal((await asOwner("DELETE", `/projects/${holidayNow.id}`)).status, 200);
 		assert.equal(projectIdOf(store.session("fake:solo")!.cwd, store.session("fake:solo")!.projectId), beezy.id);
 		assert.equal(projectIdOf(store.session("fake:shared")!.cwd, store.session("fake:shared")!.projectId), general);
 	} finally {

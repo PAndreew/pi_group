@@ -21,6 +21,7 @@ import { uploadDir } from "@/lib/attachments"
 import { useNav } from "@/lib/nav"
 import { messageText } from "@/lib/steps"
 import { subscribeUserEvents } from "@/lib/user-stream"
+import { useProjects } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -104,6 +105,7 @@ function mergeMessages(current: ChatMessage[] | undefined, incoming: ChatMessage
 /** A chat between people, with pi when someone mentions @pi. */
 export function ChatView({ chatId }: { chatId: string }) {
   const { user } = useAuth()
+  const { uploadFolder } = useProjects()
   const nav = useNav()
   const [chat, setChat] = useState<Chat>()
   const interactions = useInteractions(chat?.sessionKey)
@@ -246,12 +248,12 @@ export function ChatView({ chatId }: { chatId: string }) {
   const piWorking = Boolean(messages?.some((m) => m.status === "working"))
   const nameOf = (id: string) => (id === user?.id ? "you" : (chat?.members.find((member) => member.id === id)?.username ?? "someone"))
 
-  /** Files go to the chat folder's uploads; the message gets their paths so pi (and people) can find them. */
+  /** Files go to the project's (else the chat folder's) uploads; the message gets their paths so pi (and people) can find them. */
   const attach = async (files: File[]) => {
     if (!files.length || !chat) return
     setUploading(true)
     try {
-      const { files: done } = await api.upload(uploadDir(chat.folder), files)
+      const { files: done } = await api.upload(uploadDir(uploadFolder(chat.projectId) ?? chat.folder), files)
       setText((t) => `${t}${t ? " " : ""}${done.map((f) => `\`${f.path}\``).join(" ")} `)
     } catch (error) {
       toast.error((error as Error).message)

@@ -36,12 +36,12 @@ export function Home() {
 
   const base = project && !project.general ? project.folder : chatFolder
 
-  // The project's last three folders chats or sessions worked in (not its own folder), to start there again.
+  // The project's linked folders, then the last folders its chats or sessions worked in (not its own), to start there.
   useEffect(() => {
     if (!project) return
     api.chats(project.id).then(({ chats }) => {
       const used = chats.filter((c) => c.folder && c.folder !== base && (c.kind === "session" || c.pi)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      setRecent([...new Set(used.map((c) => c.folder))].slice(0, 3))
+      setRecent([...new Set([...project.links, ...used.map((c) => c.folder)])].slice(0, 4))
     }, () => {})
   }, [base, project])
 
@@ -84,7 +84,7 @@ export function Home() {
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => {
               if (!files.length) return
               setBusy(true)
-              void api.upload(uploadDir(folder), files).then(({ files: uploaded }) => {
+              void api.upload(uploadDir(project && !project.general ? project.folder : folder), files).then(({ files: uploaded }) => {
                 setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
               }, (error) => toast.error(error.message)).finally(() => setBusy(false))
             }} />
