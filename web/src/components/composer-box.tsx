@@ -2,9 +2,9 @@ import { ArrowUp, CircleStop, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 /**
- * The one message box every screen uses: the text area (`children`) above a row of the Agent
- * toggle and controls, evenly spaced, then stop (while a run can be stopped) and send. Files or
- * images pasted anywhere in it go to `onFiles`.
+ * The one message box every screen uses: the text area (`children`) above a row with the Agent
+ * toggle at the left, send at the right (stop beside it while a run can be stopped), and the
+ * controls spread evenly between them. Files or images pasted anywhere in it go to `onFiles`.
  */
 export function ComposerBox({
   children,
@@ -38,10 +38,8 @@ export function ComposerBox({
     >
       {children}
       <div className="flex items-center gap-1 p-2">
-        <div className="flex min-w-0 flex-1 items-center justify-evenly">
-          {agent}
-          {controls}
-        </div>
+        {agent}
+        <div className="flex min-w-0 flex-1 items-center justify-evenly">{controls}</div>
         {onStop && (
           <Button className="composer-icon size-10 shrink-0 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]" variant="destructive" size="icon" onClick={onStop} aria-label="Stop the agent">
             <CircleStop />

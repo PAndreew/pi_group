@@ -63,7 +63,7 @@ export function Home() {
   const folder = parseMessage(text, []).folder ?? base
 
   return (
-    <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col">
+    <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col lg:max-w-none">
       <ChatList key={project?.id} className="min-h-0 flex-1" requests />
       <div className="grid gap-1 border-t p-2 sm:p-3">
         {recent.length > 0 && !overlay && (

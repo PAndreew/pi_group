@@ -53,7 +53,7 @@ export function ComposerTools({
 
   return (
     <>
-      <div className={placement === "composer" ? "flex items-center justify-center gap-0.5 xl:hidden" : "flex items-center justify-evenly gap-0.5"}>
+      <div className={placement === "composer" ? "flex items-center justify-center gap-0.5 lg:hidden" : "flex items-center justify-evenly gap-0.5"}>
         {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal />)}
         {icon("tools", "Tools, skills, commands and MCP servers", <Hammer />)}
         {icon("jobs", pendingJobs ? `Scheduled jobs (${pendingJobs} waiting for approval)` : "Scheduled jobs", dot(pendingJobs > 0, <Clock />))}
