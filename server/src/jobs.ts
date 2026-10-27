@@ -64,6 +64,8 @@ export interface Job {
 	/** Disable after the first attempted run, successful or not. */
 	once?: boolean;
 	cwd: string;
+	/** Capabilities follow this project, including newly created scheduled sessions. */
+	projectId?: string;
 	schedule: string;
 	steps: JobStep[];
 	/** Runs on schedule only while enabled and approved. */
@@ -84,7 +86,7 @@ export interface Job {
 }
 
 export interface JobDeps {
-	createSession: (user: User, input: { harness: string; cwd: string; name?: string }) => Promise<SessionMeta>;
+	createSession: (user: User, input: { harness: string; cwd: string; name?: string; projectId?: string }) => Promise<SessionMeta>;
 	promptSession: (meta: SessionMeta, user: User, input: { text: string }) => Promise<void>;
 	harnessFor: (user: User) => Promise<string>;
 	onRun: (listener: (key: string, outcome: RunOutcome) => void) => void;
@@ -239,7 +241,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 		let meta = job.sessionKey ? store.session(job.sessionKey) : undefined;
 		if (meta && !meta.deleted && !deps.canWrite(owner, meta)) throw new Error("The job's owner can no longer write to its session");
 		if (!meta || meta.deleted) {
-			meta = await deps.createSession(owner, { harness: await deps.harnessFor(owner), cwd: job.cwd, name: `⏰ ${job.name}` });
+			meta = await deps.createSession(owner, { harness: await deps.harnessFor(owner), cwd: job.cwd, projectId: job.projectId ?? (job.proposedIn ? store.session(job.proposedIn)?.projectId : undefined), name: `⏰ ${job.name}` });
 			job.sessionKey = meta.key;
 			saveNow();
 		}
@@ -382,6 +384,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			ownerId: owner.id,
 			recipientIds,
 			cwd: meta.cwd,
+			projectId: meta.projectId,
 			schedule: body.schedule,
 			steps: body.steps,
 			enabled: false,

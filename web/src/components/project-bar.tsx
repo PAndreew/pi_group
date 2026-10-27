@@ -1,3 +1,4 @@
+import { ProjectCapabilities } from "@/components/project-capabilities"
 import { Folder, Link2, Loader2, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -177,6 +178,7 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
   const [editing, setEditing] = useState<Project>()
   const [creating, setCreating] = useState(false)
   const [sharing, setSharing] = useState<Project>()
+  const [tools, setTools] = useState<Project>()
   const [confirmDelete, setConfirmDelete] = useState<Project>()
 
   const remove = async (project: Project) => {
@@ -208,7 +210,7 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
             >
               {project.name}
             </button>
-            {selected && project.canManage && (
+            {selected && (project.canManage || project.canManageTools) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon-sm" className="-ml-1 size-6" aria-label={`${project.name} menu`}>
@@ -217,6 +219,8 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">/{project.folder}</DropdownMenuLabel>
+                  <DropdownMenuItem onSelect={() => setTools(project)}>Tools & connections</DropdownMenuItem>
+                  {project.canManage && <>
                   <DropdownMenuItem onSelect={() => setSharing(project)}>
                     Share project with…
                   </DropdownMenuItem>
@@ -227,6 +231,7 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
                   <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(project)}>
                     <Trash2 /> Delete project
                   </DropdownMenuItem>
+                  </>}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -236,6 +241,7 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
       <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => setCreating(true)} aria-label="New project" title="New project">
         <Plus />
       </Button>
+      {tools && <ProjectCapabilities project={tools} onClose={() => setTools(undefined)} />}
       {sharing && <ShareProjectDialog project={sharing} onClose={() => setSharing(undefined)} />}
       <ProjectDialog open={creating} onOpenChange={setCreating} />
       <ProjectDialog project={editing} open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(undefined)} />

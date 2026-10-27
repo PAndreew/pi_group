@@ -255,8 +255,18 @@ export interface Project {
   links: string[]
   general: boolean
   canManage: boolean
+  canManageTools: boolean
   memberIds: string[]
   createdAt: string
+}
+
+export interface ToolCapability {
+  id: string
+  name: string
+  description: string
+  access: "off" | "read" | "write"
+  supportsWrite: boolean
+  tools: { name: string; access: "read" | "write" }[]
 }
 
 /** A move of a session or chat to another project, waiting for the people in it. */
@@ -422,7 +432,8 @@ export const api = {
   saveAssistance: (settings: AssistanceSettings) => request<{ user: User }>("PUT", "/api/auth/assistance", settings),
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User; tenantId?: string }>("GET", "/api/auth/me"),
-  tenants: () => request<{ active: string; tenants: { id: string; name: string }[] }>("GET", "/api/tenants"),
+  tenants: () => request<{ active: string; tenants: { id: string; name: string; canShare: boolean }[] }>("GET", "/api/tenants"),
+  shareTenant: (id: string, username: string) => request("POST", `/api/tenants/${enc(id)}/shares`, { username }),
   switchTenant: (id: string) => request("POST", "/api/tenants/switch", { id }),
   login: (username: string, password: string) => request<{ user: User }>("POST", "/api/auth/login", { username, password }),
   saveAvatar: (avatar: string | null) => request("PUT", "/api/auth/avatar", { avatar }),
@@ -467,6 +478,8 @@ export const api = {
   chats: (project?: string) => request<{ chats: ChatListItem[] }>("GET", `/api/chats${project ? `?${q({ project })}` : ""}`),
   projects: () => request<{ projects: Project[] }>("GET", "/api/projects"),
   createProject: (body: { name: string; links?: string[] }) => request<{ project: Project }>("POST", "/api/projects", body),
+  projectCapabilities: (id: string) => request<{ capabilities: ToolCapability[] }>("GET", `/api/projects/${enc(id)}/capabilities`),
+  setProjectCapability: (id: string, capability: string, access: ToolCapability["access"]) => request("PUT", `/api/projects/${enc(id)}/capabilities/${enc(capability)}`, { access }),
   shareProject: (id: string, memberIds: string[]) => request<{ project: Project }>("PUT", `/api/projects/${enc(id)}/shares`, { memberIds }),
   updateProject: (id: string, body: { name?: string; links?: string[] }) => request<{ project: Project }>("PATCH", `/api/projects/${enc(id)}`, body),
   deleteProject: (id: string) => request("DELETE", `/api/projects/${enc(id)}`),

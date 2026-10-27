@@ -124,6 +124,17 @@ test("tenant boundaries cover direct URLs, chats, sessions, sharing, files, jobs
       const unexpected = await Promise.race([workReader.read().then(r => new TextDecoder().decode(r.value)), new Promise<null>(resolve => setTimeout(() => resolve(null), 150))]);
       assert.equal(unexpected, null, "Work watchers must not receive Family events");
     } finally { abortWork.abort(); abortFamily.abort(); }
+    // Tenant invitations never grant access to existing projects or private sessions.
+    const project = (await call("andris", "POST", "/projects", { name: "Private family project" })).body.project;
+    assert.equal((await call("berci", "POST", "/tenants/work/shares", { username: "nyuszi" })).status, 403);
+    assert.equal((await call("berci", "POST", "/tenants/family/shares", { username: "berci" })).status, 404);
+    assert.equal((await call("andris", "POST", "/tenants/family/shares", { username: "missing" })).status, 404);
+    assert.equal((await call("andris", "POST", "/tenants/family/shares", { username: "berci" })).status, 200);
+    assert.equal((await call("andris", "POST", "/tenants/family/shares", { username: "berci" })).status, 200);
+    assert.equal(family.memberIds.filter(id => id === berci.id).length, 1);
+    assert.equal((await call("berci", "POST", "/tenants/switch", { id: "family" })).status, 200);
+    assert.ok(!(await call("berci", "GET", "/projects")).body.projects.some((p: any) => p.id === project.id));
+    assert.equal((await call("berci", "GET", `/sessions/${familySession.body.session.key}`)).status, 404);
   } finally {
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));

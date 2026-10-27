@@ -16,12 +16,33 @@ The project menu has **Share project with…**. The creator chooses existing mem
 
 Project membership never modifies session shares or chat membership. Earlier and future private sessions are not automatically shared. Sharing a conversation still uses the existing session sharing/forwarding controls. Revoking project membership does not revoke separately shared conversations.
 
-**This is not yet a filesystem or agent security boundary.** The existing tenant-wide file API, terminal and local agent processes remain unchanged. Administrators also retain existing session access. Do not rely on project membership to isolate untrusted collaborators yet.
+**Human-facing file APIs and admin terminals are not yet project-isolated.** Administrators also retain existing session access. Do not rely on project membership to isolate untrusted collaborators. Agent tool execution now has the separate enforced boundary described below.
+
+### Tools & connections
+
+The project's menu exposes **Tools & connections**. Project creators (General: administrators) grant `off`, `read`, or `write` per capability. Web search is on/read by default. Each agent tool call rechecks the current grant; revocation blocks future calls, not already-running operations. Scheduled agent sessions inherit their project's grants.
+
+Operator-owned `DATA_DIR/tool-capabilities.json` registers exact Pi tool names, audited read/write classification, optional argument allowlists and trusted extension adapters. CLI, HTTP and MCP tools use the same gate; an arbitrary shell is not a capability adapter. Tool annotations/names alone do not prove read-only safety.
+
+The existing user-level `google-workspace` MCP registration is reused automatically when it launches `workspace-mcp --read-only`. It appears as **Google Drive**, off until explicitly approved for a project. Beezy reuses its command, environment and credentials; no re-registration/login is required. The trusted adapter exposes only `search_drive_files`, `get_drive_file_content`, `get_drive_file_download_url`, and `get_drive_shareable_link` through the per-call gate. This automatic reuse currently supports that stdio Workspace configuration; other MCP servers require an audited capability adapter. Credentials are never included in the project settings response.
+
+### Agent execution and butler delegation
+
+Pi RPC sessions load only `server/extensions/project-scope.mjs`, with built-in tools, discovered extensions, skills, context files, and project trust disabled. Session storage is pinned server-side so project settings cannot redirect it. Prompt admission verifies the extension's readiness. Pi itself remains a trusted model/transcript orchestrator; model-controlled commands run through `agent-bridge` and `project-sandbox.ts`, not in Pi's host process.
+
+- `scope` reports the enforced mounts. `scoped_bash` runs commands under Linux Bubblewrap: explicit roots, read-only system binaries, private process/network namespaces, temporary HOME/tmp, cleared environment, 60-second/100KB limits, and no unsandboxed fallback. Shell tools have no host model/bridge credentials. A seccomp filter denies socket creation (including Unix sockets in mounted folders) and io_uring, with an ABI guard; x64 and arm64 Linux are supported. Bubblewrap is required; other harnesses are refused.
+- Project sessions receive writable mounts for their own and linked folders only, even if the historical session cwd lies elsewhere. Server state, credentials and the running application's code cannot be mounted. Broad links overlapping those directories are rejected, not silently granted.
+- A private General session owned by the invoking person, not attached to a group chat, is the butler. Its project mounts are read-only across all tenants where that person has explicit access. `butler_sessions` lists/reads conversations they own or have explicit session shares for; admin status is not a private-transcript bypass. General loose files and chat-only membership without session shares are not currently included.
+- `delegate_project` is butler-only. The server rechecks target membership, switches tenant context, creates a **new private Pi session** in the target project, and submits the task as the invoking person. It returns a session key; the butler can poll progress with `butler_sessions`. Five delegations per run; delegated project agents cannot delegate again. Only the provided task text is forwarded, not the butler's transcript.
+- Group General agents get a dedicated `General/groups/<chat-id>` folder, not the shared General/memory directory. Existing files are not automatically migrated. Shared standalone General sessions must be moved into a project or use a group chat before running an agent.
+- Caller identity is server-side, reauthorized for each tool request. While a run is active, another person's prompt is rejected rather than replacing its authorization. Restart clears grants.
+
+**Compatibility:** unrestricted MCP, browser, vault, applet, scheduled-job proposal and assistance extensions are no longer loaded in scoped Pi sessions. Enabling assistance that requires its extension fails explicitly. Network-dependent shell commands cannot work. Human file APIs, admin terminals, scheduled scripts, trusted host Pi/configuration and kernel vulnerabilities are outside this boundary. This is not whole-tenant isolation from mutually untrusted host users.
 
 Remaining work before the complete privacy model can be deployed:
-- Enforce allowed project/linked roots consistently in file routes, folder search, terminal, jobs, agent tools and subprocesses, including symlinks and overlapping roots.
-- Personal General is the butler: user-authorized cross-space reads, with writes delegated to a scoped project agent. Group General reads only the group space.
-- Add explicit tenant invitations/sharing without implicit project grants.
+- Extend the agent boundary to human file routes, folder search, terminals and scheduled scripts, and provide capability-scoped network tools.
+- Extend butler reads to General personal files and chat-only conversation membership without exposing another person's private transcripts.
+- Tenant sharing now adds existing users without implicit project grants (see [tenants.md](tenants.md)); tenant ownership and removal remain to be built.
 - Preserve private transcript isolation even from project agents; selected-turn sharing must publish only those turns.
 - Resolve moved conversations whose working directories lie outside the destination project, and invitation/revocation for their participants.
 
