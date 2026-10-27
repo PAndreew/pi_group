@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
+import { UploadedPreviews } from "@/components/attachment-preview"
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
 import { Markdown } from "@/components/markdown"
@@ -353,6 +354,7 @@ export function ChatView({ chatId }: { chatId: string }) {
             e.target.value = ""
           }}
         />
+        <UploadedPreviews text={text} />
         <MentionComposer
           folder={chat?.folder ?? ""}
           sessionKey={chat?.sessionKey}

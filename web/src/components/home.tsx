@@ -1,6 +1,7 @@
 import { Folder } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { UploadedPreviews } from "@/components/attachment-preview"
 import { ChatList } from "@/components/chat-list"
 import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
@@ -23,6 +24,19 @@ export function Home() {
   const { active: project } = useProjects()
   const [text, setText] = useState("")
   const [busy, setBusy] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const attach = async (files: File[]) => {
+    if (!files.length) return
+    setBusy(true)
+    try {
+      const { files: uploaded } = await api.upload(uploadDir(project && !project.general ? project.folder : folder), files)
+      setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
   const [agent, setAgent] = useState(false)
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [chatFolder, setChatFolder] = useState("pi-chat")
@@ -72,6 +86,8 @@ export function Home() {
             ))}
           </div>
         )}
+        <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void attach(files) }} />
+        <UploadedPreviews text={text} />
         <MentionComposer
           folder={folder}
           value={text}
@@ -81,13 +97,7 @@ export function Home() {
           placeholder={project && !project.general ? `Start a chat in ${project.name}: message, @someone, #folder…` : "Start a chat: message, @someone, #folder…"}
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
-            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => {
-              if (!files.length) return
-              setBusy(true)
-              void api.upload(uploadDir(project && !project.general ? project.folder : folder), files).then(({ files: uploaded }) => {
-                setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
-              }, (error) => toast.error(error.message)).finally(() => setBusy(false))
-            }} />
+            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => void attach(files)} />
           }
           onSubmit={async (message) => {
             message.pi ||= agent
@@ -106,7 +116,7 @@ export function Home() {
             }
           }}
         />
-        <ComposerTools folder={folder} onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}${command}`)} />
+        <ComposerTools folder={folder} onAttach={() => fileInput.current?.click()} onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}${command}`)} />
       </div>
     </div>
   )

@@ -18,6 +18,7 @@ import { PiAvatar } from "@/components/mention-composer"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
 import { AgentToggle, ComposerControls } from "@/components/composer-controls"
+import { AttachmentPreview } from "@/components/attachment-preview"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
@@ -49,7 +50,7 @@ import { useSessionStream } from "@/hooks/use-session-stream"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
 import { useProjects } from "@/lib/projects"
-import { cn, formatBytes, relativePath } from "@/lib/utils"
+import { cn, relativePath } from "@/lib/utils"
 
 const MAX_INLINE_IMAGE = 5 * 1024 * 1024
 
@@ -606,12 +607,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
             {files.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {files.map((f, i) => (
-                  <Badge key={i} variant="outline" className="gap-1">
-                    {f.name} <span className="text-muted-foreground">{formatBytes(f.size)}</span>
-                    <button type="button" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>
-                      <X className="size-3" />
-                    </button>
-                  </Badge>
+                  <AttachmentPreview key={i} file={f} onRemove={() => setFiles((fs) => fs.filter((_, j) => j !== i))} />
                 ))}
               </div>
             )}
@@ -656,7 +652,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     multiple
                     hidden
                     onChange={(e) => {
-                      setFiles((fs) => [...fs, ...Array.from(e.target.files ?? [])])
+                      const selected = Array.from(e.target.files ?? [])
+                      setFiles((fs) => [...fs, ...selected])
                       e.target.value = ""
                     }}
                   />
