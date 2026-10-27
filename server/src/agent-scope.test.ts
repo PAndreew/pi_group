@@ -52,7 +52,9 @@ test("agent bridge enforces project writes, read-only butler, delegation and ACL
 		assert.equal((await call(scoped.key, { action: "scope" }, "wrong")).status, 403);
 		assert.equal((await call(privateSession.key, { action: "scope" })).status, 403);
 		assert.equal((await call(scoped.key, { action: "scope" })).body.butler, false);
-		assert.deepEqual((await call(scoped.key, { action: "tool_policy" })).body.tools, ["web_search"]);
+		const policy = (await call(scoped.key, { action: "tool_policy" })).body.tools;
+		assert.ok(["read", "write", "edit", "bash", "browser_open", "propose_applet", "web_search"].every(t => policy.includes(t)));
+		assert.ok(!policy.includes("drive_read"));
 		assert.equal((await call(scoped.key, { action: "authorize_tool", tool: "drive_read", input: { operation: "list" } })).status, 403);
 		const project = store.data.projects.find(p => p.id === "project")!;
 		project.capabilities = { drive: "read" };
@@ -65,7 +67,9 @@ test("agent bridge enforces project writes, read-only butler, delegation and ACL
 		assert.equal((await call(scoped.key, { action: "authorize_tool", tool: "drive_read", input: { operation: "list" } })).status, 403);
 		project.capabilities["web-search"] = "off";
 		assert.equal((await call(scoped.key, { action: "web_search", query: "test" })).status, 403);
-		assert.equal((await call(scoped.key, { action: "authorize_tool", tool: "bash" })).status, 403);
+		assert.equal((await call(scoped.key, { action: "authorize_tool", tool: "bash" })).status, 200);
+		assert.equal((await call(scoped.key, { action: "authorize_tool", tool: "powershell" })).status, 403);
+		assert.equal((await call(butler.key, { action: "authorize_tool", tool: "write" })).status, 403);
 		const general = store.data.projects.find(p => p.general)!;
 		general.capabilities = { drive: "write" };
 		assert.equal((await call(butler.key, { action: "authorize_tool", tool: "drive_write" })).status, 403);
@@ -76,8 +80,16 @@ test("agent bridge enforces project writes, read-only butler, delegation and ACL
 		const sockets = await call(scoped.key, { action: "bash", command: `python3 -c 'import socket; socket.socket(socket.AF_UNIX)'` });
 		assert.notEqual(sockets.body.exitCode, 0);
 		assert.match(sockets.body.output, /Operation not permitted/);
+		assert.equal((await call(scoped.key, { action: "bash", command: `python3 -c 'import socket; socket.socket(socket.AF_INET).close(); socket.socket(socket.AF_INET6).close()'` })).body.exitCode, 0);
 		assert.equal((await call(scoped.key, { action: "bash", command: `/bin/sh -c 'printf child'` })).body.output, "child");
 		assert.notEqual((await call(scoped.key, { action: "bash", command: `cat '${root}/workspace/other/secret'` })).body.exitCode, 0);
+		const projectFile = path.join(root, "workspace/project/written.txt");
+		assert.equal((await call(scoped.key, { action: "file", op: "write", path: projectFile, data: Buffer.from("héllo").toString("base64") })).status, 200);
+		assert.equal(Buffer.from((await call(scoped.key, { action: "file", op: "read", path: projectFile })).body.data, "base64").toString(), "héllo");
+		assert.equal((await call(scoped.key, { action: "file", op: "read", path: path.join(root, "workspace/other/secret") })).status, 404);
+		assert.equal((await call(scoped.key, { action: "file", op: "write", path: path.join(root, "workspace/other/new") })).status, 404);
+		assert.equal((await call(butler.key, { action: "file", op: "write", path: projectFile, data: "" })).status, 404);
+		assert.equal((await call(butler.key, { action: "file", op: "read", path: projectFile })).status, 200);
 		assert.notEqual((await call(butler.key, { action: "bash", command: "printf bad > result" })).body.exitCode, 0);
 		assert.equal((await call(butler.key, { action: "bash", command: "cat result" })).body.output, "hello");
 		assert.equal((await call(scoped.key, { action: "delegate", projectId: "project", prompt: "Do it" })).status, 403);

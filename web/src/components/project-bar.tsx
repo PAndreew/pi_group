@@ -159,7 +159,7 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
         <DialogTitle>Share project with…</DialogTitle>
-        <DialogDescription>Share “{project.name}” and its linked folders. No sessions are shared automatically, including earlier sessions. Share conversations separately from their session menu.</DialogDescription>
+        <DialogDescription>Share “{project.name}” and its linked folders. No sessions are shared automatically, including earlier sessions. Share conversations separately from their session menu.{project.openToTenant && " This project predates sharing and is currently open to everyone in the tenant. Saving limits it to you and the people selected."}</DialogDescription>
       </DialogHeader>
       <div className="grid max-h-64 gap-2 overflow-y-auto">
         {users.map(user => <label key={user.id} className="flex items-center gap-2">

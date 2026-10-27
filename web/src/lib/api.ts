@@ -257,6 +257,8 @@ export interface Project {
   canManage: boolean
   canManageTools: boolean
   memberIds: string[]
+  /** Created before project sharing: everyone in the tenant can use it until it is shared explicitly. */
+  openToTenant: boolean
   createdAt: string
 }
 
@@ -265,6 +267,7 @@ export interface ToolCapability {
   name: string
   description: string
   access: "off" | "read" | "write"
+  supportsRead: boolean
   supportsWrite: boolean
   tools: { name: string; access: "read" | "write" }[]
 }

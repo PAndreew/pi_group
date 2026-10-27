@@ -34,7 +34,8 @@ export interface Project {
 	links?: string[];
 	general?: boolean;
 	createdBy: string;
-	/** Explicit project access; never grants access to conversations. */
+	/** Explicit project access; never grants access to conversations. Absent on projects from
+	 * before sharing existed: those stay open to the whole tenant until their creator shares them. */
 	memberIds?: string[];
 	/** Capability-level grants, independent of MCP/CLI/extension transport. */
 	capabilities?: Record<string, CapabilityAccess>;
@@ -89,11 +90,16 @@ export function projectIdOf(cwd: string, explicit?: string, tenant = tenantId())
 	return best?.id ?? generalProject(tenant).id;
 }
 
-/** Check a project ID a client sent for the active tenant. */
-export function canAccessProject(user: User, project: Project) {
-	return tenantAccess(user, project) && (Boolean(project.general) || project.createdBy === user.id || Boolean(project.memberIds?.includes(user.id)));
+/** Membership alone, without the tenant check. */
+export function isProjectMember(userId: string, project: Project) {
+	return Boolean(project.general) || project.createdBy === userId || !project.memberIds || project.memberIds.includes(userId);
 }
 
+export function canAccessProject(user: User, project: Project) {
+	return tenantAccess(user, project) && isProjectMember(user.id, project);
+}
+
+/** Check a project ID a client sent for the active tenant. */
 export function checkProject(id: string | undefined, user?: User) {
 	if (id === undefined) return undefined;
 	if (!tenantProjects().some((p) => p.id === id && (!user || canAccessProject(user, p)))) throw new HttpError(400, "No such project");
@@ -120,6 +126,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		general: Boolean(project.general),
 		canManage: !project.general && user.id === project.createdBy,
 		memberIds: project.memberIds ?? [],
+		openToTenant: !project.general && !project.memberIds,
 		canManageTools: project.general ? user.role === "admin" : user.id === project.createdBy,
 		createdAt: project.createdAt,
 	});
@@ -200,7 +207,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		if (projects.some((p) => p.name.toLowerCase() === body.name.toLowerCase())) throw new HttpError(409, "A project with that name exists");
 		const links = linksOf(body.links);
 		const at = new Date().toISOString();
-		const project: Project = { tenantId: tenantId(), id: randomUUID(), name: body.name, cwd: newFolder(body.name), links, createdBy: user.id, createdAt: at, updatedAt: at };
+		const project: Project = { tenantId: tenantId(), id: randomUUID(), name: body.name, cwd: newFolder(body.name), links, createdBy: user.id, memberIds: [], createdAt: at, updatedAt: at };
 		store.data.projects.push(project);
 		saveNow();
 		changed(tenantId());
@@ -209,7 +216,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 
 	router.get("/projects/:id/capabilities", (req, res) => {
 		const project = find(req);
-		res.json({ capabilities: toolCapabilities().map(c => ({ id: c.id, name: c.name, description: c.description, access: capabilityAccess(project, c.id), supportsWrite: c.tools.some(t => t.access === "write"), tools: c.tools.map(t => ({ name: t.name, access: t.access })) })) });
+		res.json({ capabilities: toolCapabilities().map(c => ({ id: c.id, name: c.name, description: c.description, access: capabilityAccess(project, c.id), supportsRead: c.tools.some(t => t.access === "read"), supportsWrite: c.tools.some(t => t.access === "write"), tools: c.tools.map(t => ({ name: t.name, access: t.access })) })) });
 	});
 	router.put("/projects/:id/capabilities/:capability", (req, res) => {
 		const project = find(req);
@@ -218,6 +225,7 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		if (!definition) throw new HttpError(404, "Capability not registered");
 		const { access } = z.object({ access: accessSchema }).strict().parse(req.body);
 		if (access === "write" && !definition.tools.some(t => t.access === "write")) throw new HttpError(400, "This capability is read-only");
+		if (access === "read" && !definition.tools.some(t => t.access === "read")) throw new HttpError(400, "This capability has no read-only tools");
 		(project.capabilities ??= {})[definition.id] = access;
 		project.updatedAt = new Date().toISOString();
 		saveNow();

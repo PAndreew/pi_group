@@ -37,8 +37,8 @@ export function ProjectCapabilities({ project, onClose }: { project: Project; on
             <label htmlFor={`cap-${capability.id}`} className="font-medium">{capability.name}</label>
             <select id={`cap-${capability.id}`} className="rounded border bg-background px-2 py-1 text-sm" value={capability.access} disabled={busy || !project.canManageTools} onChange={e => void change(capability, e.target.value as ToolCapability["access"])}>
               <option value="off">Off</option>
-              <option value="read">On · Read-only</option>
-              {capability.supportsWrite && <option value="write">On · Read & write</option>}
+              {capability.supportsRead && <option value="read">On · Read-only</option>}
+              {capability.supportsWrite && <option value="write">{capability.supportsRead ? "On · Read & write" : "On"}</option>}
             </select>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{capability.description}</p>
@@ -47,7 +47,7 @@ export function ProjectCapabilities({ project, onClose }: { project: Project; on
           </details>
         </section>)}
       </div>
-      <p className="text-xs text-muted-foreground">MCP, CLI and extension tools share the same controls. An administrator registers audited tool capabilities once; unknown tools remain blocked.</p>
+      <p className="text-xs text-muted-foreground">MCP servers from your Pi configuration are on unless turned off here. Other tools must be registered by an administrator; unknown tools remain blocked. Files and shell commands always stay inside this project's folders.</p>
     </DialogContent>
   </Dialog>
 }
