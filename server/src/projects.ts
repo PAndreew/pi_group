@@ -1,4 +1,3 @@
-import { accessSchema, capabilityAccess, toolCapabilities, type CapabilityAccess } from "./tool-capabilities.js";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -37,8 +36,6 @@ export interface Project {
 	/** Explicit project access; never grants access to conversations. Absent on projects from
 	 * before sharing existed: those stay open to the whole tenant until their creator shares them. */
 	memberIds?: string[];
-	/** Capability-level grants, independent of MCP/CLI/extension transport. */
-	capabilities?: Record<string, CapabilityAccess>;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -99,6 +96,13 @@ export function canAccessProject(user: User, project: Project) {
 	return tenantAccess(user, project) && isProjectMember(user.id, project);
 }
 
+/** Where a person sees an item: a conversation shared with someone outside its project
+ * shows under their General, without revealing the project. */
+export function visibleProjectId(user: User, id: string) {
+	const project = tenantProjects().find((p) => p.id === id);
+	return project && canAccessProject(user, project) ? id : generalProject().id;
+}
+
 /** Check a project ID a client sent for the active tenant. */
 export function checkProject(id: string | undefined, user?: User) {
 	if (id === undefined) return undefined;
@@ -127,7 +131,6 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		canManage: !project.general && user.id === project.createdBy,
 		memberIds: project.memberIds ?? [],
 		openToTenant: !project.general && !project.memberIds,
-		canManageTools: project.general ? user.role === "admin" : user.id === project.createdBy,
 		createdAt: project.createdAt,
 	});
 
@@ -212,25 +215,6 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		saveNow();
 		changed(tenantId());
 		res.json({ project: view(project, user) });
-	});
-
-	router.get("/projects/:id/capabilities", (req, res) => {
-		const project = find(req);
-		res.json({ capabilities: toolCapabilities().map(c => ({ id: c.id, name: c.name, description: c.description, access: capabilityAccess(project, c.id), supportsRead: c.tools.some(t => t.access === "read"), supportsWrite: c.tools.some(t => t.access === "write"), tools: c.tools.map(t => ({ name: t.name, access: t.access })) })) });
-	});
-	router.put("/projects/:id/capabilities/:capability", (req, res) => {
-		const project = find(req);
-		if (project.general ? req.user!.role !== "admin" : project.createdBy !== req.user!.id) throw new HttpError(403, "Only the project's creator can approve capabilities (General: admin only)");
-		const definition = toolCapabilities().find(c => c.id === req.params.capability);
-		if (!definition) throw new HttpError(404, "Capability not registered");
-		const { access } = z.object({ access: accessSchema }).strict().parse(req.body);
-		if (access === "write" && !definition.tools.some(t => t.access === "write")) throw new HttpError(400, "This capability is read-only");
-		if (access === "read" && !definition.tools.some(t => t.access === "read")) throw new HttpError(400, "This capability has no read-only tools");
-		(project.capabilities ??= {})[definition.id] = access;
-		project.updatedAt = new Date().toISOString();
-		saveNow();
-		changed(tenantId());
-		res.json({ ok: true });
 	});
 
 	// Folder membership is deliberately independent of session shares and chat membership.

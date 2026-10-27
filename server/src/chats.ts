@@ -12,7 +12,7 @@ import { platform, type SqlDatabase } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type Rewrite, type RunOutcome } from "./sessions.js";
 import { type PendingDelete, saveNow, type SessionMeta, store, type User } from "./store.js";
-import { checkProject, projectIdOf, tenantProjects } from "./projects.js";
+import { checkProject, projectIdOf, tenantProjects, visibleProjectId } from "./projects.js";
 import { tenantId } from "./tenant-context.js";
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
 
@@ -402,7 +402,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 				updatedAt: chat.updatedAt,
 				unread: Number(row.unread),
 				last: last && { author: authorName(last), text: textOf(last).slice(0, 200) },
-				projectId: projectIdOf(resolveSafe(chat.folder), chat.projectId),
+				projectId: visibleProjectId(user, projectIdOf(resolveSafe(chat.folder), chat.projectId)),
 				canMove: true,
 				canDelete: true,
 			};
@@ -411,7 +411,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			.filter((meta) => !linked.has(meta.key) && !meta.applet && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
-				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: projectIdOf(meta.cwd, meta.projectId), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
+				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
 			});
 		// ?project= narrows the list to one project; a pending move shows on the item.
 		const project = typeof req.query.project === "string" ? req.query.project : undefined;

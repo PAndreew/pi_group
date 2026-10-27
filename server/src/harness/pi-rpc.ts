@@ -1,4 +1,3 @@
-import { builtinTools, capabilityExtensions, toolCapabilities } from "../tool-capabilities.js";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -80,16 +79,8 @@ class RpcProcess {
 	onExit: (code: number | null) => void = () => {};
 
 	constructor(args: string[], cwd: string, sessionKey?: string) {
-		// Production uses the extension snapshot from the same build as the server.
-		// Source development can still load server/extensions directly.
-		const builtExtensions = path.resolve(import.meta.dirname, "..", "extensions");
-		const extension = (name: string) => ["--extension", path.resolve(existsSync(builtExtensions) ? builtExtensions : path.resolve(import.meta.dirname, "..", "..", "extensions"), name)];
-		// Only explicit extensions: project-local ones (.pi/extensions, .pi/mcp.json) would run outside the
-		// sandbox, and the agent can write project folders. User-level skills, context files, prompt
-		// templates and MCP servers load. Pi's host file/shell tools are replaced by sandbox-tools.mjs.
-		const beezy = ["project-scope.mjs", "sandbox-tools.mjs", "request-user-input.mjs", "file-links.mjs", "scheduled-jobs.mjs", "applets.mjs", "vault.mjs", "browser.mjs", "cloudflare-assistance.mjs"];
-		const tools = ["scope", "delegate_project", "butler_sessions", ...builtinTools(false), ...toolCapabilities().flatMap(c => c.tools.map(t => t.name))];
-		if (sessionKey) args = [...args, "--session-dir", sessionDirFor(cwd), "--no-extensions", "--no-approve", "--no-builtin-tools", "--tools", [...new Set(tools)].join(","), ...beezy.flatMap(extension), ...["mcp", "codemode", "tool-search"].flatMap(name => ["--extension", `builtin:${name}`]), ...capabilityExtensions().flatMap(file => ["--extension", file])];
+		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
+		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("cloudflare-assistance.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		this.child = platform().sandbox.spawn(command, argv, {
 			cwd,
@@ -322,7 +313,7 @@ class PiLiveSession extends LiveSessionBase {
 				this.notice("warn", `Extension error: ${record.error}`);
 				// Pi normally logs extension exceptions and continues. A failed context
 				// guard must not silently send the unfiltered result to the provider.
-				if (["cloudflare-assistance.mjs", "project-scope.mjs", "sandbox-tools.mjs"].some(name => String(record.extensionPath ?? "").endsWith(name))) this.rpc.write({ type: "abort" });
+				if (String(record.extensionPath ?? "").endsWith("cloudflare-assistance.mjs")) this.rpc.write({ type: "abort" });
 				break;
 		}
 	}
@@ -363,8 +354,6 @@ class PiLiveSession extends LiveSessionBase {
 	}
 
 	async prompt(input: PromptInput) {
-		const { commands } = await this.rpc.send({ type: "get_commands" });
-		if (!commands?.some((c: Any) => c.name === "beezy-scope-ready")) throw new Error("Scoped runtime extension unavailable; refusing an unscoped run");
 		this.touch();
 		const images = input.images?.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType }));
 		if (this.state.running) {

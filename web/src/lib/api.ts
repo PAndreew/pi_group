@@ -255,21 +255,10 @@ export interface Project {
   links: string[]
   general: boolean
   canManage: boolean
-  canManageTools: boolean
   memberIds: string[]
   /** Created before project sharing: everyone in the tenant can use it until it is shared explicitly. */
   openToTenant: boolean
   createdAt: string
-}
-
-export interface ToolCapability {
-  id: string
-  name: string
-  description: string
-  access: "off" | "read" | "write"
-  supportsRead: boolean
-  supportsWrite: boolean
-  tools: { name: string; access: "read" | "write" }[]
 }
 
 /** A move of a session or chat to another project, waiting for the people in it. */
@@ -481,8 +470,6 @@ export const api = {
   chats: (project?: string) => request<{ chats: ChatListItem[] }>("GET", `/api/chats${project ? `?${q({ project })}` : ""}`),
   projects: () => request<{ projects: Project[] }>("GET", "/api/projects"),
   createProject: (body: { name: string; links?: string[] }) => request<{ project: Project }>("POST", "/api/projects", body),
-  projectCapabilities: (id: string) => request<{ capabilities: ToolCapability[] }>("GET", `/api/projects/${enc(id)}/capabilities`),
-  setProjectCapability: (id: string, capability: string, access: ToolCapability["access"]) => request("PUT", `/api/projects/${enc(id)}/capabilities/${enc(capability)}`, { access }),
   shareProject: (id: string, memberIds: string[]) => request<{ project: Project }>("PUT", `/api/projects/${enc(id)}/shares`, { memberIds }),
   updateProject: (id: string, body: { name?: string; links?: string[] }) => request<{ project: Project }>("PATCH", `/api/projects/${enc(id)}`, body),
   deleteProject: (id: string) => request("DELETE", `/api/projects/${enc(id)}`),

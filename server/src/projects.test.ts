@@ -15,7 +15,7 @@ for (const folder of ["apps/beezy/server", "apps/clairic", "holiday"]) mkdirSync
 test("projects sort sessions in, move them, and ask the people in them first", async () => {
 	const { authenticate, authRoutes, createUser } = await import("./auth.js");
 	const { loadStore, store } = await import("./store.js");
-	const { mountProjects, projectIdOf } = await import("./projects.js");
+	const { mountProjects, projectIdOf, visibleProjectId } = await import("./projects.js");
 	loadStore();
 	const owner = createUser("project-owner", "test-password", "member");
 	const friend = createUser("project-friend", "test-password", "member");
@@ -85,6 +85,15 @@ test("projects sort sessions in, move them, and ask the people in them first", a
 		assert.equal((await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: ["missing"] })).status, 400);
 		await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: [] });
 		assert.equal((await asFriend("GET", "/projects")).body.projects.length, 1);
+		// Conversations shared with a non-member stay findable, under their General.
+		assert.equal(visibleProjectId(friend, apps.id), general);
+		assert.equal(visibleProjectId(owner, apps.id), apps.id);
+		// Projects from before sharing existed stay open to the tenant.
+		const legacy = store.data.projects.find((p) => p.id === holidayNow.id)!;
+		delete legacy.memberIds;
+		assert.equal((await asFriend("GET", "/projects")).body.projects.length, 2);
+		assert.equal((await asOwner("GET", "/projects")).body.projects.find((p: { id: string }) => p.id === holidayNow.id).openToTenant, true);
+		legacy.memberIds = [];
 		await asOwner("PUT", `/projects/${apps.id}/shares`, { memberIds: [friend.id] });
 		assert.equal((await asOwner("DELETE", `/projects/${general}`)).status, 400);
 

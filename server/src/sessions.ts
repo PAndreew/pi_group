@@ -1,4 +1,3 @@
-import { authorizeAgentRun, mountAgentScope, revokeAgentRun } from "./agent-scope.js";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -325,10 +324,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
 		saveNow();
 		try {
-			authorizeAgentRun(meta, user, live.state.running);
 			await live.prompt(input);
 		} catch (error) {
-			if (!live.state.running) revokeAgentRun(meta.key);
 			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
 			save();
 			throw error;
@@ -336,23 +333,6 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(input.text), updatedAt: new Date().toISOString() });
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
-
-	hub.onRun(key => revokeAgentRun(key));
-	mountAgentScope(router, {
-		readSession: async meta => {
-			const adapter = adapterOf(meta.harness);
-			const live = adapter.live(meta.id);
-			const messages = live?.state.messages ?? (await adapter.readSession(meta.id, meta.cwd))?.messages ?? [];
-			const text = JSON.stringify(messages);
-			return { key: meta.key, running: live?.state.running ?? false, transcript: text.slice(-100000), truncated: text.length > 100000 };
-		},
-		delegate: async (user, projectId, text) => {
-			const project = store.data.projects.find(p => p.id === projectId)!;
-			const meta = await createSession(user, { harness: "pi", cwd: project.cwd, projectId, name: `Delegated: ${project.name}` });
-			await submitPrompt(meta, user, { text });
-			return meta.key;
-		},
-	});
 
 	// Serialize admission (including asynchronous Clef checks), otherwise two shared
 	// submissions could replace one another's initiating user/settings before acceptance.

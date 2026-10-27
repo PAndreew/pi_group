@@ -44,12 +44,12 @@ test("sharing a message into other sessions waits until both agents are idle", a
 	const reader = createUser("fwd-reader", "test-password", "member");
 	const lives = Object.fromEntries(["src", "idle", "busy", "ro"].map((id) => [id, fakeLive(id, dir)]));
 	const adapter = {
-		id: "pi",
+		id: "fake",
 		live: (id: string) => lives[id]?.live,
 		liveSessions: () => Object.values(lives).map((l) => l.live),
 		open: async (id: string) => lives[id].live,
 	} as unknown as HarnessAdapter;
-	const base = { harness: "pi", cwd: dir, updatedAt: "2026-01-01T00:00:00.000Z" };
+	const base = { harness: "fake", cwd: dir, updatedAt: "2026-01-01T00:00:00.000Z" };
 	store.upsertSession({ ...base, key: "fake:src", id: "src", ownerId: owner.id, name: "Source" });
 	store.upsertSession({ ...base, key: "fake:idle", id: "idle", ownerId: owner.id });
 	store.upsertSession({ ...base, key: "fake:busy", id: "busy", ownerId: owner.id });

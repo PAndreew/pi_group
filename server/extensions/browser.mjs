@@ -4,7 +4,7 @@ const guidance = `
 
 ## Shared browser in beezy
 This session has a headless browser the people in the chat see live in beezy's browser panel (the globe icon). Use the browser_* tools to open, read and drive it.
-Shell commands run in a sandbox and their background processes stop when the command ends, so you cannot keep a dev server running for the browser. Open public or already-running URLs, and tell the user the page is open in the browser panel.
+To show a web app, start its dev server in the background so it keeps running (e.g. \`nohup npm run dev > dev.log 2>&1 &\`), wait until it listens, then browser_open its http://localhost:<port> URL and tell the user it is open in the browser panel.
 People can pick elements in the panel; their message then lists "Referenced page elements" with a CSS selector, text, HTML, a screenshot and, when the app provides it, the source file and component. The selectors work with browser_click and browser_type. Use the source location to find the code.`
 
 export default function (pi) {

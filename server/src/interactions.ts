@@ -36,7 +36,6 @@ const tokenFor = (key: string) => createHmac("sha256", secret).update(key).diges
 export function interactionEnvironment(key: string) {
   const base = `http://${config.host === "::1" ? "[::1]" : "127.0.0.1"}:${config.port}/api`;
   return {
-    BEEZY_AGENT_URL: `${base}/agent-bridge/${encodeURIComponent(key)}`,
     BEEZY_INTERACTION_URL: `${base}/interaction-bridge/${encodeURIComponent(key)}`,
     BEEZY_JOBS_URL: `${base}/job-bridge/${encodeURIComponent(key)}`,
     BEEZY_APPLETS_URL: `${base}/applet-bridge/${encodeURIComponent(key)}`,

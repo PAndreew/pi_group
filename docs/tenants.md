@@ -8,7 +8,7 @@ Existing data migrates to **Work**; new tenants never inherit its sessions or me
 
 An administrator who belongs to a tenant can use **Tenant → Share tenant with…** to add an existing account by exact username. `POST /api/tenants/:id/shares` accepts `{username}`; repeated sharing is idempotent. Non-members cannot invite, including administrators outside that tenant. Ordinary members cannot invite until tenant ownership is modeled.
 
-Joining provides the tenant's General space, not access to its non-General projects, existing private sessions or chats. Project membership and conversation sharing remain separate. This is additive sharing only; removal and tenant creation are not exposed by this UI yet. As below, filesystem/tool isolation is not implemented, so invitations are only suitable for trusted users.
+Joining provides the tenant's General space, not access to its non-General projects, existing private sessions or chats. Project membership and conversation sharing remain separate. This is additive sharing only; removal and tenant creation are not exposed by this UI yet. Filesystem/tool isolation is not implemented (see below), so invitations are only suitable for trusted users.
 
 ## Initial Family setup
 
@@ -27,7 +27,7 @@ Default chat working folders and memory master sessions are per tenant. Existing
 
 ## Trust boundary
 
-**Tenant membership is not itself an OS sandbox.** Pi agent commands now use an explicit-mount Bubblewrap/seccomp boundary, and a personal General butler delegates writes to project sessions (see [projects.md](projects.md#agent-execution-and-butler-delegation)). Admin terminals and scheduled scripts still run as the server's Unix user and can access host files outside their working folder. Separate OS users/containers, credentials, and process/storage policies are needed before hosting mutually untrusted infrastructure customers. The application API boundary and default context separation do not provide that protection.
+**This is not an OS sandbox.** Agent tools, admin terminals and scheduled scripts run as the server's Unix user and can access host files outside their working folder. Separate OS users/containers, credentials, and process/storage policies are needed before hosting mutually untrusted infrastructure customers. The application API boundary and default context separation do not provide that protection.
 
 ## Validation
 

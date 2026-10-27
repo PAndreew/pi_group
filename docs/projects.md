@@ -16,37 +16,12 @@ The project menu has **Share project with…**. The creator chooses existing mem
 
 Project membership never modifies session shares or chat membership. Earlier and future private sessions are not automatically shared. Sharing a conversation still uses the existing session sharing/forwarding controls. Revoking project membership does not revoke separately shared conversations.
 
-**Human-facing file APIs and admin terminals are not yet project-isolated.** Administrators also retain existing session access. Do not rely on project membership to isolate untrusted collaborators. Agent tool execution now has the separate enforced boundary described below.
+Someone a conversation is shared with, but who is not a member of its project, finds it under their **General**; the project itself stays hidden from them.
 
-### Tools & connections
+**Project membership is an organizing and visibility boundary, not isolation.** Agents run with the server user's permissions and can reach files outside their project, as can human-facing file APIs and admin terminals. Administrators also retain existing session access. Do not rely on project membership to isolate untrusted collaborators.
 
-The project's menu exposes **Tools & connections**. Project creators (General: administrators) grant `off`, `read`, or `write` per capability. Each agent tool call rechecks the current grant; revocation blocks future calls, not already-running operations. Scheduled agent sessions inherit their project's grants.
-
-- **Web search** is on (read) by default.
-- **MCP servers** from the user-level `~/.pi/agent/mcp.json` each appear as a capability, **on by default**. Pi's built-in MCP support connects them with their existing command, environment and sign-in; credentials are never included in the project settings response. A server started with `--read-only` counts as read tools (also usable by the read-only butler); any other server counts as write tools. Project `.pi/mcp.json` files are never loaded, since agents can write project folders. MCP tools reach the model according to their [exposure](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/mcp.md#control-tool-exposure), through `codemode` or `tool_search` by default; codemode scripts run in QuickJS without Node, file or network access, and each tool they call passes the same gate.
-- Operator-owned `DATA_DIR/tool-capabilities.json` registers further tools: exact Pi tool names, audited read/write classification, optional argument allowlists, an optional `defaultAccess`, and trusted extension adapters. An arbitrary host shell is not a capability adapter.
-
-Beezy's own tools are always available: file and shell tools (sandboxed, below), the shared browser, vault, applets, scheduled-job proposals, `request_user_input`, Cloudflare assistance helpers, `codemode` and `tool_search`. Unknown tools are blocked.
-
-### Agent execution and butler delegation
-
-Pi RPC sessions load only explicit extensions: Beezy's (`project-scope.mjs` first, then `sandbox-tools.mjs` and the feature extensions) and Pi's built-in MCP, codemode and tool search. Discovered and project-local extensions and project trust are disabled; user-level skills, prompt templates and context files (`AGENTS.md`) load. Session storage is pinned server-side so project settings cannot redirect it. Prompt admission verifies the scope extension's readiness. Pi itself remains a trusted orchestrator on the host; Beezy's extensions act through authenticated server bridges.
-
-- `sandbox-tools.mjs` replaces Pi's `read`, `write`, `edit` and `bash` (and user `!` commands) with the same tools whose every file and process operation runs on the server through `agent-bridge` in Linux Bubblewrap (`project-sandbox.ts`): explicit roots, read-only system binaries, a private process namespace, the host's TCP/UDP network (with read-only DNS/TLS configuration from `/etc`), temporary HOME/tmp, cleared environment and no unsandboxed fallback. Shell commands run up to 30 minutes by default (at most an hour) and keep the last 1 MB of output; files up to 25 MB can be read or written. Reading operator-installed skill files (`~/.pi/agent/skills`, `~/.agents/skills`) is the only host file access. Shell tools have no host model/bridge credentials. A seccomp filter allows only AF_INET/AF_INET6 sockets, so commands can use the internet but not Unix sockets (in mounted folders or abstract ones such as D-Bus), and denies io_uring, with an ABI guard. Commands can reach services listening on the host's TCP ports; background processes end with their command. x64 and arm64 Linux are supported. Bubblewrap is required; other harnesses are refused.
-- `scope` reports the enforced mounts.
-- Project sessions receive writable mounts for their own and linked folders only, even if the historical session cwd lies elsewhere. Server state, credentials and the running application's code cannot be mounted. Broad links overlapping those directories are rejected, not silently granted.
-- A private General session owned by the invoking person, not attached to a group chat, is the butler. Its project mounts are read-only across all tenants where that person has explicit access. `butler_sessions` lists/reads conversations they own or have explicit session shares for; admin status is not a private-transcript bypass. General loose files and chat-only membership without session shares are not currently included.
-- `delegate_project` is butler-only. The server rechecks target membership, switches tenant context, creates a **new private Pi session** in the target project, and submits the task as the invoking person. It returns a session key; the butler can poll progress with `butler_sessions`. Five delegations per run; delegated project agents cannot delegate again. Only the provided task text is forwarded, not the butler's transcript.
-- Group General agents get a dedicated `General/groups/<chat-id>` folder, not the shared General/memory directory. Existing files are not automatically migrated. Shared standalone General sessions must be moved into a project or use a group chat before running an agent.
-- Caller identity is server-side, reauthorized for each tool request. While a run is active, another person's prompt is rejected rather than replacing its authorization. Restart clears grants.
-
-**Outside this boundary:** extensions and MCP servers themselves run on the host (operator-installed and trusted; an MCP server can do whatever its own implementation allows), as do human file APIs, admin terminals, scheduled scripts, trusted host Pi/configuration and kernel vulnerabilities are outside this boundary. This is not whole-tenant isolation from mutually untrusted host users.
-
-Remaining work before the complete privacy model can be deployed:
-- Extend the agent boundary to human file routes, folder search, terminals and scheduled scripts.
-- Extend butler reads to General personal files and chat-only conversation membership without exposing another person's private transcripts.
-- Tenant sharing now adds existing users without implicit project grants (see [tenants.md](tenants.md)); tenant ownership and removal remain to be built.
-- Preserve private transcript isolation even from project agents; selected-turn sharing must publish only those turns.
+Remaining work:
+- Tenant sharing adds existing users without implicit project grants (see [tenants.md](tenants.md)); tenant ownership and removal remain to be built.
 - Resolve moved conversations whose working directories lie outside the destination project, and invitation/revocation for their participants.
 
 ## Moving
