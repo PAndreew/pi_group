@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { House } from "lucide-react"
+import { ChevronDown, House } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -41,8 +41,8 @@ export function TenantPicker() {
     <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" aria-label="Tenant" className="min-w-0 max-w-40" disabled={busy || !tenants.length}>
-          <House className="shrink-0" /><span className="truncate">{tenants.find(t => t.id === activeTenant())?.name ?? "…"}</span>
+        <Button variant="ghost" size="sm" aria-label="Tenant" className="min-w-0 max-w-40 shrink-0 gap-1 px-1.5" disabled={busy || !tenants.length}>
+          <House className="shrink-0" /><span className="hidden truncate sm:inline">{tenants.find(t => t.id === activeTenant())?.name ?? "…"}</span><ChevronDown className="shrink-0 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

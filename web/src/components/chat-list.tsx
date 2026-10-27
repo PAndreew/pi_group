@@ -1,4 +1,4 @@
-import { Brain, Folder, FolderInput, Loader2, Search, Trash2 } from "lucide-react"
+import { Brain, Folder, FolderInput, Loader2, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -8,8 +8,8 @@ import { MoveDialog, MoveRequests, type MoveTarget } from "@/components/project-
 import { SwipeActions, type SwipeAction } from "@/components/swipe-actions"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
+import { useChatSearch } from "@/lib/chat-search"
 import { api, type ChatListItem, type SessionSummary } from "@/lib/api"
 import { useNav } from "@/lib/nav"
 import { useProjects } from "@/lib/projects"
@@ -41,7 +41,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
   const [moving, setMoving] = useState<MoveTarget>()
   const [deletingChat, setDeletingChat] = useState<Extract<ChatListItem, { kind: "chat" }>>()
   const [items, setItems] = useState<ChatListItem[]>()
-  const [query, setQuery] = useState("")
+  const { query } = useChatSearch()
   const [swiped, setSwiped] = useState<string>()
   const [deleting, setDeleting] = useState<SessionSummary>()
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -71,11 +71,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
 
   return (
     <div className={cn("flex min-h-0 min-w-0 max-w-full flex-col", className)}>
-      <div className="relative px-3 py-2">
-        <Search className="pointer-events-none absolute top-1/2 left-5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search chats" className="h-9 pl-8" />
-      </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-2">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {requests && <MoveRequests />}
         {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : active && !active.general ? `Nothing in ${active.name} yet. Start a chat below, or move one here.` : "No chats yet. Mention @pi or someone below to start one."}</p>}

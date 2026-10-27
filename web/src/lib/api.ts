@@ -514,6 +514,7 @@ export const api = {
   deleteApplet: (id: string) => request("DELETE", `/api/applets/${enc(id)}`),
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
+  lastEdit: (scope: { session: string } | { project: string }) => request<{ file: string | null; sessionKey?: string }>("GET", `/api/sessions/last-edit?${q(scope)}`),
   createSession: (body: { harness: string; path: string; projectId?: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
     request<{ session: SessionSummary }>("POST", "/api/sessions", body),
   eventsUrl: (key: string) => tenantUrl(`/api/sessions/${enc(key)}/events`),

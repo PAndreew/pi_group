@@ -19,7 +19,7 @@ try {
     await route.fulfill({ json: body })
   })
   await page.goto(`${process.env.TEST_URL || 'http://127.0.0.1:5173'}/#s=s`)
-  await page.locator('input[type="file"][multiple]').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') })
+  await page.locator('main input[type="file"][multiple]').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') })
   await page.getByRole('button', { name: 'Remove sample.png', exact: true }).waitFor({ timeout: 3000 })
   const preview = page.getByRole('img', { name: 'sample.png', exact: true })
   await preview.waitFor({ timeout: 3000 })
@@ -30,7 +30,7 @@ try {
   for (const hash of ['', '#c=test']) {
     await page.goto(`${process.env.TEST_URL || 'http://127.0.0.1:5173'}/${hash}`)
     await page.getByRole('button', { name: 'Attach files', exact: true }).waitFor()
-    await page.locator('input[type="file"][multiple]').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: Buffer.from('image') })
+    await page.locator('main input[type="file"][multiple]').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: Buffer.from('image') })
     await page.getByRole('img', { name: 'sample.png', exact: true }).waitFor()
     assert.ok((await page.locator('textarea').inputValue()).includes('uploads/sample.png'))
   }

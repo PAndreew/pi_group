@@ -267,18 +267,18 @@ export function Sidebar({
               e.target.value = ""
             }}
           />
-          <Button size="sm" className="flex-1" disabled={creating} onClick={onNewSession}>
+          <Button size="sm" className="min-w-0 flex-1 lg:h-7 lg:text-xs" disabled={creating} onClick={onNewSession}>
             {creating ? <Loader2 className="animate-spin" /> : <Plus />} New session
           </Button>
-          <Button size="icon-sm" variant="outline" onClick={() => input.current?.click()} disabled={busy} aria-label="Upload files" title="Upload files">
+          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={() => input.current?.click()} disabled={busy} aria-label="Upload files" title="Upload files">
             {busy ? <Loader2 className="animate-spin" /> : <Upload />}
           </Button>
-          <Button size="icon-sm" variant="outline" onClick={mkdir} aria-label="New folder" title="New folder">
+          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={mkdir} aria-label="New folder" title="New folder">
             <FolderPlus />
           </Button>
           <Button
             size="icon-sm"
-            variant="outline"
+            variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5"
             onClick={() => {
               setHidden((h) => !h)
               localStorage.setItem("pi-group:hidden", hidden ? "0" : "1")
@@ -288,7 +288,7 @@ export function Sidebar({
           >
             {hidden ? <Eye /> : <EyeOff />}
           </Button>
-          <Button size="icon-sm" variant="outline" onClick={load} aria-label="Refresh" title="Refresh">
+          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={load} aria-label="Refresh" title="Refresh">
             <RefreshCw />
           </Button>
         </div>

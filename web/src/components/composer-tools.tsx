@@ -1,4 +1,4 @@
-import { Clock, FolderOpen, Gauge, Globe, Hammer, LayoutGrid, Paperclip, SquareTerminal } from "lucide-react"
+import { Clock, FolderOpen, Gauge, Hammer, LayoutGrid, SquareTerminal } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { AppletsDialog } from "@/components/applets-dialog"
 import { ExplorerDialog } from "@/components/explorer-dialog"
@@ -17,22 +17,21 @@ const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "explorer"
 
 /**
- * The icons under every message box, each opening its own modal. With a session they act on it;
- * without one (home screen, a chat pi has not joined yet) they act on `folder`.
+ * The tool icons, each opening its own modal: under every message box, or at the bottom of the
+ * large-screen left sidebar (which replaces the ones under the box, and already shows the files).
+ * With a session they act on it; without one (home screen, a chat pi has not joined yet) they act
+ * on `folder`.
  */
 export function ComposerTools({
   sessionKey,
   folder,
-  onAttach,
   onInsert,
-  browser,
+  placement = "composer",
 }: {
   sessionKey?: string
   folder: string
-  onAttach?: () => void
   onInsert?: (text: string) => void
-  /** The session's shared browser: whether it runs, whether its panel shows, and showing or hiding it. */
-  browser?: { live: boolean; shown: boolean; toggle: () => void }
+  placement?: "composer" | "sidebar"
 }) {
   const { user } = useAuth()
   const nav = useNav()
@@ -40,46 +39,27 @@ export function ComposerTools({
   const pendingJobs = usePendingJobs()
   const pendingApplets = usePendingApplets()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
-  const icon = (name: Panel | "attach", label: string, node: React.ReactNode, onClick: () => void) => (
-    <Button key={name} variant="ghost" size="icon" className="composer-icon size-10 [&_svg]:size-[22px]" data-active={panel === name} onClick={onClick} aria-label={label} title={label}>
+  const icon = (name: Panel, label: string, node: React.ReactNode) => (
+    <Button key={name} variant="ghost" size="icon" className="composer-icon size-10 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]" data-active={panel === name} onClick={() => setPanel(name)} aria-label={label} title={label}>
       {node}
     </Button>
+  )
+  const dot = (show: boolean, node: React.ReactNode) => (
+    <span className="relative">
+      {node}
+      {show && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-amber-500" />}
+    </span>
   )
 
   return (
     <>
-      <div className="flex items-center justify-center gap-0.5">
-        {onAttach && icon("attach", "Attach files", <Paperclip className="size-[22px]" />, onAttach)}
-        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal className="size-[22px]" />, () => setPanel("terminal"))}
-        {icon("tools", "Tools, skills, commands and MCP servers", <Hammer className="size-[22px]" />, () => setPanel("tools"))}
-        {icon(
-          "jobs",
-          pendingJobs ? `Scheduled jobs (${pendingJobs} waiting for approval)` : "Scheduled jobs",
-          <span className="relative">
-            <Clock className="size-[22px]" />
-            {pendingJobs > 0 && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-amber-500" />}
-          </span>,
-          () => setPanel("jobs"),
-        )}
-        {icon(
-          "applets",
-          pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets",
-          <span className="relative">
-            <LayoutGrid className="size-[22px]" />
-            {pendingApplets > 0 && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-amber-500" />}
-          </span>,
-          () => setPanel("applets"),
-        )}
-        {icon("monitor", "Resource monitor", <Gauge className="size-[22px]" />, () => setPanel("monitor"))}
-        {icon("explorer", "Folders and files", <FolderOpen className="size-[22px]" />, () => setPanel("explorer"))}
-        {browser && (
-          <Button variant="ghost" size="icon" className="composer-icon size-10 [&_svg]:size-[22px]" data-active={browser.shown} onClick={browser.toggle} aria-label="Shared browser" title="Shared browser: open your app or any page, pick elements to reference">
-            <span className="relative">
-              <Globe className="size-[22px]" />
-              {browser.live && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-green-500" />}
-            </span>
-          </Button>
-        )}
+      <div className={placement === "composer" ? "flex items-center justify-center gap-0.5 xl:hidden" : "flex items-center justify-evenly gap-0.5"}>
+        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal />)}
+        {icon("tools", "Tools, skills, commands and MCP servers", <Hammer />)}
+        {icon("jobs", pendingJobs ? `Scheduled jobs (${pendingJobs} waiting for approval)` : "Scheduled jobs", dot(pendingJobs > 0, <Clock />))}
+        {icon("applets", pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets", dot(pendingApplets > 0, <LayoutGrid />))}
+        {icon("monitor", "Resource monitor", <Gauge />)}
+        {placement === "composer" && icon("explorer", "Folders and files", <FolderOpen />)}
       </div>
       <ToolsDialog
         sessionKey={sessionKey}

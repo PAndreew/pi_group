@@ -365,14 +365,14 @@ export function ChatView({ chatId }: { chatId: string }) {
           hash="paths"
           placeholder={editing ? "Edit message…" : "Message… (# for files)"}
           agent={<AgentToggle checked={agent} onChange={setAgent} />}
-          controls={<ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} disabled={sending || uploading} agentEnabled={agent} />}
+          controls={<ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={agent} />}
+          onFiles={(files) => void attach(files)}
           onSubmit={(message) => (editing ? saveEdit(message.raw) : send(agent && !message.pi ? `@pi ${message.raw}` : message.raw))}
         />
         {chat && (
           <ComposerTools
             sessionKey={chat.sessionKey}
             folder={chat.folder}
-            onAttach={() => fileInput.current?.click()}
             onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}@pi ${command}`)}
           />
         )}

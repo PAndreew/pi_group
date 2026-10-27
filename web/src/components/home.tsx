@@ -97,8 +97,9 @@ export function Home() {
           placeholder={project && !project.general ? `Start a chat in ${project.name}: message, @someone, #folder…` : "Start a chat: message, @someone, #folder…"}
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
-            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => void attach(files)} />
+            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} />
           }
+          onFiles={(files) => void attach(files)}
           onSubmit={async (message) => {
             message.pi ||= agent
             if (!message.pi && message.people.length === 0) return void toast.info("Mention @pi or at least one person to start a chat.")
@@ -116,7 +117,7 @@ export function Home() {
             }
           }}
         />
-        <ComposerTools folder={folder} onAttach={() => fileInput.current?.click()} onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}${command}`)} />
+        <ComposerTools folder={folder} onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}${command}`)} />
       </div>
     </div>
   )

@@ -77,6 +77,7 @@ export function MentionComposer({
   sessionKey,
   agent,
   controls,
+  onFiles,
 }: {
   value: string
   onChange: (value: string) => void
@@ -93,6 +94,8 @@ export function MentionComposer({
   sessionKey?: string
   agent?: React.ReactNode
   controls?: React.ReactNode
+  /** Files or images pasted into the box. */
+  onFiles?: (files: File[]) => void
 }) {
   const input = useRef<HTMLTextAreaElement>(null)
   const [everyone, setEveryone] = useState<Person[]>([])
@@ -182,7 +185,7 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <ComposerBox agent={agent} controls={controls} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
+    <ComposerBox agent={agent} controls={controls} onFiles={onFiles} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>

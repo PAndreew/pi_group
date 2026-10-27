@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type Router } from "express";
@@ -39,6 +40,23 @@ const canWrite = (a?: EffectiveAccess) => a === "admin" || a === "owner" || a ==
 const canManage = (a?: EffectiveAccess) => a === "admin" || a === "owner";
 
 /** Users who hear about a session's runs: the owner, people it is shared with, and anyone who prompted it. */
+const editTools = new Set(["write", "write_file", "edit", "multiedit"]);
+/** The last existing file inside the root that a write/edit tool call touched, root-relative. */
+export function lastEditedFile(messages: AgentMessage[], cwd: string) {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const content = (messages[i]?.role === "assistant" && Array.isArray(messages[i].content) ? messages[i].content : []) as { type?: string; name?: string; arguments?: Record<string, unknown> }[];
+		for (let j = content.length - 1; j >= 0; j--) {
+			const block = content[j];
+			if (block?.type !== "toolCall" || !editTools.has(String(block.name).toLowerCase())) continue;
+			const target = block.arguments?.path ?? block.arguments?.file_path ?? block.arguments?.filePath;
+			if (typeof target !== "string") continue;
+			const rel = toRel(path.resolve(cwd, target));
+			if (rel && !rel.startsWith("..") && !path.isAbsolute(rel) && existsSync(path.resolve(cwd, target))) return rel;
+		}
+	}
+	return undefined;
+}
+
 export function involved(user: User, meta: SessionMeta) {
 	if (meta.deleted || !accessOf(user, meta)) return false;
 	if (meta.ownerId === user.id || (meta.visibility === "shared" && meta.shares.some((s) => s.userId === user.id))) return true;
@@ -609,6 +627,24 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt))
 			.slice(0, limit);
 		res.json({ sessions });
+	});
+
+	/** The file pi last wrote or edited, in one session or across a project's recent sessions (the file preview sidebar). */
+	router.get("/sessions/last-edit", async (req, res) => {
+		const user = req.user!;
+		const { session, project } = z.object({ session: z.string().optional(), project: z.string().optional() }).parse(req.query);
+		const candidates = Object.values(store.data.sessions)
+			.filter((meta) => !meta.deleted && accessOf(user, meta) && (session ? meta.key === session : !project || projectIdOf(meta.cwd, meta.projectId, meta.tenantId ?? "work") === project))
+			.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
+			.slice(0, 10);
+		for (const meta of candidates) {
+			const adapter = byId.get(meta.harness);
+			if (!adapter) continue;
+			const messages = adapter.live(meta.id)?.state.messages ?? (await adapter.readSession(meta.id, meta.cwd).catch(() => undefined))?.messages ?? [];
+			const file = lastEditedFile(messages, meta.cwd);
+			if (file) return void res.json({ file, sessionKey: meta.key });
+		}
+		res.json({ file: null });
 	});
 
 	/** Sessions and chats the caller can send messages into (the share-to picker); sessions behind a chat and memory are left out. */

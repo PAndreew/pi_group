@@ -1,17 +1,23 @@
-import { Brain, Camera, X } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import { Camera, Globe, Paperclip } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
 import { api, type ModelInfo } from "@/lib/api"
 
-const short: Record<string, string> = { off: "0", minimal: "MIN", low: "L", medium: "M", high: "H", xhigh: "XH", max: "MAX" }
-
 export interface ComposerConfig { model?: { provider: string; id: string }; thinkingLevel?: string }
 
-/** Quick switches affect only the linked session, never creation defaults. */
-export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled = true, draft, onDraftChange }: { agentEnabled?: boolean; sessionKey?: string; draft?: ComposerConfig; onDraftChange?: (config: ComposerConfig) => void; onCamera: (files: File[]) => void; disabled?: boolean }) {
+/** The session's shared browser: whether it runs, whether its panel shows, and showing or hiding it. */
+export interface BrowserToggle { live: boolean; shown: boolean; toggle: () => void }
+
+const iconButton = "composer-icon grid size-10 shrink-0 place-items-center rounded hover:bg-accent disabled:opacity-50 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]"
+
+/**
+ * The message box's buttons after the Agent toggle: attach, shared browser, camera, and the model
+ * below the box. A model switch affects only the linked session, never creation defaults; the
+ * reasoning level is set in Settings.
+ */
+export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disabled, agentEnabled = true, draft, onDraftChange }: { agentEnabled?: boolean; sessionKey?: string; draft?: ComposerConfig; onDraftChange?: (config: ComposerConfig) => void; onCamera: (files: File[]) => void; onAttach?: () => void; browser?: BrowserToggle; disabled?: boolean }) {
   const { user } = useAuth()
   const { state: liveState } = useSessionStream(sessionKey)
   const state = sessionKey ? liveState : draft
@@ -31,29 +37,8 @@ export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled 
     lastDefaults.current = savedDefaults
     if (!sessionKey) onDraftChange?.({})
   }, [savedDefaults, sessionKey, onDraftChange])
-  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
-  const reasoning = useRef<HTMLButtonElement>(null)
-  const [popupPosition, setPopupPosition] = useState({ left: 0, bottom: 0, width: 320 })
-  useLayoutEffect(() => {
-    if (!open) return
-    const position = () => {
-      const box = reasoning.current?.closest("[data-composer-box]")?.getBoundingClientRect()
-      if (!box) return
-      const width = Math.min(320, box.width - 16, window.innerWidth - 16)
-      setPopupPosition({ width, left: Math.max(8, Math.min(window.innerWidth - width - 8, box.left + (box.width - width) / 2)), bottom: window.innerHeight - box.top + 8 })
-    }
-    position()
-    window.addEventListener("resize", position)
-    window.addEventListener("scroll", position, true)
-    window.visualViewport?.addEventListener("resize", position)
-    return () => {
-      window.removeEventListener("resize", position)
-      window.removeEventListener("scroll", position, true)
-      window.visualViewport?.removeEventListener("resize", position)
-    }
-  }, [open])
   useEffect(() => {
     setModels([])
     if (!sessionKey && !harness) return
@@ -69,7 +54,6 @@ export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled 
     onDraftChange({ model: { provider: selected.provider, id: selected.id }, thinkingLevel: levels.includes(saved?.thinkingLevel ?? "") ? saved!.thinkingLevel : levels[0] })
   }, [models, sessionKey, draft, onDraftChange, harness, user])
   const model = models.find((m) => m.id === state?.model?.id && m.provider === state?.model?.provider)
-  const levels = model?.thinkingLevels ?? ["off"]
   const level = state?.thinkingLevel ?? "off"
   // The toggle only decides whether a message goes to the agent; an existing session can always be reconfigured.
   const locked = !agentEnabled && !sessionKey
@@ -91,19 +75,18 @@ export function ComposerControls({ sessionKey, onCamera, disabled, agentEnabled 
       {models.map((m) => <option key={`${m.provider}/${m.id}`} value={JSON.stringify([m.provider, m.id])}>{m.name}</option>)}
     </select>
     </div>
-    <div className="shrink-0">
-      <button ref={reasoning} type="button" className="composer-icon flex h-11 items-center gap-1 rounded px-1 hover:bg-accent" aria-label={`Reasoning: ${level}`} aria-expanded={open} data-active={open} disabled={disabled || locked || busy || levels.length < 2} onPointerDown={(e) => e.preventDefault()} onClick={() => setOpen((current) => !current)}><Brain className="size-6" /><span className="text-xs">{short[level] ?? level}</span></button>
-      {open && createPortal(<div role="dialog" aria-label="Reasoning settings" style={popupPosition} className="fixed z-50 rounded border bg-popover p-3 text-popover-foreground shadow" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false) }}>
-        <div className="-mt-1 -mr-1 flex items-center justify-between text-sm"><span>Reasoning: {level}</span><button type="button" aria-label="Close reasoning" className="grid size-11 place-items-center rounded hover:bg-accent" onClick={() => setOpen(false)}><X className="size-6" /></button></div>
-        <input aria-label="Reasoning level" aria-valuetext={level} type="range" min={0} max={levels.length - 1} step={1} value={Math.max(0, levels.indexOf(level))} disabled={busy} className="reasoning-range" onChange={(e) => { const thinkingLevel = levels[Number(e.target.value)]; if (sessionKey) void change(() => api.setThinking(sessionKey, thinkingLevel)); else onDraftChange?.({ ...draft, thinkingLevel }) }} />
-        <div className="flex justify-between text-xs">{levels.map((l) => <span key={l}>{short[l] ?? l}</span>)}</div>
-      </div>, document.body)}
-    </div>
     <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onCamera(Array.from(e.target.files ?? [])); e.target.value = "" }} />
-    <button type="button" disabled={disabled} className="composer-icon grid size-11 shrink-0 place-items-center rounded hover:bg-accent" aria-label="Take photo" onClick={() => camera.current?.click()}><Camera className="size-6" /></button>
+    <button type="button" disabled={disabled || !onAttach} className={iconButton} aria-label="Attach files" title="Attach files (or paste them)" onClick={onAttach}><Paperclip /></button>
+    <button type="button" disabled={!browser} className={iconButton} data-active={browser?.shown} aria-label="Shared browser" title={browser ? "Shared browser: open your app or any page, pick elements to reference" : "The shared browser opens in agent sessions"} onClick={browser?.toggle}>
+      <span className="relative">
+        <Globe />
+        {browser?.live && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-green-500" />}
+      </span>
+    </button>
+    <button type="button" disabled={disabled} className={iconButton} aria-label="Take photo" title="Take photo" onClick={() => camera.current?.click()}><Camera /></button>
   </>
 }
 
 export function AgentToggle({ checked, onChange, disabled }: { checked: boolean; onChange?: (value: boolean) => void; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon flex min-h-11 shrink-0 items-center gap-2 text-base font-medium"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-zinc-300 dark:bg-white"}`}><span className={`size-5 rounded-full bg-background transition-transform ${checked ? "translate-x-5" : ""}`} /></span>Agent</button>
+  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon flex min-h-10 shrink-0 items-center gap-2 text-base font-medium lg:min-h-8 lg:gap-1.5 lg:text-sm"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 lg:h-5 lg:w-9 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-zinc-300 dark:bg-white"}`}><span className={`size-5 rounded-full bg-background transition-transform lg:size-4 ${checked ? "translate-x-5 lg:translate-x-4" : ""}`} /></span>Agent</button>
 }

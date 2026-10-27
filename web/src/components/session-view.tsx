@@ -660,7 +660,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   <div className="min-w-0 flex-1">
                   <ComposerBox
                     agent={<AgentToggle checked disabled />}
-                    controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} />}
+                    controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}
+                    onFiles={(pasted) => setFiles((fs) => [...fs, ...pasted])}
                     onSend={send}
                     canSend={Boolean(text.trim()) || (!editing && (files.length > 0 || refs.length > 0))}
                     sending={sending}
@@ -679,10 +680,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   </ComposerBox>
                   </div>
                 </div>
-                <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onAttach={() => fileInput.current?.click()}
-                  onInsert={setText}
-                  browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }}
-                />
+                <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onInsert={setText} />
                 {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
               </>
             ) : (

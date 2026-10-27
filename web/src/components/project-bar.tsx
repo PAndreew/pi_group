@@ -1,4 +1,4 @@
-import { Folder, Link2, Loader2, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react"
+import { Check, Folder, Link2, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -171,13 +171,20 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
   </Dialog>
 }
 
-/** The secondary navbar: General, every other project, then +. The active project's menu edits or deletes it. */
-export function ProjectBar({ className, onSelect }: { className?: string; onSelect?: () => void }) {
-  const { projects, active, setActive, reload } = useProjects()
+/**
+ * The projects in the top bar: the two most recently opened ones, then … with every project, a new
+ * one, and the active project's sharing, rename and delete.
+ */
+export function ProjectSwitcher({ className, onSelect }: { className?: string; onSelect?: () => void }) {
+  const { projects, active, recent, setActive, reload } = useProjects()
   const [editing, setEditing] = useState<Project>()
   const [creating, setCreating] = useState(false)
   const [sharing, setSharing] = useState<Project>()
   const [confirmDelete, setConfirmDelete] = useState<Project>()
+  const select = (project: Project) => {
+    setActive(project.id)
+    onSelect?.()
+  }
 
   const remove = async (project: Project) => {
     try {
@@ -191,51 +198,56 @@ export function ProjectBar({ className, onSelect }: { className?: string; onSele
   }
 
   return (
-    <nav className={cn("flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2 sm:px-3", className)} aria-label="Projects">
-      {projects.map((project) => {
+    <nav className={cn("flex min-w-0 items-center gap-0.5", className)} aria-label="Projects">
+      {recent.map((project) => {
         const selected = project.id === active?.id
         return (
-          <div key={project.id} className={cn("flex shrink-0 items-center rounded-md", selected && "bg-accent")}>
-            <button
-              type="button"
-              aria-current={selected ? "page" : undefined}
-              onClick={() => {
-                setActive(project.id)
-                onSelect?.()
-              }}
-              title={`/${project.folder}`}
-              className={cn("max-w-48 truncate rounded-md px-2.5 py-1 text-sm", selected ? "font-medium" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
-            >
-              {project.name}
-            </button>
-            {selected && project.canManage && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" className="-ml-1 size-6" aria-label={`${project.name} menu`}>
-                    <MoreHorizontal className="size-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">/{project.folder}</DropdownMenuLabel>
-                  <DropdownMenuItem onSelect={() => setSharing(project)}>
-                    Share project with…
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setEditing(project)}>
-                    <Pencil /> Rename or link folders
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(project)}>
-                    <Trash2 /> Delete project
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+          <button
+            key={project.id}
+            type="button"
+            aria-current={selected ? "page" : undefined}
+            onClick={() => select(project)}
+            title={`/${project.folder}`}
+            className={cn("min-w-0 max-w-32 shrink truncate rounded-md px-2 py-1 text-sm lg:max-w-40", selected ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+          >
+            {project.name}
+          </button>
         )
       })}
-      <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => setCreating(true)} aria-label="New project" title="New project">
-        <Plus />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="All projects" title="All projects">
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-[70dvh] w-60 overflow-y-auto">
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Projects</DropdownMenuLabel>
+          {projects.map((project) => (
+            <DropdownMenuItem key={project.id} onSelect={() => select(project)} title={`/${project.folder}`}>
+              {project.id === active?.id ? <Check /> : <Folder />}
+              <span className="truncate">{project.name}</span>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onSelect={() => setCreating(true)}>
+            <Plus /> New project
+          </DropdownMenuItem>
+          {active?.canManage && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{active.name} · /{active.folder}</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setSharing(active)}>
+                <Users /> Share project with…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setEditing(active)}>
+                <Pencil /> Rename or link folders
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(active)}>
+                <Trash2 /> Delete project
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {sharing && <ShareProjectDialog project={sharing} onClose={() => setSharing(undefined)} />}
       <ProjectDialog open={creating} onOpenChange={setCreating} />
       <ProjectDialog project={editing} open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(undefined)} />

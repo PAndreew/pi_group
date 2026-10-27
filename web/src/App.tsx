@@ -9,7 +9,12 @@ import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
-import { ProjectBar } from "@/components/project-bar"
+import { ChatSearchBox } from "@/components/chat-search-box"
+import { FilePreviewPanel } from "@/components/file-preview-panel"
+import { ProjectSwitcher } from "@/components/project-bar"
+import { WorkspaceSidebar } from "@/components/workspace-sidebar"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { ChatSearchProvider } from "@/lib/chat-search"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
@@ -182,22 +187,22 @@ function Workspace() {
     </Button>
   )
   const inside = Boolean(route.chat || route.session || route.file || route.app)
+  // Large screens: files on the left, the last edited file on the right.
+  const wide = useMediaQuery("(min-width: 1280px)")
 
   return (
     <NavContext.Provider value={nav}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <header className={cn("h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
-          <button type="button" onClick={nav.home} className="rounded-md px-1 font-semibold hover:bg-accent" aria-label="Home">
-            <img src="/beezy-logo.svg" alt="beezy" className="size-7" />
-          </button>
+        <header className={cn("relative h-11 shrink-0 items-center gap-1 border-b px-1.5 sm:gap-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
           <TenantPicker />
-          <div className="flex-1" />
+          <ProjectSwitcher className="flex-1" onSelect={nav.home} />
+          <ChatSearchBox onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1280 && innerWidth < 1536)) && nav.home()} />
           <ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="max-w-32">
+              <Button variant="ghost" size="sm" className="max-w-32 shrink-0 px-1.5" aria-label="Profile and settings">
                 {user && <AuthorAvatar id={user.id} name={user.username} />}
-                <span className="truncate">{user?.username}</span>
+                <span className="hidden truncate sm:inline">{user?.username}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -250,10 +255,9 @@ function Workspace() {
           </DropdownMenu>
         </header>
 
-        <ProjectBar className={inside ? "hidden md:flex" : "flex"} onSelect={nav.home} />
-
         <div className="flex min-h-0 flex-1">
-          {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex" />}
+          {wide && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} className="w-64 shrink-0" />}
+          {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex xl:hidden 2xl:flex 2xl:w-72" />}
           <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
             {route.chat ? (
               <ChatView key={route.chat} chatId={route.chat} />
@@ -275,6 +279,7 @@ function Workspace() {
               <Home />
             )}
           </main>
+          {wide && <FilePreviewPanel sessionKey={route.session} projectId={project?.id} className="w-96 shrink-0" />}
         </div>
 
         <NewSessionDialog
@@ -308,7 +313,9 @@ function Gate() {
     )
   return user ? (
     <ProjectsProvider>
-      <Workspace />
+      <ChatSearchProvider>
+        <Workspace />
+      </ChatSearchProvider>
     </ProjectsProvider>
   ) : (
     <Login />
