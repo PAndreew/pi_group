@@ -562,7 +562,11 @@ export class PiRpcAdapter implements HarnessAdapter {
 		if (!file) return undefined;
 		const records = await readJsonl(file);
 		const name = records.filter((r) => r.type === "session_info").at(-1)?.name;
-		return { messages: entriesToMessages(records), name };
+		// The model and thinking level a resumed session would use: its latest selection.
+		const change = records.filter((r) => r.type === "model_change").at(-1);
+		const model = change?.provider && change?.modelId ? { provider: String(change.provider), id: String(change.modelId) } : undefined;
+		const thinkingLevel = records.filter((r) => r.type === "thinking_level_change").at(-1)?.thinkingLevel;
+		return { messages: entriesToMessages(records), name, model, thinkingLevel: typeof thinkingLevel === "string" ? thinkingLevel : undefined };
 	}
 
 	/** Rewrite the message's line in pi's session file; pi reads the file again when the session is next opened. */

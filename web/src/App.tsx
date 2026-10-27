@@ -15,6 +15,7 @@ import { ProjectSwitcher } from "@/components/project-bar"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { ChatSearchProvider } from "@/lib/chat-search"
+import { NavSlotContext } from "@/lib/nav-slot"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
@@ -194,13 +195,20 @@ function Workspace() {
   const lastEdit = useLastEdit(route.session, project?.id)
   const [previewOpen, setPreviewOpen] = useState(false)
   const previewPanel = huge && inside
+  const [navSlot, setNavSlot] = useState<HTMLDivElement | null>(null)
 
   return (
     <NavContext.Provider value={nav}>
+      <NavSlotContext.Provider value={wide ? navSlot : null}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <header className={cn("relative h-11 shrink-0 items-center gap-1 border-b px-1.5 sm:gap-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
+          <button type="button" onClick={nav.home} className="shrink-0 rounded-md p-0.5 hover:bg-accent" aria-label="Home" title="Home">
+            <img src="/beezy-logo.svg" alt="beezy" className="size-7" />
+          </button>
           <TenantPicker />
-          <ProjectSwitcher className="flex-1" onSelect={nav.home} />
+          <ProjectSwitcher className="shrink" onSelect={nav.home} />
+          {/* The open conversation's title and actions on large screens (ConversationHeader); a spacer otherwise. */}
+          <div ref={setNavSlot} className="flex min-w-0 flex-1 items-center" />
           <ChatSearchBox onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />
           <ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} />
           <DropdownMenu>
@@ -305,6 +313,7 @@ function Workspace() {
         <VaultDialog open={vaultOpen} onOpenChange={setVaultOpen} />
         <AssistanceDialog open={assistanceOpen} onOpenChange={setAssistanceOpen} />
       </div>
+      </NavSlotContext.Provider>
     </NavContext.Provider>
   )
 }

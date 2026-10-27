@@ -19,6 +19,9 @@ test("editing rewrites only the chosen message in pi's session file", async () =
 			{ type: "session", id: "s1", cwd, timestamp: "2026-10-19T10:00:00Z" },
 			{ type: "message", id: "a", parentId: null, message: { role: "user", content: [{ type: "text", text: "fix the bug" }], timestamp: 1 } },
 			{ type: "message", id: "b", parentId: "a", message: { role: "assistant", content: answer, timestamp: 2 } },
+			{ type: "model_change", id: "m1", parentId: "b", provider: "openai", modelId: "gpt-4o" },
+			{ type: "model_change", id: "m2", parentId: "m1", provider: "anthropic", modelId: "claude-opus-5-5" },
+			{ type: "thinking_level_change", id: "t1", parentId: "m2", thinkingLevel: "high" },
 		];
 		writeFileSync(file, records.map((r) => JSON.stringify(r)).join("\n") + "\n");
 		const adapter = new PiRpcAdapter();
@@ -26,7 +29,9 @@ test("editing rewrites only the chosen message in pi's session file", async () =
 		await adapter.editMessage("s1", cwd, 0, replaceText(records[1].message!.content, "fix the bug in auth", "fix the bug"));
 		const answerEdit = replaceText(answer, "All done.", "Done.");
 		await adapter.editMessage("s1", cwd, 1, answerEdit);
-		const { messages } = (await adapter.readSession("s1", cwd))!;
+		const { messages, model, thinkingLevel } = (await adapter.readSession("s1", cwd))!;
+		assert.deepEqual(model, { provider: "anthropic", id: "claude-opus-5-5" }, "a stopped session reports its latest model");
+		assert.equal(thinkingLevel, "high");
 		assert.deepEqual(messages[0].content, [{ type: "text", text: "fix the bug in auth" }]);
 		assert.deepEqual(messages[1].content, [...answer.slice(0, 3), { type: "text", text: "All done." }], "reasoning and tool calls stay");
 		assert.equal(readFileSync(file, "utf8").split("\n")[0], JSON.stringify(records[0]), "other lines are untouched");

@@ -159,7 +159,8 @@ export interface HarnessAdapter {
 	listModels(): Promise<ModelInfo[]>;
 	listSessions(cwd: string): Promise<SessionListing[]>;
 	/** Messages of a session that is not live, without starting anything. */
-	readSession(id: string, cwd: string): Promise<{ messages: AgentMessage[]; name?: string } | undefined>;
+	/** A stored session: its messages, name, and the model and thinking level it last used. */
+	readSession(id: string, cwd: string): Promise<{ messages: AgentMessage[]; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string } | undefined>;
 	live(id: string): LiveSession | undefined;
 	liveSessions(): LiveSession[];
 	/** Attach to a session, starting its runtime if needed. */

@@ -49,6 +49,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
+import { ConversationHeader } from "@/lib/nav-slot"
 import { useProjects } from "@/lib/projects"
 import { cn, relativePath } from "@/lib/utils"
 
@@ -350,13 +351,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
     [state]
   )
 
-  const participants = useMemo(() => {
-    const authors = new Map<string, string>()
-    for (const run of runs) {
-      if (run.user) authors.set(run.user.author?.id ?? "unknown", run.user.author?.username ?? "Unknown author")
-    }
-    return Array.from(authors, ([id, name]) => ({ id, name }))
-  }, [runs])
+  // Filtering by prompt author is kept; its picker is to be redesigned.
   const visibleRuns = runs.map((run, index) => ({ run, index })).filter(({ run }) => authorFilter === "all" || (run.user && (run.user.author?.id ?? "unknown") === authorFilter))
 
   const act = async (fn: () => Promise<unknown>, ok?: string) => {
@@ -487,7 +482,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center gap-1.5 border-b px-2 py-1.5 sm:px-3">
+        <ConversationHeader className="gap-1.5 border-b px-2 py-1.5 sm:px-3">
           {header}
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium" title={title}>
@@ -540,17 +535,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-        </div>
-
-        {participants.length > 0 && (
-          <div aria-label="Filter by prompt author" className="flex items-center gap-2 overflow-x-auto border-b px-3 py-2">
-            {[{ id: "all", name: "Everyone" }, ...participants].map(({ id, name }) => (
-              <Button key={id} size="sm" variant={authorFilter === id ? "secondary" : "ghost"} aria-pressed={authorFilter === id} onClick={() => { setAuthorFilter(id); setOpen(null) }}>
-                {id !== "all" && <AuthorAvatar id={id} name={name} />}{name}
-              </Button>
-            ))}
-          </div>
-        )}
+        </ConversationHeader>
 
         <div
           ref={scroller}
@@ -681,7 +666,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   </div>
                 </div>
                 <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onInsert={setText} />
-                {state && !state.live && state.messages.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Sending a message resumes this session.</p>}
               </>
             ) : (
               <p className="flex items-center justify-center gap-1.5 py-2 text-sm text-muted-foreground">

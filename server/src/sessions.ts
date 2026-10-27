@@ -751,6 +751,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				dialogs: [],
 				live: false,
 				name: meta.name ?? stored?.name,
+				model: stored?.model,
+				thinkingLevel: stored?.thinkingLevel,
 			};
 			send(res, { type: "state", state: hub.state(key, state) });
 		}

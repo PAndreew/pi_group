@@ -18,6 +18,7 @@ import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import { api, type Chat, type ChatMessage } from "@/lib/api"
+import { ConversationHeader } from "@/lib/nav-slot"
 import { uploadDir } from "@/lib/attachments"
 import { useNav } from "@/lib/nav"
 import { messageText } from "@/lib/steps"
@@ -268,7 +269,7 @@ export function ChatView({ chatId }: { chatId: string }) {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-2 border-b px-2 py-1.5">
+      <ConversationHeader className="gap-2 border-b px-2 py-1.5">
         <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={nav.home} aria-label="Back to chats">
           <ArrowLeft />
         </Button>
@@ -294,7 +295,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           </Button>
         )}
         <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} />
-      </header>
+      </ConversationHeader>
 
       <div ref={scroller} onScroll={jumper.onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {!messages && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
