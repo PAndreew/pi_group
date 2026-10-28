@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, Play, X } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -8,22 +8,46 @@ export interface GalleryImage {
   /** Shown as the caption and used for the download name. */
   name?: string
   download?: string
+  /** A video: its first frame with a play button, playing in place. */
+  video?: boolean
 }
 
-/** Thumbnails under a message; tapping one opens it full screen, with arrows between several. */
-export function ImageGallery({ images, className }: { images: GalleryImage[]; className?: string }) {
+/** A video's first frame with a play button; pressing it plays the video right there, with controls. */
+export function VideoThumb({ src, name, className }: { src: string; name?: string; className?: string }) {
+  const [playing, setPlaying] = useState(false)
+  if (playing) return <video src={src} controls autoPlay playsInline className={cn("max-h-64 max-w-[20rem] rounded bg-black", className)} />
+  return (
+    <button type="button" onClick={() => setPlaying(true)} className={cn("relative overflow-hidden rounded bg-black focus-visible:outline-2", className)} aria-label={`Play ${name ?? "video"}`}>
+      {/* #t asks for the first frame, so the thumbnail is not black. */}
+      <video src={`${src}#t=0.1`} preload="metadata" muted playsInline className="pointer-events-none max-h-40 max-w-[16rem] object-cover" />
+      <span className="absolute inset-0 grid place-items-center">
+        <span className="grid size-11 place-items-center rounded-full bg-black/60 text-white shadow">
+          <Play className="ml-0.5 size-5 fill-current" />
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** Thumbnails under a message; tapping an image opens it full screen, with arrows between several. Videos play in place. */
+export function ImageGallery({ images: media, className }: { images: GalleryImage[]; className?: string }) {
   const [open, setOpen] = useState<number>()
-  if (!images.length) return null
+  if (!media.length) return null
+  const images = media.filter((m) => !m.video)
   const current = open === undefined ? undefined : images[open]
   const step = (delta: number) => setOpen((i) => (i === undefined ? i : (i + delta + images.length) % images.length))
   return (
     <>
       <div className={cn("mt-2 flex flex-wrap gap-1.5", className)}>
-        {images.map((image, i) => (
-          <button key={image.src} type="button" onClick={() => setOpen(i)} className="overflow-hidden rounded focus-visible:outline-2" aria-label={`Show ${image.name ?? "image"} full screen`}>
-            <img src={image.src} alt={image.name ?? ""} loading="lazy" className="max-h-40 max-w-[16rem] object-cover" />
-          </button>
-        ))}
+        {media.map((item) =>
+          item.video ? (
+            <VideoThumb key={item.src} src={item.src} name={item.name} />
+          ) : (
+            <button key={item.src} type="button" onClick={() => setOpen(images.indexOf(item))} className="overflow-hidden rounded focus-visible:outline-2" aria-label={`Show ${item.name ?? "image"} full screen`}>
+              <img src={item.src} alt={item.name ?? ""} loading="lazy" className="max-h-40 max-w-[16rem] object-cover" />
+            </button>
+          ),
+        )}
       </div>
       <DialogPrimitive.Root open={current !== undefined} onOpenChange={(value) => !value && setOpen(undefined)}>
         <DialogPrimitive.Portal>
