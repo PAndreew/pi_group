@@ -28,7 +28,7 @@ export function ComposerBox({
   return (
     <div
       data-composer-box
-      className="relative mb-9 min-w-0 rounded-md border focus-within:ring-1 focus-within:ring-ring"
+      className="relative min-w-0 rounded-[9px] bg-muted"
       onPaste={(e) => {
         const files = Array.from(e.clipboardData.files)
         if (!files.length || !onFiles) return

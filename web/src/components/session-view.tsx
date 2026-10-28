@@ -482,7 +482,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   return (
     <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ConversationHeader className="gap-1.5 border-b px-2 py-1.5 sm:px-3">
+        <ConversationHeader className="gap-1.5 px-2 py-1.5 sm:px-3">
           {header}
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium" title={title}>
@@ -540,7 +540,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
         <div
           ref={scroller}
           onScroll={jumper.onScroll}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <div className="mx-auto max-w-3xl space-y-5 px-3 py-4 sm:px-4">
             {!state && <Loader2 className="mx-auto mt-10 animate-spin text-muted-foreground" />}
@@ -575,7 +575,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           </div>
         </div>
 
-        <div data-chat-composer className="relative shrink-0 border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
+        <div data-chat-composer className="relative shrink-0 bg-background p-2 sm:p-3">
           <JumpToBottom show={jumper.away} onClick={jumper.jump} />
           <div className="mx-auto max-w-3xl space-y-2">
             {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}

@@ -269,7 +269,7 @@ export function ChatView({ chatId }: { chatId: string }) {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <ConversationHeader className="gap-2 border-b px-2 py-1.5">
+      <ConversationHeader className="gap-2 px-2 py-1.5">
         <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={nav.home} aria-label="Back to chats">
           <ArrowLeft />
         </Button>
@@ -297,7 +297,7 @@ export function ChatView({ chatId }: { chatId: string }) {
         <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} />
       </ConversationHeader>
 
-      <div ref={scroller} onScroll={jumper.onScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      <div ref={scroller} onScroll={jumper.onScroll} className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {!messages && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         <div className="mx-auto grid max-w-3xl gap-2">
           {messages?.map((m, i) => {
@@ -341,7 +341,7 @@ export function ChatView({ chatId }: { chatId: string }) {
         </div>
       </div>
 
-      <div data-chat-composer className={cn("relative mx-auto grid w-full max-w-3xl shrink-0 gap-1 border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3", !chat && "pointer-events-none opacity-60")}>
+      <div data-chat-composer className={cn("relative mx-auto grid w-full max-w-3xl shrink-0 gap-1 p-2 sm:p-3", !chat && "pointer-events-none opacity-60")}>
         <JumpToBottom show={jumper.away} onClick={jumper.jump} />
         {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}
         {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}

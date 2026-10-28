@@ -102,6 +102,7 @@
     left: 0;
     width: 100%;
     height: var(--app-height, 100dvh);
+    padding-bottom: calc(var(--app-safe-bottom, env(safe-area-inset-bottom, 0px)) + 6px);
     overflow: hidden;
     @apply bg-background text-foreground antialiased;
     -webkit-tap-highlight-color: transparent;
@@ -169,6 +170,23 @@
 .dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
 
 .scrollbar-thin { scrollbar-width: thin; }
+
+/* Soften content at the navbar and composer instead of drawing dividers. */
+.chat-scroll-fade {
+  mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 20px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 20px), transparent);
+}
+
+/* One continuous, borderless input surface, including its control row. */
+[data-composer-box] { background-color: var(--muted); }
+[data-composer-box] textarea,
+.dark [data-composer-box] textarea {
+  background-color: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 9px;
+}
+
 
 .composer-send,
 .composer-send:hover,

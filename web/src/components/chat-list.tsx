@@ -71,7 +71,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
 
   return (
     <div className={cn("flex min-h-0 min-w-0 max-w-full flex-col", className)}>
-      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
+      <div className="chat-scroll-fade min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {requests && <MoveRequests />}
         {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : active && !active.general ? `Nothing in ${active.name} yet. Start a chat below, or move one here.` : "No chats yet. Mention @pi or someone below to start one."}</p>}

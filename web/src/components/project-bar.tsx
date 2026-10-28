@@ -1,4 +1,4 @@
-import { Check, Folder, Link2, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Users, X } from "lucide-react"
+import { Check, Folder, Link2, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -176,7 +176,7 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
  * one, and the active project's sharing, rename and delete.
  */
 export function ProjectSwitcher({ className, onSelect }: { className?: string; onSelect?: () => void }) {
-  const { projects, active, recent, setActive, reload } = useProjects()
+  const { projects, active, setActive, reload } = useProjects()
   const [editing, setEditing] = useState<Project>()
   const [creating, setCreating] = useState(false)
   const [sharing, setSharing] = useState<Project>()
@@ -199,25 +199,10 @@ export function ProjectSwitcher({ className, onSelect }: { className?: string; o
 
   return (
     <nav className={cn("flex min-w-0 items-center gap-0.5", className)} aria-label="Projects">
-      {recent.map((project) => {
-        const selected = project.id === active?.id
-        return (
-          <button
-            key={project.id}
-            type="button"
-            aria-current={selected ? "page" : undefined}
-            onClick={() => select(project)}
-            title={`/${project.folder}`}
-            className={cn("min-w-0 max-w-32 shrink truncate rounded-md px-2 py-1 text-sm lg:max-w-40", selected ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
-          >
-            {project.name}
-          </button>
-        )
-      })}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="All projects" title="All projects">
-            <MoreHorizontal />
+          <Button variant="ghost" size="sm" className="min-w-0 max-w-full" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title="Switch project">
+            <span className="truncate">{active?.name ?? "Projects"}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-[70dvh] w-60 overflow-y-auto">

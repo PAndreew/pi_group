@@ -1,9 +1,9 @@
-import { Activity, ArrowLeft, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Settings, Sun, Users, Vault } from "lucide-react"
+import { Activity, ArrowLeft, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Settings, Sun, Users, Vault } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
 import { ChatList } from "@/components/chat-list"
-import { TenantPicker } from "@/components/tenant-picker"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { ChatView } from "@/components/chat-view"
 import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
@@ -32,7 +32,6 @@ import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-n
 import { api, type SessionSummary } from "@/lib/api"
 import { type Nav, NavContext } from "@/lib/nav"
 import { ProjectsProvider, useProjects } from "@/lib/projects"
-import { cn } from "@/lib/utils"
 
 type Theme = "light" | "dark" | "system"
 
@@ -112,7 +111,7 @@ function ActiveSessions({ onOpen }: { onOpen: (s: SessionSummary) => void }) {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-1.5" aria-label="Active sessions">
           <Activity className={running.length ? "text-green-500" : undefined} />
-          <span className="tabular-nums">{running.length}</span>
+          <span className="tabular-nums">{running.length} running</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
@@ -142,6 +141,8 @@ function Workspace() {
   const notifications = useRunNotifications(route.session, route.chat)
   const [newFolder, setNewFolder] = useState<string>()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => setDrawerOpen(false), [route.chat, route.session, route.file, route.app])
   const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -195,27 +196,23 @@ function Workspace() {
   const lastEdit = useLastEdit(route.session, project?.id)
   const [previewOpen, setPreviewOpen] = useState(false)
   const previewPanel = huge && inside
-  const [navSlot, setNavSlot] = useState<HTMLDivElement | null>(null)
+
 
   return (
     <NavContext.Provider value={nav}>
-      <NavSlotContext.Provider value={wide ? navSlot : null}>
+      <NavSlotContext.Provider value={null}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <header className={cn("relative h-11 shrink-0 items-center gap-1 border-b px-1.5 sm:gap-2 sm:px-3", inside ? "hidden md:flex" : "flex")}>
-          <button type="button" onClick={nav.home} className="shrink-0 rounded-md p-0.5 hover:bg-accent" aria-label="Home" title="Home">
-            <img src="/beezy-logo.svg" alt="beezy" className="size-7" />
-          </button>
-          <TenantPicker />
-          <ProjectSwitcher className="shrink" onSelect={nav.home} />
-          {/* The open conversation's title and actions on large screens (ConversationHeader); a spacer otherwise. */}
-          <div ref={setNavSlot} className="flex min-w-0 flex-1 items-center" />
+        <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 sm:px-3">
+          <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><Menu /></Button>
+          <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
           <ChatSearchBox onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />
-          <ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="max-w-32 shrink-0 px-1.5" aria-label="Profile and settings">
                 {user && <AuthorAvatar id={user.id} name={user.username} />}
-                <span className="hidden truncate sm:inline">{user?.username}</span>
+
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -266,10 +263,17 @@ function Workspace() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </header>
+        <Sheet open={!wide && drawerOpen} onOpenChange={setDrawerOpen}>
+          <SheetContent className="gap-0" aria-describedby={undefined}>
+            <SheetTitle className="border-b px-4 py-3">Menu</SheetTitle>
+            <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} className="min-h-0 flex-1"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>
+          </SheetContent>
+        </Sheet>
 
         <div className="flex min-h-0 flex-1">
-          {wide && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="w-64 shrink-0" />}
+          {wide && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="w-64 shrink-0"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
           {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex lg:hidden 2xl:flex 2xl:w-72" />}
           <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
             {route.chat ? (

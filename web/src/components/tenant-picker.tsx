@@ -42,7 +42,7 @@ export function TenantPicker() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label="Tenant" className="min-w-0 max-w-40 shrink-0 gap-1 px-1.5" disabled={busy || !tenants.length}>
-          <House className="shrink-0" /><span className="hidden truncate sm:inline">{tenants.find(t => t.id === activeTenant())?.name ?? "…"}</span><ChevronDown className="shrink-0 opacity-60" />
+          <House className="shrink-0" /><span className="truncate">{tenants.find(t => t.id === activeTenant())?.name ?? "…"}</span><ChevronDown className="shrink-0 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

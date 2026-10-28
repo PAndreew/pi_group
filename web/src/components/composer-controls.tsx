@@ -1,5 +1,6 @@
 import { Camera, Globe, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
@@ -39,6 +40,10 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
   }, [savedDefaults, sessionKey, onDraftChange])
   const [busy, setBusy] = useState(false)
   const camera = useRef<HTMLInputElement>(null)
+  const anchor = useRef<HTMLSpanElement>(null)
+  const [modelTarget, setModelTarget] = useState<Element | null>(null)
+  const [showModel, setShowModel] = useState(false)
+  useEffect(() => { setModelTarget(anchor.current?.closest('[data-composer-box]')?.querySelector('[data-agent-model]') ?? null) }, [])
   useEffect(() => {
     setModels([])
     if (!sessionKey && !harness) return
@@ -55,6 +60,13 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
   }, [models, sessionKey, draft, onDraftChange, harness, user])
   const model = models.find((m) => m.id === state?.model?.id && m.provider === state?.model?.provider)
   const level = state?.thinkingLevel ?? "off"
+  const modelLabel = model?.name ?? state?.model?.id
+  useEffect(() => {
+    if (!modelLabel) return
+    setShowModel(true)
+    const timer = setTimeout(() => setShowModel(false), 2500)
+    return () => clearTimeout(timer)
+  }, [modelLabel])
   // The toggle only decides whether a message goes to the agent; an existing session can always be reconfigured.
   const locked = !agentEnabled && !sessionKey
   const change = async (action: () => Promise<unknown>) => {
@@ -62,8 +74,9 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
     try { await action() } catch (error) { toast.error((error as Error).message) } finally { setBusy(false) }
   }
   return <>
-    <div className="absolute top-full left-0 flex h-9 w-full min-w-0 justify-center">
-    <select aria-label="Current session model" title="Current session model" className="h-9 min-w-0 max-w-full rounded bg-transparent text-xs text-center [text-align-last:center]" disabled={disabled || locked || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
+    <span ref={anchor} className="hidden" />
+    {showModel && <div role="status" className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 max-w-full -translate-x-1/2 truncate rounded-xl border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">{modelLabel}</div>}
+    {modelTarget && createPortal(<select aria-label="Current session model" title={modelLabel ?? "Change model"} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" disabled={disabled || locked || busy || !models.length} value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""} onChange={(e) => {
       const [provider, id] = JSON.parse(e.target.value)
       if (sessionKey) void change(() => api.setModel(sessionKey, provider, id))
       else {
@@ -73,8 +86,7 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
     }}>
       {!model && <option value={state?.model ? JSON.stringify([state.model.provider, state.model.id]) : ""}>{state?.model?.id ?? "Model"}</option>}
       {models.map((m) => <option key={`${m.provider}/${m.id}`} value={JSON.stringify([m.provider, m.id])}>{m.name}</option>)}
-    </select>
-    </div>
+    </select>, modelTarget)}
     <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onCamera(Array.from(e.target.files ?? [])); e.target.value = "" }} />
     <button type="button" disabled={disabled || !onAttach} className={iconButton} aria-label="Attach files" title="Attach files (or paste them)" onClick={onAttach}><Paperclip /></button>
     <button type="button" disabled={!browser} className={iconButton} data-active={browser?.shown} aria-label="Shared browser" title={browser ? "Shared browser: open your app or any page, pick elements to reference" : "The shared browser opens in agent sessions"} onClick={browser?.toggle}>
@@ -88,5 +100,5 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
 }
 
 export function AgentToggle({ checked, onChange, disabled }: { checked: boolean; onChange?: (value: boolean) => void; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon flex min-h-10 shrink-0 items-center gap-2 text-base font-medium lg:min-h-8 lg:gap-1.5 lg:text-sm"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 lg:h-5 lg:w-9 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-zinc-300 dark:bg-white"}`}><span className={`size-5 rounded-full bg-background transition-transform lg:size-4 ${checked ? "translate-x-5 lg:translate-x-4" : ""}`} /></span>Agent</button>
+  return <div className="flex shrink-0 items-center gap-2"><button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon flex min-h-10 shrink-0 items-center gap-2 text-base font-medium lg:min-h-8 lg:gap-1.5 lg:text-sm"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 lg:h-5 lg:w-9 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-zinc-300 dark:bg-white"}`}><span className={`size-5 rounded-full bg-background transition-transform lg:size-4 ${checked ? "translate-x-5 lg:translate-x-4" : ""}`} /></span></button><span data-agent-model className="relative cursor-pointer text-base font-medium lg:text-sm">Agent ▾</span></div>
 }

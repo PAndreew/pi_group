@@ -1,66 +1,29 @@
 import { FileText } from "lucide-react"
-import { useEffect, useState } from "react"
 import { ComposerTools } from "@/components/composer-tools"
-import { Sidebar } from "@/components/sidebar"
-import { api } from "@/lib/api"
-import { useNav } from "@/lib/nav"
+import { TenantPicker } from "@/components/tenant-picker"
 import { cn } from "@/lib/utils"
 
-/**
- * The large-screen left sidebar: the file explorer, starting at `folder` (the open session's or
- * the project's), with the tool icons at its bottom. Without room for the preview sidebar, the
- * last edited file is a button here that opens it in a modal.
- */
-export function WorkspaceSidebar({
-  folder: start,
-  sessionKey,
-  selectedFile,
-  lastEdit,
-  onLastEdit,
-  className,
-}: {
+/** Shared navigation for the mobile drawer and permanent desktop menu. */
+export function WorkspaceSidebar({ folder, sessionKey, lastEdit, onLastEdit, className, children }: {
   folder: string
   sessionKey?: string
   selectedFile?: string
   lastEdit?: string
   onLastEdit?: () => void
   className?: string
+  children?: React.ReactNode
 }) {
-  const nav = useNav()
-  const [folder, setFolder] = useState(start)
-  const [rootName, setRootName] = useState("root")
-  const [version, setVersion] = useState(0)
-
-  useEffect(() => setFolder(start), [start])
-  useEffect(() => {
-    api.fsInfo().then(({ rootName }) => setRootName(rootName), () => {})
-  }, [])
-
   return (
-    <aside className={cn("flex min-h-0 flex-col border-r", className)} aria-label="Files">
-      {lastEdit && (
-        <button type="button" onClick={onLastEdit} title={`/${lastEdit}`} className="flex shrink-0 items-center gap-1.5 border-b px-3 py-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-          <FileText className="size-3.5 shrink-0" />
-          <span className="shrink-0">Last edited:</span>
-          <span className="min-w-0 truncate font-medium text-foreground">{lastEdit.split("/").pop()}</span>
-        </button>
-      )}
-      <div className="min-h-0 flex-1">
-        <Sidebar
-          rootName={rootName}
-          folder={folder}
-          selectedSession={sessionKey}
-          selectedFile={selectedFile}
-          onFolder={setFolder}
-          onSession={(key) => nav.openSession(key)}
-          onFile={nav.openFile}
-          onNewSession={() => nav.newSession(folder)}
-          onSessionDeleted={() => setVersion((v) => v + 1)}
-          version={version}
-        />
-      </div>
-      <div className="shrink-0 border-t p-1">
+    <aside className={cn("flex min-h-0 flex-col overflow-y-auto border-r", className)} aria-label="Menu">
+      <div className="p-2">
         <ComposerTools sessionKey={sessionKey} folder={folder} placement="sidebar" />
+        {lastEdit && <button type="button" onClick={onLastEdit} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"><FileText className="size-4 shrink-0" /><span className="truncate">Last edited: {lastEdit.split("/").pop()}</span></button>}
+      </div>
+      <div className="flex flex-col items-start gap-2 border-t p-3">
+        <span className="text-xs font-medium text-muted-foreground">Tenant</span>
+        <TenantPicker />
+        <span className="mt-2 text-xs font-medium text-muted-foreground">Running sessions</span>
+        {children}
       </div>
     </aside>
   )

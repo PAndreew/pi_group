@@ -40,8 +40,8 @@ export function ComposerTools({
   const pendingApplets = usePendingApplets()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
   const icon = (name: Panel, label: string, node: React.ReactNode) => (
-    <Button key={name} variant="ghost" size="icon" className="composer-icon size-10 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]" data-active={panel === name} onClick={() => setPanel(name)} aria-label={label} title={label}>
-      {node}
+    <Button key={name} variant="ghost" size="icon" className="h-auto min-h-10 w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left [&_svg]:size-4" data-active={panel === name} onClick={() => setPanel(name)} aria-label={label} title={label}>
+      {node}<span>{label}</span>
     </Button>
   )
   const dot = (show: boolean, node: React.ReactNode) => (
@@ -51,15 +51,17 @@ export function ComposerTools({
     </span>
   )
 
+  if (placement === "composer") return null
+
   return (
     <>
-      <div className={placement === "composer" ? "flex items-center justify-center gap-0.5 lg:hidden" : "flex items-center justify-evenly gap-0.5"}>
-        {user?.role === "admin" && icon("terminal", "Terminal in this folder", <SquareTerminal />)}
-        {icon("tools", "Tools, skills, commands and MCP servers", <Hammer />)}
+      <div className="flex flex-col items-stretch gap-1">
+        {user?.role === "admin" && icon("terminal", "Terminal", <SquareTerminal />)}
+        {icon("tools", "Tools, skills, commands & MCP", <Hammer />)}
         {icon("jobs", pendingJobs ? `Scheduled jobs (${pendingJobs} waiting for approval)` : "Scheduled jobs", dot(pendingJobs > 0, <Clock />))}
         {icon("applets", pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets", dot(pendingApplets > 0, <LayoutGrid />))}
         {icon("monitor", "Resource monitor", <Gauge />)}
-        {placement === "composer" && icon("explorer", "Folders and files", <FolderOpen />)}
+        {icon("explorer", "Folders and files", <FolderOpen />)}
       </div>
       <ToolsDialog
         sessionKey={sessionKey}
