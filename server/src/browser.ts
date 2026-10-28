@@ -73,7 +73,9 @@ export interface PickedElement {
 
 /**
  * Runs in the page: what is under a point (`hover` only wants its box), or the outermost elements
- * inside a rectangle. Plain JavaScript in a string, since the server is not compiled against the DOM.
+ * inside a rectangle. `depth` picks from the stack of elements under the point, topmost first
+ * (overlapping layers, then the elements containing them), to reach ones covered by others.
+ * Plain JavaScript in a string, since the server is not compiled against the DOM.
  */
 export const PICK = String.raw`(arg) => {
   const box = (r) => ({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
@@ -141,14 +143,23 @@ export const PICK = String.raw`(arg) => {
       ...origin(el),
     };
   };
-  const at = (x, y) => {
-    let el = document.elementFromPoint(x, y);
-    while (el && el.shadowRoot) {
-      const inner = el.shadowRoot.elementFromPoint(x, y);
-      if (!inner || inner === el) break;
-      el = inner;
+  const stackAt = (x, y) => {
+    const all = document.elementsFromPoint(x, y);
+    let stack = all.filter((el) => el !== document.documentElement && el !== document.body);
+    if (!stack.length) stack = all;
+    // Into open shadow roots: their elements come before the host.
+    for (let host = stack[0]; host && host.shadowRoot; ) {
+      const inner = host.shadowRoot.elementsFromPoint(x, y).filter((el) => !stack.includes(el));
+      if (!inner.length) break;
+      stack = [...inner, ...stack];
+      host = inner[0];
     }
-    return el;
+    return stack;
+  };
+  const at = (x, y, depth = 0) => {
+    const stack = stackAt(x, y);
+    const index = Math.max(0, Math.min(depth, stack.length - 1));
+    return { el: stack[index], depth: index, count: stack.length };
   };
   if (arg.rect) {
     const r = arg.rect;
@@ -158,14 +169,14 @@ export const PICK = String.raw`(arg) => {
     });
     const set = new Set(inside);
     const outer = inside.filter((el) => !set.has(el.parentElement)).slice(0, 12);
-    const found = outer.length ? outer : [at(r.x + r.width / 2, r.y + r.height / 2)].filter(Boolean);
+    const found = outer.length ? outer : [at(r.x + r.width / 2, r.y + r.height / 2).el].filter(Boolean);
     return { box: r, elements: found.map(describe) };
   }
-  const el = at(arg.x, arg.y);
+  const { el, depth, count } = at(arg.x, arg.y, arg.depth || 0);
   if (!el) return null;
   if (arg.hover) {
     const cls = [...el.classList].slice(0, 2).map((c) => "." + c).join("");
-    return { box: box(el.getBoundingClientRect()), label: el.localName + (el.id ? "#" + el.id : cls) };
+    return { box: box(el.getBoundingClientRect()), label: el.localName + (el.id ? "#" + el.id : cls), depth, count };
   }
   const d = describe(el);
   return { box: d.box, elements: [d] };
@@ -279,11 +290,11 @@ class SessionBrowser {
 	private async handle(ws: WebSocket, canInput: boolean, raw: unknown) {
 		const message = clientMessage.parse(raw);
 		if (message.type === "inspect") {
-			const hit = (await this.page.evaluate(`(${PICK})(${JSON.stringify({ x: message.x, y: message.y, hover: true })})`)) as { box: Pick["box"]; label: string } | null;
+			const hit = (await this.page.evaluate(`(${PICK})(${JSON.stringify({ x: message.x, y: message.y, depth: message.depth, hover: true })})`)) as { box: Pick["box"]; label: string; depth: number; count: number } | null;
 			return send(ws, { type: "hover", ...hit });
 		}
 		if (message.type === "pick") {
-			const pick = await this.pick(message.rect ?? { x: message.x ?? 0, y: message.y ?? 0 });
+			const pick = await this.pick(message.rect ?? { x: message.x ?? 0, y: message.y ?? 0, depth: message.depth });
 			return send(ws, { type: "picked", id: message.id, ...pick });
 		}
 		if (!canInput) throw new Error("You have view-only access to this browser.");
@@ -339,7 +350,7 @@ class SessionBrowser {
 	}
 
 	/** The elements at a point or in a rectangle, with a PNG of that area (base64). */
-	async pick(target: { x: number; y: number; width?: number; height?: number }) {
+	async pick(target: { x: number; y: number; width?: number; height?: number; depth?: number }) {
 		const arg = target.width ? { rect: target } : target;
 		const pick = (await this.page.evaluate(`(${PICK})(${JSON.stringify(arg)})`)) as Pick | null;
 		if (!pick || !pick.elements.length) throw new Error("Nothing there to pick.");
@@ -364,8 +375,8 @@ class SessionBrowser {
 
 const point = { x: z.number().finite(), y: z.number().finite() };
 const clientMessage = z.discriminatedUnion("type", [
-	z.object({ type: z.literal("inspect"), ...point }),
-	z.object({ type: z.literal("pick"), id: z.string().max(100), x: z.number().finite().optional(), y: z.number().finite().optional(), rect: z.object({ ...point, width: z.number().positive(), height: z.number().positive() }).optional() }),
+	z.object({ type: z.literal("inspect"), ...point, depth: z.number().int().min(0).max(200).optional() }),
+	z.object({ type: z.literal("pick"), id: z.string().max(100), x: z.number().finite().optional(), y: z.number().finite().optional(), depth: z.number().int().min(0).max(200).optional(), rect: z.object({ ...point, width: z.number().positive(), height: z.number().positive() }).optional() }),
 	z.object({ type: z.literal("navigate"), url: z.string().min(1).max(4000) }),
 	z.object({ type: z.enum(["back", "forward", "reload", "close"]) }),
 	z.object({ type: z.literal("viewport"), width: z.number().int().min(320).max(1920), height: z.number().int().min(320).max(1600) }),

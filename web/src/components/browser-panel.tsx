@@ -29,7 +29,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
   const [page, setPage] = useState({ url: "", title: "", viewport: DESKTOP, canInput: false })
   const [address, setAddress] = useState("")
   const [picking, setPicking] = useState(false)
-  const [hover, setHover] = useState<{ box: Box; label: string }>()
+  const [hover, setHover] = useState<{ box: Box; label: string; depth: number; count: number }>()
   const [drag, setDrag] = useState<Box>()
   const [pending, setPending] = useState(0)
   const [typing, setTyping] = useState(false)
@@ -42,6 +42,12 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
   const pointer = useRef<{ x: number; y: number; clientX: number; clientY: number; moved: boolean; shift: boolean }>(undefined)
   const lastDown = useRef({ at: 0, x: 0, y: 0, count: 1 })
   const lastInspect = useRef(0)
+  // While picking, which element of the stack under the pointer (0 = topmost), and where it was chosen.
+  const depth = useRef(0)
+  const inspected = useRef<{ x: number; y: number }>(undefined)
+  const pickingRef = useRef(picking)
+  pickingRef.current = picking
+  const wheelSum = useRef(0)
   const onPickRef = useRef(onPick)
   onPickRef.current = onPick
   const pageRef = useRef(page)
@@ -79,7 +85,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
         setPage((p) => ({ url: message.url, title: message.title, viewport: message.viewport, canInput: message.canInput ?? p.canInput }))
         setAddress((a) => (document.activeElement?.id === "browser-address" ? a : message.url === "about:blank" ? "" : message.url))
       } else if (message.type === "hover") {
-        setHover(message.box ? { box: message.box, label: message.label } : undefined)
+        if (message.box) depth.current = message.depth ?? 0
+        setHover(message.box ? { box: message.box, label: message.label, depth: message.depth ?? 0, count: message.count ?? 1 } : undefined)
       } else if (message.type === "picked") {
         setPending((n) => Math.max(0, n - 1))
         onPickRef.current({ id: message.id, url: message.url, title: message.title, elements: message.elements, image: message.image })
@@ -115,6 +122,14 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
     if (!el) return
     const wheel = (e: WheelEvent) => {
       e.preventDefault()
+      // While picking, the wheel goes down (or up) through the elements stacked under the pointer.
+      if (pickingRef.current) {
+        wheelSum.current += e.deltaY
+        if (Math.abs(wheelSum.current) < 40) return
+        layer(Math.sign(wheelSum.current))
+        wheelSum.current = 0
+        return
+      }
       if (!pageRef.current.canInput) return
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1
       send({ type: "mouse", action: "wheel", ...toPage(e), deltaX: e.deltaX * unit, deltaY: e.deltaY * unit, modifiers: modifiers(e) })
@@ -126,6 +141,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
   const pick = (target: object) => {
     setPending((n) => n + 1)
     send({ type: "pick", id: crypto.randomUUID(), ...target })
+  }
+  /** Highlight the element `step` layers deeper (or, negative, higher) under the pointer. */
+  const layer = (step: number) => {
+    if (!inspected.current) return
+    send({ type: "inspect", ...inspected.current, depth: Math.max(0, depth.current + step) })
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -150,7 +170,13 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
         setDrag({ x: Math.min(down.x, at.x), y: Math.min(down.y, at.y), width: Math.abs(at.x - down.x), height: Math.abs(at.y - down.y) })
       } else if (!down && Date.now() - lastInspect.current > 80) {
         lastInspect.current = Date.now()
-        send({ type: "inspect", ...at })
+        // Moving on starts again from the topmost element.
+        const last = inspected.current
+        if (!last || Math.hypot(at.x - last.x, at.y - last.y) > 4) {
+          inspected.current = at
+          depth.current = 0
+        }
+        send({ type: "inspect", ...inspected.current, depth: depth.current })
       }
       return
     }
@@ -177,7 +203,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
       if (down?.moved) {
         const rect = { x: Math.min(down.x, at.x), y: Math.min(down.y, at.y), width: Math.abs(at.x - down.x), height: Math.abs(at.y - down.y) }
         if (rect.width > 2 && rect.height > 2) pick({ rect })
-      } else pick(at)
+      } else {
+        // The highlighted layer, if it is the one under the click.
+        const last = inspected.current
+        pick(last && Math.hypot(at.x - last.x, at.y - last.y) <= 4 ? { ...last, depth: depth.current } : at)
+      }
       // Shift keeps picking, for several separate elements.
       if (!down?.shift && !e.shiftKey) setPicking(false)
       return
@@ -198,6 +228,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
     if (e.key === "Escape" && picking) {
       setPicking(false)
       setHover(undefined)
+      return
+    }
+    if (picking && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault()
+      if (action === "down") layer(e.key === "ArrowDown" ? 1 : -1)
       return
     }
     if (!page.canInput || e.nativeEvent.isComposing || e.key === "Unidentified" || e.key === "Process") return
@@ -257,7 +292,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
             setHover(undefined)
           }}
           aria-label="Pick elements to reference"
-          title="Pick elements: click one, or drag around several (Shift keeps picking)"
+          title="Pick elements: click one, or drag around several (Shift keeps picking). Scroll or ↑/↓ to reach elements underneath."
         >
           {pending ? <Loader2 className="animate-spin" /> : <Crosshair />}
         </Button>
@@ -316,7 +351,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
             onContextMenu={(e) => e.preventDefault()}
           >
             <canvas ref={canvas} className="block h-full w-full" />
-            {hover && picking && <Outline box={hover.box} scale={scale} label={hover.label} />}
+            {hover && picking && <Outline box={hover.box} scale={scale} label={hover.count > 1 ? `${hover.depth + 1}/${hover.count} ${hover.label}` : hover.label} />}
             {drag && <Outline box={drag} scale={scale} />}
             {status.state === "connecting" && (
               <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">

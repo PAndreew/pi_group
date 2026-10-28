@@ -51,6 +51,19 @@ test("picking describes elements at a point or inside a rectangle", { skip: !exe
 		// Only the outermost elements inside the rectangle: both buttons, not the <b> elsewhere.
 		const group = await pick({ rect: { x: 0, y: 0, width: 300, height: 100 } });
 		assert.deepEqual(group.elements.map((e: { text: string }) => e.text), ["Save", "Cancel"]);
+
+		// Covered elements are reachable by depth: an overlay above a card and its label, in a panel.
+		await page.setContent(`
+			<style>body{margin:0} div{position:absolute;inset:0}</style>
+			<section id="panel" style="position:absolute;width:400px;height:300px">
+				<div id="card" style="z-index:1"><span id="label">Card</span></div>
+				<div id="overlay" style="z-index:5"></div>
+			</section>`);
+		const layers = await Promise.all([0, 1, 2, 3, 4].map((depth) => pick({ x: 5, y: 5, depth, hover: true })));
+		assert.deepEqual(layers.map((l) => l.label), ["div#overlay", "span#label", "div#card", "section#panel", "section#panel"], "past the bottom stays at the last element");
+		assert.deepEqual(layers.map((l) => l.depth), [0, 1, 2, 3, 3]);
+		assert.equal(layers[0].count, 4, "html and body are left out");
+		assert.equal((await pick({ x: 5, y: 5, depth: 2 })).elements[0].selector, "#card");
 	} finally {
 		await browser.close();
 	}

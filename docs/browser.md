@@ -8,7 +8,7 @@ Status: a spike. It works end to end but is not hardened yet; see [Limits](#limi
 
 - **Open a page:** type a URL (`localhost:5173`, `example.com`) in the address bar, or ask `@pi start the app and open it in the browser`.
 - **Drive it:** click, scroll, and type as in a normal browser. On a phone, the keyboard button opens a text box that types into the focused field. The first person to open a browser sizes it to their panel. The phone/monitor button switches between a phone-sized viewport and one that fits your panel.
-- **Pick elements:** turn on the crosshair. Click one element, or drag a rectangle around several (you get the outermost elements inside it). Hold Shift to keep picking. Each pick becomes a chip above the message box, with a screenshot.
+- **Pick elements:** turn on the crosshair. Click one element, or drag a rectangle around several (you get the outermost elements inside it). To reach an element covered by another (an overlay, a lower z-index layer, the container around what you point at), scroll the mouse wheel or press ↓/↑: the outline steps through everything stacked under the pointer, labeled like `2/5 div.card`, and the click picks the highlighted one. Moving the pointer starts again from the top. Hold Shift to keep picking. Each pick becomes a chip above the message box, with a screenshot.
 - **Several people:** everyone in the session sees the same page. Anyone with write access can drive it; view-only members watch. Picks go into the composer of the person who made them.
 
 The browser closes when nobody has watched it and the agent has not used it for `BROWSER_IDLE_MIN` minutes, or when someone presses the power button.
