@@ -15,7 +15,7 @@ import { useProjects } from "@/lib/projects"
 
 /**
  * Home: the active project's chats, and a message box that starts a new one in it. Mention @pi, one
- * or more people, or both; add #folder to pick where pi works (the project's folder otherwise; for
+ * or more people, or both; add $folder to pick where pi works (the project's folder otherwise; for
  * General, the shared chat folder).
  */
 export function Home() {
@@ -59,13 +59,13 @@ export function Home() {
     }, () => {})
   }, [base, project])
 
-  // The icons act on the #folder being typed, or the project's folder.
+  // The icons act on the $folder being typed, or the project's folder.
   const folder = parseMessage(text, []).folder ?? base
 
   return (
     <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col lg:max-w-none">
       <ChatList key={project?.id} className="min-h-0 flex-1" requests />
-      <div className="grid gap-1 p-2 sm:p-3">
+      <div data-chat-composer className="relative grid gap-1 p-2 sm:p-3">
         {recent.length > 0 && !overlay && (
           <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-1" aria-label="Recent folders">
             {recent.map((f) => (
@@ -94,7 +94,7 @@ export function Home() {
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder={project && !project.general ? `Start a chat in ${project.name}: message, @someone, #folder…` : "Start a chat: message, @someone, #folder…"}
+          placeholder="Message: @someone and $folder"
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} />

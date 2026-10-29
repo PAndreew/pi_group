@@ -26,9 +26,10 @@ export function ComposerBox({
   onFiles?: (files: File[]) => void
 }) {
   return (
+    <>
     <div
       data-composer-box
-      className="relative min-w-0 rounded-[9px] bg-muted"
+      className="relative min-w-0 rounded-[12px] bg-muted"
       onPaste={(e) => {
         const files = Array.from(e.clipboardData.files)
         if (!files.length || !onFiles) return
@@ -50,5 +51,7 @@ export function ComposerBox({
         </Button>
       </div>
     </div>
+    <div data-model-picker className="flex min-w-0 justify-center" />
+    </>
   )
 }

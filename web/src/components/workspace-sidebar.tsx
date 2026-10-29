@@ -20,9 +20,9 @@ export function WorkspaceSidebar({ folder, sessionKey, lastEdit, onLastEdit, cla
         {lastEdit && <button type="button" onClick={onLastEdit} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"><FileText className="size-4 shrink-0" /><span className="truncate">Last edited: {lastEdit.split("/").pop()}</span></button>}
       </div>
       <div className="flex flex-col items-start gap-2 border-t p-3">
-        <span className="text-xs font-medium text-muted-foreground">Tenant</span>
+        <span className="font-lato text-xs font-medium text-muted-foreground">Tenant</span>
         <TenantPicker />
-        <span className="mt-2 text-xs font-medium text-muted-foreground">Running sessions</span>
+        <span className="font-lato mt-2 text-xs font-medium text-muted-foreground">Running sessions</span>
         {children}
       </div>
     </aside>

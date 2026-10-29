@@ -5,6 +5,12 @@
 
 :root {
   --radius: 0.625rem;
+  --composer-background: #f3f6f7;
+  --modal-list-card: #fff;
+  --composer-foreground: #20282c;
+  --composer-icon: #374151;
+  --composer-placeholder: #64748b;
+  --composer-active: #1d4ed8;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -30,6 +36,12 @@
 }
 
 .dark {
+  --composer-background: #20282c;
+  --modal-list-card: #000;
+  --composer-foreground: #fff;
+  --composer-icon: #fff;
+  --composer-placeholder: #cbd5e1;
+  --composer-active: #93c5fd;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -109,6 +121,9 @@
   }
 }
 
+/* The idle composer floats above the home indicator; editing needs no extra lift. */
+html[data-editing] body { padding-bottom: 0; }
+
 /* Avoid Safari's focus zoom while retaining user pinch zoom. */
 @media (pointer: coarse) {
   textarea, input, select { font-size: 16px; }
@@ -169,6 +184,10 @@
 .dark .agent-bubble .hljs-title, .dark .agent-bubble .hljs-section, .dark .agent-bubble .hljs-function { color: #6f42c1; }
 .dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
 
+@font-face { font-family: Lato; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/lato-regular.ttf') format('truetype'); }
+@font-face { font-family: Lato; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/lato-bold.ttf') format('truetype'); }
+.font-lato { font-family: Lato, sans-serif; }
+
 .scrollbar-thin { scrollbar-width: thin; }
 
 /* Soften content at the navbar and composer instead of drawing dividers. */
@@ -178,13 +197,58 @@
 }
 
 /* One continuous, borderless input surface, including its control row. */
-[data-composer-box] { background-color: var(--muted); }
+[data-composer-box] { background-color: var(--composer-background); color: var(--composer-foreground); }
+[data-composer-box] .composer-icon { color: var(--composer-icon); background-color: transparent; }
+[data-composer-box] > div,
+[data-composer-box] > div > div { background-color: transparent; }
+[data-composer-box] .composer-icon:is([data-active="true"], :active, :focus-visible) { color: var(--composer-active); }
+[data-composer-box] textarea::placeholder { color: var(--composer-placeholder); }
+
+/* Shared menu/modal surfaces follow the composer palette in both themes.
+   Rebind shadcn surface tokens locally so inner panels match without changing
+   page cards, form-control borders, or keyboard focus rings. */
+:is([data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="popover-content"]) {
+  --background: var(--composer-background);
+  --foreground: var(--composer-foreground);
+  --card: var(--composer-background);
+  --card-foreground: var(--composer-foreground);
+  --popover: var(--composer-background);
+  --popover-foreground: var(--composer-foreground);
+  background-color: var(--composer-background);
+  color: var(--composer-foreground);
+  border-width: 0;
+}
+
+:is([data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="popover-content"])
+  :where([data-slot="card"], div, section, article, ul, li, form, fieldset, label, button.w-full) {
+  border-width: 0;
+}
+:is([data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="popover-content"]) [data-slot="card"] {
+  box-shadow: none;
+}
+
+/* Expandable job rows and selectable applet rows share the same list-card
+   structure. Keep their surfaces distinct from the modal without borders. */
+[data-slot="dialog-content"] ul > li:has(> button.w-full) {
+  background-color: var(--modal-list-card);
+  border-width: 0;
+  border-radius: var(--radius);
+}
+[data-slot="dialog-content"] ul > li:has(> button.w-full) > button.w-full {
+  background-color: transparent;
+  border-width: 0;
+}
+
+/* Grid/flex children must shrink before long MCP identifiers can wrap. */
+.tools-dialog :where(section, ul, li, button, div, span, p) { min-width: 0; overflow-wrap: anywhere; }
+.tools-dialog [data-slot="badge"] { max-width: 100%; white-space: normal; }
+.tools-dialog p { white-space: pre-wrap; }
 [data-composer-box] textarea,
 .dark [data-composer-box] textarea {
   background-color: transparent;
   border: 0;
   box-shadow: none;
-  border-radius: 9px;
+  border-radius: 12px;
 }
 
 
@@ -193,11 +257,9 @@
 .composer-send:active,
 .dark .composer-send { background-color: #d1d5db; color: #000; }
 
-/* Composer controls: near-black (light) or white (dark) when idle, theme-aware blue when active. */
-.composer-icon { color: #18181b; }
-.dark .composer-icon { color: #fff; }
-.composer-icon:is([data-active="true"], :active, :focus-visible) { color: #1d4ed8; }
-.dark .composer-icon:is([data-active="true"], :active, :focus-visible) { color: #93c5fd; }
+/* Composer controls share the light/dark theme tokens, including outside the input surface. */
+.composer-icon { color: var(--composer-icon); }
+.composer-icon:is([data-active="true"], :active, :focus-visible) { color: var(--composer-active); }
 
 /* The reasoning slider: a thick track and a large thumb, easy to hit with a finger. */
 .reasoning-range { appearance: none; -webkit-appearance: none; width: 100%; height: 2.75rem; background: transparent; cursor: pointer; }

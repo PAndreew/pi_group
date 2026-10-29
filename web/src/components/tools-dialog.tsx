@@ -21,15 +21,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Row({ name, badge, description, title, onClick }: { name: string; badge?: string; description?: string; title?: string; onClick?: () => void }) {
   const body = (
     <>
-      <span className="flex items-center gap-1.5">
-        <span className="truncate font-mono text-[13px]">{name}</span>
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="whitespace-normal font-mono text-[13px]">{name}</span>
         {badge && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
             {badge}
           </Badge>
         )}
       </span>
-      {description && <span className="line-clamp-2 text-xs text-muted-foreground">{description}</span>}
+      {description && <span className="whitespace-normal text-xs text-muted-foreground">{description}</span>}
     </>
   )
   return (
@@ -59,7 +59,7 @@ function ServerRow({ server }: { server: McpServer }) {
     <li className="rounded-md border px-3 py-2">
       <button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setExpanded((e) => !e)} disabled={!tools.length}>
         <span className={cn("size-2 shrink-0 rounded-full", stateColor(server))} />
-        <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{server.name}</span>
+        <span className="min-w-0 flex-1 whitespace-normal font-mono text-[13px]">{server.name}</span>
         {server.scope && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
             {server.scope}
@@ -70,7 +70,7 @@ function ServerRow({ server }: { server: McpServer }) {
         {tools.length > 0 && <ChevronRight className={cn("size-3.5 text-muted-foreground transition-transform", expanded && "rotate-90")} />}
       </button>
       {server.error && <p className="mt-1 text-xs break-words text-destructive">{server.error}</p>}
-      {server.target && <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground" title={server.target}>{server.target}</p>}
+      {server.target && <p className="mt-1 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground" title={server.target}>{server.target}</p>}
       {expanded && (
         <ul className="mt-2 flex flex-wrap gap-1">
           {tools.map((tool) => (
@@ -119,7 +119,7 @@ export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-xl">
+      <DialogContent className="tools-dialog flex max-h-[85dvh] min-w-0 flex-col sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Tools

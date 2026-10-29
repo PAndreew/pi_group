@@ -14,25 +14,25 @@ export interface Person {
 export interface ParsedMessage {
   /** What was typed, mentions included. */
   raw: string
-  /** Without the @ and # mentions. */
+  /** Without the @ and $ mentions. */
   text: string
   pi: boolean
   people: Person[]
   folder?: string
 }
 
-/** Folder mentions keep spaces as no-break spaces so a #path stays one token. */
+/** Folder mentions keep spaces as no-break spaces so a $path stays one token. */
 const NBSP = "\u00a0"
 const MENTION = /(^|\s)@([\w.-]+)/g
-const FOLDER = /(^|\s)#(\S+)/g
+const FOLDER = /(^|\s)\$(\S+)/g
 
 let directory: Promise<Person[]> | undefined
 const people = () => (directory ??= api.directory().then((d) => d.users, () => []))
 
-/** `raw` with its #folder mention (if any) replaced by `folder`, placed first. */
+/** `raw` with its $folder mention (if any) replaced by `folder`, placed first. */
 export function withFolder(raw: string, folder: string): string {
   const rest = raw.replace(FOLDER, (_all, lead) => lead).replace(/^[ 	]+/, "")
-  return `#${folder.replaceAll(" ", NBSP)} ${rest}`
+  return `$${folder.replaceAll(" ", NBSP)} ${rest}`
 }
 
 export function parseMessage(raw: string, everyone: Person[]): ParsedMessage {
@@ -57,12 +57,12 @@ type Suggestion =
 
 /** The token being typed at the caret, if it is a mention. */
 function activeToken(value: string, caret: number) {
-  const match = /(^|\s)([@#/])([^\s@#]*)$/.exec(value.slice(0, caret))
-  return match ? { trigger: match[2] as "@" | "#" | "/", query: match[3], start: caret - match[3].length - 1 } : undefined
+  const match = /(^|\s)([@$/])([^\s@$]*)$/.exec(value.slice(0, caret))
+  return match ? { trigger: match[2] as "@" | "$" | "/", query: match[3], start: caret - match[3].length - 1 } : undefined
 }
 
 /**
- * A message box with @ (pi and people), # (fuzzy folders or files) and / (skills) suggestions.
+ * A message box with @ (pi and people), $ (fuzzy folders or files) and / (skills) suggestions.
  * Enter sends, Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
  */
 export function MentionComposer({
@@ -86,7 +86,7 @@ export function MentionComposer({
   busy?: boolean
   selfId?: string
   /**
-   * What # offers: "folder" picks the folder for a new chat (#path token), "paths" mentions files and
+   * What $ offers: "folder" picks the folder for a new chat ($path token), "paths" mentions files and
    * folders, inserted as `paths` relative to `folder` so pi can open them.
    */
   hash?: "folder" | "paths" | "off"
@@ -166,7 +166,7 @@ export function MentionComposer({
             ? `/skill:${s.name} `
             : s.kind === "path"
               ? `\`${relativePath(folder, s.path)}${s.type === "dir" ? "/" : ""}\` `
-              : `#${s.path.replaceAll(" ", NBSP)} `
+              : `$${s.path.replaceAll(" ", NBSP)} `
     const next = value.slice(0, token.start) + insert + value.slice(caret)
     const at = token.start + insert.length
     onChange(next)

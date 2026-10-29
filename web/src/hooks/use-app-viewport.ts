@@ -13,6 +13,7 @@ export function useAppViewport() {
       frame = requestAnimationFrame(() => {
         if (viewport && Math.abs(viewport.scale - 1) > 0.01) return
         const editing = document.activeElement instanceof HTMLElement && document.activeElement.matches('textarea, input, [contenteditable="true"]')
+        root.toggleAttribute("data-editing", editing)
         root.style.setProperty("--app-height", `${editing ? (viewport?.height ?? window.innerHeight) : window.innerHeight}px`)
         root.style.setProperty("--app-top", `${editing ? (viewport?.offsetTop ?? 0) : 0}px`)
       })
@@ -58,6 +59,7 @@ export function useAppViewport() {
       window.removeEventListener("pageshow", resume)
       window.removeEventListener("focus", resume)
       document.removeEventListener("visibilitychange", visibility)
+      root.removeAttribute("data-editing")
       root.style.removeProperty("--app-height")
       root.style.removeProperty("--app-top")
     }

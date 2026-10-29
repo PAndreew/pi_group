@@ -4,13 +4,13 @@ import { api } from "@/lib/api"
 import { relativePath } from "@/lib/utils"
 
 /**
- * #file and #folder suggestions (fuzzy) for the direct-session composer. Picking one inserts the path
+ * $file and $folder suggestions (fuzzy) for the direct-session composer. Picking one inserts the path
  * in backticks, relative to the session's folder, so the agent can open it.
  */
 export function PathDropup({ value, folder, onChange }: { value: string; folder: string; onChange: (value: string) => void }) {
   const [entries, setEntries] = useState<{ path: string; type: "dir" | "file" }[]>([])
   const [dismissed, setDismissed] = useState<string>()
-  const match = /(^|\s)#([^\s#]*)$/.exec(value)
+  const match = /(^|\s)\$([^\s$]*)$/.exec(value)
   const query = match?.[2]
 
   useEffect(() => {

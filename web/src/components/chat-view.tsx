@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, TriangleAlert } from "lucide-react"
+import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, MoreVertical, TriangleAlert } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -16,6 +16,7 @@ import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } fro
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
 import { api, type Chat, type ChatMessage } from "@/lib/api"
 import { ConversationHeader } from "@/lib/nav-slot"
@@ -284,15 +285,16 @@ export function ChatView({ chatId }: { chatId: string }) {
             </div>
           )}
         </div>
-        {watch && (
-          <Button variant="outline" size="sm" onClick={watch} title="Open pi's session for this chat">
-            <PiAvatar small /> Session
-          </Button>
-        )}
         {chat && (
-          <Button variant="ghost" size="icon-sm" onClick={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })} aria-label="Move to project" title="Move to project">
-            <FolderInput />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="Chat actions"><MoreVertical /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {watch && <DropdownMenuItem onSelect={watch}><ExternalLink /> Open agent session</DropdownMenuItem>}
+              <DropdownMenuItem onSelect={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })}><FolderInput /> Move to project…</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} />
       </ConversationHeader>
@@ -364,7 +366,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           busy={sending || uploading}
           selfId={user?.id}
           hash="paths"
-          placeholder={editing ? "Edit message…" : "Message… (# for files)"}
+          placeholder={editing ? "Edit message…" : "Message: @someone and $folder"}
           agent={<AgentToggle checked={agent} onChange={setAgent} />}
           controls={<ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={agent} />}
           onFiles={(files) => void attach(files)}
