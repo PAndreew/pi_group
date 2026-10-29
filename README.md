@@ -8,7 +8,8 @@
 
 Run Beezy on your computer or Raspberry Pi, then use it from a browser or phone. Chat with each other, bring in the [pi coding agent](https://github.com/earendil-works/pi) with `@pi`, and work on files together. Agents keep working when you close the browser.
 
-- Human-only chats, private agent chats, or both in the same conversation.
+- One [agent thread](docs/threads.md) per person and project, with side threads for long tasks; chats with people that agents can see (and `@pi` asks your agent) or that stay private.
+- Agents keep the last day in context and search everything older in a [conversation archive](docs/threads.md#the-archive).
 - Choose a working folder, browse files, and preview the agent’s output.
 - A [shared browser](docs/browser.md) per session: see your app live together and pick elements to ask about.
 - Pick your model, reply to messages, and steer or stop an agent.

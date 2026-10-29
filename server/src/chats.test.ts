@@ -71,7 +71,7 @@ const until = async (check: () => Promise<boolean> | boolean, what: string) => {
 	}
 };
 
-test("chats: people talk, @pi joins with context and replies, pi-only chats are sessions, memory consolidates", async () => {
+test("chats: people talk, the asker's agent answers, private chats stay private, agent threads, side threads and the archive", async () => {
 	const dir = mkdtempSync(path.join(os.tmpdir(), "pi-group-chats-"));
 	process.env.DATA_DIR = path.join(dir, "data");
 	process.env.FS_ROOT = dir;
@@ -124,27 +124,34 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(prompts.length, 0, "a chat between people does not start pi");
 		assert.equal((await call("carol", "GET", `/chats/${chatId}`)).status, 404, "non-members cannot read a chat");
 
-		// Bob asks pi: it gets the conversation so far, and its reply lands in the chat.
+		// Bob asks @pi: Bob's agent gets the conversation so far, and its reply lands in the chat, labeled as his.
 		await call("bob", "POST", `/chats/${chatId}/messages`, { text: "@pi can you look at the logs?" });
-		await until(async () => (await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "done"), "pi's reply");
+		await until(async () => (await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "done"), "bob's agent's reply");
 		const chat = (await call("anna", "GET", `/chats/${chatId}`)).body;
 		const reply = chat.messages.find((m: any) => m.status === "done");
 		assert.equal(reply.message.role, "assistant");
 		assert.equal(reply.message.content[0].text, "reply to f1");
-		assert.match(prompts[0].text, /group chat with anna, bob/);
+		assert.deepEqual(reply.message.agentOf, { id: bob.id, username: "bob" });
+		assert.match(prompts[0].text, /You are bob's agent, taking part in a group chat with anna, bob/);
 		assert.match(prompts[0].text, /anna: hello bob, the deploy failed\n\nbob: @pi can you look at the logs\?/);
-		assert.equal(prompts[0].cwd, config.chatFolder, "without #folder pi works in the shared chat folder");
-		assert.ok(existsSync(path.join(config.chatFolder, "AGENTS.md")), "the chat folder points pi at the memory");
-		const meta = store.session(chat.chat.sessionKey)!;
-		assert.equal(meta.ownerId, bob.id);
-		assert.deepEqual(meta.shares, [{ userId: anna.id, access: "write" }], "chat members can follow pi's session");
+		assert.equal(prompts[0].cwd, config.chatFolder, "without #folder the agent works in the shared chat folder");
+		assert.ok(existsSync(path.join(config.chatFolder, "AGENTS.md")));
+		const bobAgent = Object.values(store.data.sessions).find((m) => m.thread === "chat" && m.ownerId === bob.id)!;
+		assert.ok(bobAgent, "bob's agent for the chat is his own session");
+		assert.deepEqual(bobAgent.shares, [], "nobody else steers bob's agent");
 		assert.equal(chat.chat.title, "bob, pi");
 
-		// The next mention only carries what was said since pi's last turn.
+		// Anna asks: her own agent answers, and it hears what bob's agent said.
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "thanks! @pi also check the cron job" });
-		await until(() => prompts.length === 2, "second prompt");
-		assert.equal(prompts[1].text, "anna: thanks! @pi also check the cron job");
-		assert.ok(!(await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.kind === "session" && c.id === meta.key), "a chat's session is not listed twice");
+		await until(() => prompts.length === 2, "anna's agent's prompt");
+		assert.equal(prompts[1].id, "f2", "a second person's agent is a second session");
+		assert.match(prompts[1].text, /You are anna's agent/);
+		assert.match(prompts[1].text, /bob's agent: reply to f1/);
+		assert.match(prompts[1].text, /anna: thanks! @pi also check the cron job$/);
+		await until(async () => !(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "anna's agent's reply");
+		const annaReply = (await call("anna", "GET", `/chats/${chatId}`)).body.messages.at(-1);
+		assert.equal(annaReply.message.agentOf.username, "anna");
+		assert.ok(!(await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.kind === "session" && c.thread === "chat"), "chat agents are not listed");
 
 		// Catch-up after a dropped connection: everything after the last message seen, plus the current state of checked ones.
 		const all = (await call("anna", "GET", `/chats/${chatId}`)).body.messages;
@@ -155,7 +162,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		);
 		assert.equal((await call("carol", "GET", `/chats/${chatId}/messages?after=0`)).status, 404);
 
-		// Messages arriving during a turn wait; ordinary messages remain chat context, not new runs.
+		// Mentions during a turn wait their turn; each asker's agent gets only what is new to it.
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "ordinary note while working" });
 		await call("bob", "POST", `/chats/${chatId}/messages`, { text: "@pi queued request one" });
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "@pi queued request two" });
@@ -163,22 +170,25 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		const queued = (await call("anna", "GET", `/chats/${chatId}`)).body.messages;
 		assert.equal(queued.filter((m: any) => m.status === "error").length, 0);
 		assert.equal(prompts.length, 4);
+		assert.equal(prompts[2].id, "f1");
+		assert.match(prompts[2].text, /anna: thanks! @pi also check the cron job/, "bob's agent catches up on what it missed");
+		assert.match(prompts[2].text, /anna's agent: reply to f2/);
 		assert.match(prompts[2].text, /ordinary note while working/);
-		assert.match(prompts[2].text, /queued request one/);
-		assert.equal(prompts[3].text, "anna: @pi queued request two");
+		assert.match(prompts[2].text, /bob: @pi queued request one$/);
+		assert.ok(!/reply to f1/.test(prompts[2].text), "an agent is not told its own replies");
+		assert.equal(prompts[3].id, "f2");
+		assert.match(prompts[3].text, /bob's agent: reply to f1/);
+		assert.match(prompts[3].text, /anna: @pi queued request two$/);
 
-		// Edits: people fix their own words, anyone fixes pi's; pi's session reads the new text from then on.
+		// Edits: people fix their own words, anyone fixes an agent's finished reply.
 		const first = queued[0];
 		assert.equal((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/edit`, { text: "hijacked" })).status, 403);
 		const edited = await call("anna", "POST", `/chats/${chatId}/messages/${first.id}/edit`, { text: "hello bob, the deploy failed twice" });
 		assert.equal(edited.status, 200);
 		assert.equal(edited.body.message.message.content[0].text, "hello bob, the deploy failed twice");
 		assert.ok(edited.body.message.editedAt);
-		const piSession = adapter.live(meta.id)!.state.messages as any[];
-		assert.match(piSession[0].content[0].text, /anna: hello bob, the deploy failed twice\n\nbob: @pi can you look/);
 		const answer = queued.find((m: any) => m.status === "done");
 		assert.equal((await call("anna", "POST", `/chats/${chatId}/messages/${answer.id}/edit`, { text: "logs are clean" })).status, 200);
-		assert.equal(piSession[1].content[0].text, "logs are clean");
 
 		// Reactions: only on people's messages, toggled per person.
 		assert.equal((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "👍" })).body.message.reactions["👍"][0], bob.id);
@@ -188,22 +198,95 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.notEqual((await call("bob", "POST", `/chats/${chatId}/messages/${first.id}/reactions`, { emoji: "lol" })).status, 200, "only emoji are reactions");
 		assert.deepEqual((await call("bob", "GET", `/chats/${chatId}`)).body.messages[0].reactions, { "❤️": [anna.id] });
 
-		// Deleting: only your own words; they leave the chat and pi's transcript.
+		// Deleting: only your own words.
 		const note = queued.find((m: any) => m.message.content[0]?.text?.includes("ordinary note while working"));
 		assert.equal((await call("bob", "DELETE", `/chats/${chatId}/messages/${note.id}`)).status, 403);
-		await until(async () => !(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "pi to finish before deleting");
-		assert.equal((await call("anna", "DELETE", `/chats/${chatId}/messages/${note.id}`)).body.queued, false);
+		assert.equal((await call("anna", "DELETE", `/chats/${chatId}/messages/${note.id}`)).status, 200);
 		assert.ok(!(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.id === note.id));
-		const transcriptAfter = (adapter.live(meta.id)?.state.messages ?? (await adapter.readSession(meta.id, meta.cwd))!.messages) as any[];
-		assert.ok(!transcriptAfter.some((m) => m.role === "user" && JSON.stringify(m.content).includes("ordinary note while working")));
-		assert.ok(transcriptAfter.some((m) => m.role === "user" && JSON.stringify(m.content).includes("queued request one")));
 
-		// Only @pi: a plain session, in the chosen folder.
-		const solo = await call("anna", "POST", "/chats", { text: "summarise the API", pi: true, folder: "projects/api-server" });
+		// The archive has the agentic chat (edits replace, deletions leave), searchable by its members only.
+		const search = async (who: string, q: string) => (await call(who, "GET", `/archive/search?q=${encodeURIComponent(q)}`)).body.turns as any[];
+		assert.ok((await search("bob", "deploy failed twice")).some((t) => t.conversation === `chat:${chatId}` && t.senderName === "anna"));
+		assert.equal((await search("bob", "hijacked")).length, 0);
+		assert.equal((await search("anna", "ordinary note")).length, 0, "deleted messages leave the archive");
+		assert.ok((await search("anna", "clean")).some((t) => t.senderName === "bob's agent"), "agent replies are archived as whose agent spoke");
+		assert.equal((await search("carol", "deploy")).length, 0, "non-members find nothing");
+
+		// Titles: typed, cleared back to the names, or generated (without pi: the first words).
+		assert.equal((await call("anna", "PATCH", `/chats/${chatId}`, { title: "Deploy incident" })).body.chat.title, "Deploy incident");
+		assert.equal((await call("bob", "GET", "/chats")).body.chats.find((c: any) => c.id === chatId).title, "Deploy incident");
+		assert.ok((await search("bob", "deploy failed twice")).every((t) => t.title === "Deploy incident"), "the archive follows renames");
+		assert.equal((await call("anna", "PATCH", `/chats/${chatId}`, { title: "" })).body.chat.title, "bob, pi");
+		const generated = await call("anna", "POST", `/chats/${chatId}/title`);
+		assert.equal(generated.status, 200);
+		assert.ok(generated.body.title.length > 0 && generated.body.title.length <= 60);
+
+		// The agents' bridge: context window, the agentic chats digest, and archive search for their person.
+		const { interactionEnvironment } = await import("./interactions.js");
+		const bridge = async (key: string, body: unknown) => {
+			const res = await fetch(`${base}/threads-bridge/${encodeURIComponent(key)}`, { method: "POST", headers: { Authorization: `Bearer ${interactionEnvironment(key).BEEZY_INTERACTION_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+			return { status: res.status, body: await res.json() };
+		};
+		assert.equal((await fetch(`${base}/threads-bridge/${encodeURIComponent(bobAgent.key)}`, { method: "POST", headers: { Authorization: "Bearer wrong", "Content-Type": "application/json" }, body: "{}" })).status, 403);
+		const bobContext = (await bridge(bobAgent.key, { action: "context" })).body;
+		assert.equal(bobContext.windowHours, 24);
+		assert.ok(!bobContext.digest.includes(`chat:${chatId}`), "a chat agent is not told its own chat twice");
+
+		// Private chats: no agent, never archived; making one agentic archives it.
+		const secret = (await call("anna", "POST", "/chats", { text: "surprise party for carol", userIds: [bob.id], private: true })).body.chat;
+		const before = prompts.length;
+		await call("bob", "POST", `/chats/${secret}/messages`, { text: "@pi plan it" });
+		await new Promise((r) => setTimeout(r, 300));
+		assert.equal(prompts.length, before, "@pi does nothing in a private chat");
+		assert.equal((await search("bob", "surprise")).length, 0, "private chats are not archived");
+		assert.equal((await call("bob", "GET", "/chats")).body.chats.find((c: any) => c.id === secret).private, true);
+		await call("anna", "PATCH", `/chats/${secret}`, { private: false });
+		assert.equal((await search("bob", "surprise")).length, 1);
+		await call("anna", "PATCH", `/chats/${secret}`, { private: true });
+		assert.equal((await search("bob", "surprise")).length, 0, "making a chat private takes it out of the archive");
+
+		// Only the agent: that is the caller's agent thread in the project (one per person, reused).
+		const solo = await call("anna", "POST", "/chats", { text: "summarise the API", pi: true });
 		assert.ok(solo.body.session);
-		assert.equal(store.session(solo.body.session)!.cwd, path.join(dir, "projects", "api-server"));
+		const thread = store.session(solo.body.session)!;
+		assert.equal(thread.thread, "main");
+		assert.equal(thread.ownerId, anna.id);
+		await until(() => !adapter.live(thread.id)!.state.running, "anna's agent thread to answer");
+		assert.equal((await call("anna", "POST", "/chats", { text: "and the web app?", pi: true })).body.session, thread.key, "the same thread again");
+		assert.equal((await call("anna", "POST", "/agent-thread", {})).body.session.key, thread.key);
+		assert.equal((await call("bob", "GET", "/agent-thread")).body.session, null, "bob has his own (not yet created) thread");
+		await until(() => !adapter.live(thread.id)!.state.running && prompts.filter((p) => p.id === thread.id).length === 2, "anna's agent thread to answer again");
 		const annaList = (await call("anna", "GET", "/chats")).body.chats;
-		assert.ok(annaList.some((c: any) => c.kind === "session" && c.id === solo.body.session && c.folder === "projects/api-server"));
+		assert.ok(annaList.some((c: any) => c.kind === "session" && c.id === thread.key && c.thread === "main"));
+
+		// Anna's agent thread sees the agentic chats she is in, and searches the archive as her.
+		const mainContext = (await bridge(thread.key, { action: "context" })).body;
+		assert.match(mainContext.digest, /Recent agentic chats/);
+		assert.match(mainContext.digest, /hello bob, the deploy failed twice/);
+		assert.ok(!mainContext.digest.includes("surprise"), "private chats never reach an agent");
+		const cron = (await bridge(thread.key, { action: "search", query: "cron" })).body;
+		assert.match(cron.results, /cron job/);
+		assert.equal((await bridge(thread.key, { action: "read", conversation: `session:${bobAgent.key}` })).status, 404, "an agent cannot read another person's sessions");
+		await until(async () => /summarise the API/.test((await bridge(thread.key, { action: "read", conversation: `session:${thread.key}` })).body.turns ?? ""), "the agent thread in the archive");
+
+		// Side threads: started from the agent thread, they report back when the run ends.
+		const side = await call("anna", "POST", `/sessions/${encodeURIComponent(thread.key)}/side`, { task: "refactor the uploads module", name: "Refactor uploads" });
+		assert.equal(side.status, 200);
+		const sideMeta = store.session(side.body.session.key)!;
+		assert.equal(sideMeta.thread, "side");
+		assert.equal(sideMeta.parentKey, thread.key);
+		assert.match(prompts.find((p) => p.id === sideMeta.id)!.text, /Task: refactor the uploads module/);
+		await until(() => store.session(sideMeta.key)!.sideStatus === "merged", "the side thread to merge");
+		await until(() => prompts.some((p) => p.id === thread.id && p.text.startsWith('[Side thread "Refactor uploads" finished]')), "the summary in the agent thread");
+		assert.match(prompts.find((p) => p.id === thread.id && p.text.startsWith("[Side thread"))!.text, new RegExp(`reply to ${sideMeta.id}`));
+		const listed = (await call("anna", "GET", "/chats")).body.chats.find((c: any) => c.id === sideMeta.key);
+		assert.equal(listed.parentKey, thread.key);
+		assert.equal(listed.sideStatus, "merged");
+		assert.equal((await call("anna", "POST", `/sessions/${encodeURIComponent(bobAgent.key)}/side`, { task: "x" })).status, 404, "only the owner's threads take side threads");
+		await until(() => !adapter.live(thread.id)!.state.running, "the agent thread to take in the summary");
+		const fromAgent = await bridge(thread.key, { action: "side", task: "run the long test suite", name: "Long tests" });
+		assert.equal(fromAgent.body.status, "started");
+		assert.equal((await bridge(sideMeta.key, { action: "side", task: "nested" })).status, 400, "side threads do not nest");
 
 		// Fuzzy #folder search.
 		const found = await call("anna", "GET", "/folders/search?q=apisrv");
@@ -224,7 +307,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(master.memory, true);
 		assert.equal(master.ownerId, admin.id);
 		const memoryPrompts = prompts.filter((p) => p.text.startsWith("Consolidate"));
-		assert.ok(memoryPrompts.some((p) => /anna: hello bob, the deploy failed/.test(p.text) && /pi: reply to f1/.test(p.text)));
+		assert.ok(memoryPrompts.some((p) => /anna: hello bob, the deploy failed/.test(p.text) && /bob's agent: /.test(p.text)));
 		const again = await call("chat-admin", "POST", "/memory/consolidate", { all: true });
 		assert.equal(again.body.pending, 0, "consolidated conversations are not repeated");
 

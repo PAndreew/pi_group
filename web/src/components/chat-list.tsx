@@ -1,4 +1,4 @@
-import { Brain, Folder, FolderInput, Loader2, Trash2 } from "lucide-react"
+import { Bot, Brain, Check, CircleSlash, CornerDownRight, Folder, FolderInput, Loader2, Lock, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -29,9 +29,22 @@ function Avatars({ item, selfId }: { item: ChatListItem; selfId?: string }) {
   )
 }
 
+type SessionItem = Extract<ChatListItem, { kind: "session" }>
+
+function SideStatusIcon({ item }: { item: SessionItem }) {
+  if (item.running || item.sideStatus === "running") return <Loader2 className="size-3.5 shrink-0 animate-spin text-green-600" aria-label="Working" />
+  if (item.sideStatus === "merged") return <Check className="size-3.5 shrink-0 text-muted-foreground" aria-label="Merged" />
+  if (item.sideStatus === "failed") return <X className="size-3.5 shrink-0 text-red-600" aria-label="Failed" />
+  return <CircleSlash className="size-3.5 shrink-0 text-muted-foreground" aria-label="Stopped" />
+}
+
+/** Finished side threads shown under the agent thread before "more". */
+const FINISHED_SIDES = 3
+
 /**
- * The active project's chats and sessions, newest first; those with pi working are on top. Refreshes
- * on chat, run and project events. Swiping a row left uncovers Move (to another project) and Delete.
+ * The active project's conversations: the caller's agent thread on top (offered before it exists),
+ * its side threads under it, then the chats with people, newest first, those with an agent working
+ * on top. Refreshes on chat, run and project events. Swiping a row left uncovers Move and Delete.
  */
 export function ChatList({ selected, className, requests }: { selected?: string; className?: string; requests?: boolean }) {
   const { user } = useAuth()
@@ -44,6 +57,8 @@ export function ChatList({ selected, className, requests }: { selected?: string;
   const { query } = useChatSearch()
   const [swiped, setSwiped] = useState<string>()
   const [deleting, setDeleting] = useState<SessionSummary>()
+  const [allSides, setAllSides] = useState(false)
+  const [opening, setOpening] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
@@ -68,34 +83,76 @@ export function ChatList({ selected, className, requests }: { selected?: string;
 
   const q = query.trim().toLowerCase()
   const visible = items?.filter((i) => !q || i.title.toLowerCase().includes(q) || i.folder.toLowerCase().includes(q))
+  const sessions = (visible ?? []).filter((i): i is SessionItem => i.kind === "session")
+  const main = sessions.find((i) => i.thread === "main")
+  const sides = sessions.filter((i) => i.thread === "side" && (!main || i.parentKey === main.id))
+  const working = sides.filter((i) => i.running || i.sideStatus === "running")
+  const finished = sides.filter((i) => !working.includes(i))
+  const shownSides = [...working, ...(allSides ? finished : finished.slice(0, FINISHED_SIDES))]
+  const chats = (visible ?? []).filter((i) => i.kind === "chat")
+
+  const openAgent = async () => {
+    setOpening(true)
+    try {
+      const { session } = await api.openAgentThread(project)
+      nav.openSession(session.key, session.path)
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setOpening(false)
+    }
+  }
 
   return (
     <div className={cn("flex min-h-0 min-w-0 max-w-full flex-col", className)}>
       <div className="chat-scroll-fade min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {requests && <MoveRequests />}
-        {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : active && !active.general ? `Nothing in ${active.name} yet. Start a chat below, or move one here.` : "No chats yet. Mention @pi or someone below to start one."}</p>}
-        {visible?.map((item) => {
+        {visible && !q && !main && (
+          <button type="button" disabled={opening} onClick={() => void openAgent()} className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-accent">
+            <PiAvatar />
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="text-sm font-medium">Your agent</span>
+              <span className="text-xs text-muted-foreground">{opening ? "Starting…" : active && !active.general ? `Talk to your agent about ${active.name}` : "Talk to your agent"}</span>
+            </span>
+            {opening && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+          </button>
+        )}
+        {visible && !q && !main && chats.length > 0 && <div className="mx-2 my-1 border-t" />}
+        {visible?.length === 0 && q && <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matching chats.</p>}
+        {[...(main ? [main] : []), ...shownSides, ...(finished.length > FINISHED_SIDES ? ["more" as const] : []), ...(main || shownSides.length ? ["divider" as const] : []), ...chats].map((item) => {
+          if (item === "more")
+            return (
+              <button key="more" type="button" onClick={() => setAllSides((v) => !v)} className="ml-10 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                {allSides ? "Fewer side threads" : `${finished.length - FINISHED_SIDES} earlier side threads`}
+              </button>
+            )
+          if (item === "divider") return chats.length ? <div key="divider" className="mx-2 my-1 border-t" /> : null
+          const side = item.kind === "session" && item.thread === "side"
           const row = (
           <button
             key={item.id}
             type="button"
             onClick={() => (item.kind === "chat" ? nav.openChat(item.id) : nav.openSession(item.id, item.folder))}
-            className={cn("flex w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-lg px-2 py-2 text-left hover:bg-accent", selected === item.id && "bg-accent")}
+            className={cn("flex w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-lg px-2 py-2 text-left hover:bg-accent", side && "py-1.5 pl-6", selected === item.id && "bg-accent")}
           >
-            <Avatars item={item} selfId={user?.id} />
+            {side ? <CornerDownRight className="size-4 shrink-0 text-muted-foreground" /> : <Avatars item={item} selfId={user?.id} />}
             <span className="grid min-w-0 flex-1 gap-0.5">
               <span className="flex min-w-0 items-center gap-1.5">
                 {item.kind === "session" && item.memory && <Brain className="size-3.5 shrink-0 text-muted-foreground" />}
-                <span className={cn("min-w-0 flex-1 truncate text-sm", item.kind === "chat" && item.unread > 0 && "font-semibold")}>{item.title}</span>
+                {side && <SideStatusIcon item={item} />}
+                {item.kind === "chat" && (item.private ? <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Private: no agent" /> : <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-label="Agentic" />)}
+                <span className={cn("min-w-0 flex-1 truncate text-sm", item.kind === "chat" && item.unread > 0 && "font-semibold", item.kind === "session" && item.thread === "main" && "font-medium")}>{item.kind === "session" && item.thread === "main" ? "Your agent" : item.title}</span>
                 {item.running && <span className="size-2 shrink-0 animate-pulse rounded-full bg-green-500" title="Beezy is working" />}
                 <span className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(item.updatedAt)}</span>
               </span>
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="min-w-0 flex-1 truncate">
-                  {item.kind === "chat" ? (item.last ? `${item.last.author === user?.username ? "You" : item.last.author === "pi" ? "Beezy" : item.last.author}: ${item.last.text || "…"}` : "") : item.running ? "Beezy is working…" : `Beezy · ${item.harness}`}
+                  {item.kind === "chat"
+                    ? item.last ? `${item.last.author === user?.username ? "You" : item.last.author === `${user?.username}'s agent` ? "Your agent" : item.last.author === "pi" ? "Beezy" : item.last.author}: ${item.last.text || "…"}` : ""
+                    : item.running ? "Working…" : side ? (item.sideStatus === "merged" ? "Merged" : item.sideStatus === "failed" ? "Failed" : item.sideStatus === "aborted" ? "Stopped" : "Side thread") : item.title}
                 </span>
-                {(item.kind === "session" || item.pi) && item.folder && (
+                {item.kind === "chat" && item.pi && item.folder && (
                   <span title={`/${item.folder}`} className="flex min-w-0 max-w-[50%] items-center gap-0.5">
                     <Folder className="size-3 shrink-0" />
                     <span className="truncate">/{item.folder}</span>

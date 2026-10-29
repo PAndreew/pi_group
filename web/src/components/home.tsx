@@ -94,15 +94,15 @@ export function Home() {
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder="Message: @someone and $folder"
+          placeholder="Message your agent, or @someone to start a chat ($folder)"
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} />
           }
           onFiles={(files) => void attach(files)}
           onSubmit={async (message) => {
-            message.pi ||= agent
-            if (!message.pi && message.people.length === 0) return void toast.info("Mention @pi or at least one person to start a chat.")
+            // Nobody mentioned: it goes to your agent thread in this project. With people, Agent asks your agent too.
+            message.pi ||= agent || message.people.length === 0
             if (!message.text) return void toast.info("Write a message too.")
             setBusy(true)
             try {

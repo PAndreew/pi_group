@@ -37,6 +37,7 @@ export function interactionEnvironment(key: string) {
   const base = `http://${config.host === "::1" ? "[::1]" : "127.0.0.1"}:${config.port}/api`;
   return {
     BEEZY_INTERACTION_URL: `${base}/interaction-bridge/${encodeURIComponent(key)}`,
+    BEEZY_THREADS_URL: `${base}/threads-bridge/${encodeURIComponent(key)}`,
     BEEZY_JOBS_URL: `${base}/job-bridge/${encodeURIComponent(key)}`,
     BEEZY_APPLETS_URL: `${base}/applet-bridge/${encodeURIComponent(key)}`,
     BEEZY_BROWSER_URL: `${base}/browser-bridge/${encodeURIComponent(key)}`,

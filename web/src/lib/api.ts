@@ -81,7 +81,13 @@ export interface SessionSummary {
   shares: { userId: string; username: string; access: Access }[]
   projectId?: string
   access?: EffectiveAccess
+  /** A person's agent thread in a project, a side thread of one, or an agent answering in a chat. */
+  thread?: "main" | "side" | "chat"
+  parentKey?: string
+  sideStatus?: SideStatus
 }
+
+export type SideStatus = "running" | "merged" | "failed" | "aborted"
 
 /** A pi AgentMessage; loose on purpose, harnesses may add roles. */
 export type AgentMessage = { role: string; timestamp?: number; author?: { id: string; username: string }; [key: string]: any }
@@ -235,15 +241,19 @@ export interface Chat {
   projectId?: string
   sessionKey?: string
   pi: boolean
+  /** Shielded from every agent: no @pi, not in agents' context, not archived. */
+  private: boolean
+  /** Whether the title was given (otherwise it is the members' names). */
+  customTitle?: boolean
   members: { id: string; username: string }[]
   updatedAt: string
 }
 
-/** The home screen list: chats with people, and sessions shown as pi-only chats. */
+/** The conversation list: chats with people, and the caller's agent threads and side threads. */
 type ListedInProject = { projectId: string; canMove: boolean; /** The project a move waits to go to, for approval by the people in it. */ moving?: string }
 export type ChatListItem =
-  | ({ kind: "chat"; id: string; title: string; folder: string; pi: boolean; canDelete?: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } } & ListedInProject)
-  | ({ kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean } & ListedInProject)
+  | ({ kind: "chat"; id: string; title: string; folder: string; pi: boolean; private: boolean; canDelete?: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } } & ListedInProject)
+  | ({ kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; thread?: "main" | "side"; parentKey?: string; sideStatus?: SideStatus; canDelete?: boolean } & ListedInProject)
 
 /** What sessions and chats are grouped by within a tenant; General is the default. */
 export interface Project {
@@ -482,7 +492,15 @@ export const api = {
   chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),
   /** Leave a chat; it is deleted once nobody is left in it. */
   deleteChat: (id: string) => request<{ ok: true; deleted: boolean }>("DELETE", `/api/chats/${enc(id)}`),
-  startChat: (body: { text: string; pi: boolean; userIds: string[]; folder?: string; projectId?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
+  startChat: (body: { text: string; pi: boolean; private?: boolean; userIds: string[]; folder?: string; projectId?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) => request<{ chat?: string; session?: string }>("POST", "/api/chats", body),
+  updateChat: (id: string, change: { title?: string | null; private?: boolean }) => request<{ chat: Chat }>("PATCH", `/api/chats/${enc(id)}`, change),
+  generateChatTitle: (id: string) => request<{ title: string }>("POST", `/api/chats/${enc(id)}/title`),
+  /** The caller's agent thread in a project (General without one): null until first used. */
+  agentThread: (project?: string) => request<{ session: SessionSummary | null }>("GET", `/api/agent-thread${project ? `?${q({ project })}` : ""}`),
+  openAgentThread: (project?: string) => request<{ session: SessionSummary }>("POST", "/api/agent-thread", { project }),
+  startSideThread: (key: string, task: string, name?: string) => request<{ session: SessionSummary }>("POST", `/api/sessions/${enc(key)}/side`, { task, name }),
+  mergeSideThread: (key: string) => request<{ session: SessionSummary }>("POST", `/api/sessions/${enc(key)}/merge`),
+  generateSessionTitle: (key: string) => request<{ name: string }>("POST", `/api/sessions/${enc(key)}/title`),
   /** Messages after `after`, plus the current state of `check` (replies still shown as working). */
   chatSince: (id: string, after: number, check: number[]) =>
     request<{ messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}/messages?${q({ after: String(after), check: check.join(",") })}`),

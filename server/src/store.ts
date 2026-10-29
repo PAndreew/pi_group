@@ -68,6 +68,16 @@ export interface SessionMeta {
 	applet?: string;
 	/** Messages to remove once the agent stops running; see sessions.ts. */
 	pendingDeletes?: PendingDelete[];
+	/**
+	 * What the session is in the conversation model (see threads.ts): a person's one agent thread in
+	 * a project, a side thread working on a long task for it, or the agent answering for a person in
+	 * an agentic chat. Older sessions have none.
+	 */
+	thread?: "main" | "side" | "chat";
+	/** For side threads: the agent thread they report back to. */
+	parentKey?: string;
+	/** For side threads: still working, or how it ended (its summary was posted to the parent). */
+	sideStatus?: "running" | "merged" | "failed" | "aborted";
 }
 
 /**
@@ -106,6 +116,8 @@ interface Data {
 	appletRuns: AppletRun[];
 	projects: Project[];
 	moveRequests: MoveRequest[];
+	/** When existing sessions and chats were copied into the archive (once). */
+	archiveImportedAt?: string;
 }
 
 let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [], applets: [], appletRuns: [], projects: [], moveRequests: [] };

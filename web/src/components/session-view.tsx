@@ -1,6 +1,9 @@
 import {
   Eye,
+  GitBranch,
+  GitMerge,
   Loader2,
+  Sparkles,
   MoreVertical,
   Pencil,
   Pin,
@@ -41,7 +44,7 @@ import { StepsDialog } from "@/components/step-dialog"
 import { StepStrip } from "@/components/step-strip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -299,6 +302,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [shareOpen, setShareOpen] = useState(false)
   const [moving, setMoving] = useState<MoveTarget>()
   const [renameOpen, setRenameOpen] = useState(false)
+  const [sideOpen, setSideOpen] = useState(false)
+  const [sideTask, setSideTask] = useState("")
+  const [sideName, setSideName] = useState("")
   const [newName, setNewName] = useState("")
   const [answered, setAnswered] = useState<Answered[]>([])
   const scroller = useRef<HTMLDivElement>(null)
@@ -494,6 +500,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               {summary && <span>· {summary.harness}</span>}
               {summary?.pinned && <Pin className="size-3" />}
               {summary?.visibility === "shared" && <Share2 className="size-3" />}
+              {summary?.thread === "main" && <span>· your agent</span>}
+              {summary?.thread === "side" && <span>· side thread{summary.sideStatus && summary.sideStatus !== "running" ? ` (${summary.sideStatus === "merged" ? "merged" : summary.sideStatus === "failed" ? "failed" : "stopped"})` : ""}</span>}
               {!connected && <span className="text-amber-600">· reconnecting…</span>}
             </div>
           </div>
@@ -514,6 +522,19 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 >
                   <Pencil /> Rename
                 </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canWrite} onSelect={() => void act(async () => { await api.generateSessionTitle(sessionKey); refresh() }, "Title generated")}>
+                  <Sparkles /> Generate title
+                </DropdownMenuItem>
+                {summary.thread === "main" && (
+                  <DropdownMenuItem disabled={!canWrite} onSelect={() => setSideOpen(true)}>
+                    <GitBranch /> Start side thread…
+                  </DropdownMenuItem>
+                )}
+                {summary.thread === "side" && summary.parentKey && (
+                  <DropdownMenuItem disabled={!canWrite} onSelect={() => void act(() => api.mergeSideThread(sessionKey).then(({ session }) => setSummary(session)), "Its latest answer was posted to your agent thread")}>
+                    <GitMerge /> Merge into agent thread
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setShareOpen(true)}>
                   <Share2 /> Access & sharing
                 </DropdownMenuItem>
@@ -687,6 +708,35 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} onMoved={() => void api.session(sessionKey).then(({ session }) => setSummary(session), () => {})} />
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
       <ForwardDialog text={forwarding} from={{ kind: "session", id: sessionKey }} onOpenChange={(o) => !o && setForwarding(undefined)} />
+      <Dialog open={sideOpen} onOpenChange={setSideOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start a side thread</DialogTitle>
+            <DialogDescription>A separate agent works on this on its own, so this thread stays free. When it finishes, fails or is stopped, its summary is posted here.</DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!sideTask.trim()) return
+              void act(async () => {
+                await api.startSideThread(sessionKey, sideTask.trim(), sideName.trim() || undefined)
+                setSideOpen(false)
+                setSideTask("")
+                setSideName("")
+              }, "Side thread started")
+            }}
+            className="grid gap-3"
+          >
+            <Textarea value={sideTask} onChange={(e) => setSideTask(e.target.value)} placeholder="The task: goal, relevant files, constraints…" rows={5} autoFocus />
+            <Input value={sideName} onChange={(e) => setSideName(e.target.value)} placeholder="Title (optional, generated otherwise)" maxLength={120} />
+            <DialogFooter>
+              <Button type="submit" disabled={!sideTask.trim()}>
+                <GitBranch /> Start
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>

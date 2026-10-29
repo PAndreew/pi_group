@@ -12,15 +12,18 @@ import { platform, type SqlDatabase } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { accessOf, involved, type Rewrite, type RunOutcome } from "./sessions.js";
 import { type PendingDelete, saveNow, type SessionMeta, store, type User } from "./store.js";
+import { archiveChatMessage, type ConversationInfo, forgetChatMessage, forgetConversation, relabelConversation } from "./archive.js";
 import { checkProject, projectIdOf, tenantProjects, visibleProjectId } from "./projects.js";
 import { tenantId } from "./tenant-context.js";
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
 
 /*
- * Chats between people, optionally with pi. Messages are stored in pi's message shape
- * ({ role, content, timestamp, author }) so a chat converts to a pi session as is. A chat with
- * only pi is just a session; a chat with people links to one pi session (in the chat's fixed
- * folder) the first time someone mentions @pi, and pi's replies are posted back.
+ * Chats between people. Messages are stored in pi's message shape ({ role, content, timestamp,
+ * author }). A chat is agentic (the agents of its members see it, see threads.ts) or private (no
+ * agent ever sees it, and it is not archived). In an agentic chat, @pi asks the asker's agent: each
+ * member gets their own agent session for the chat (in the chat's folder) on their first mention,
+ * and its replies are posted back, labeled with whose agent answered. Older chats may still have one
+ * shared pi session (`session_key`), which keeps working.
  */
 
 export type PiStatus = "working" | "done" | "error" | "aborted";
@@ -54,6 +57,8 @@ export interface Chat {
 	consolidatedAt?: string;
 	/** Set when someone put the chat in a project; see projects.ts. */
 	projectId?: string;
+	/** Shielded from every agent: no @pi, no agent context, not archived. */
+	private: boolean;
 }
 
 const SCHEMA = `
@@ -69,6 +74,11 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_by_chat ON messages (chat_id, id);
 CREATE INDEX IF NOT EXISTS chats_by_session ON chats (session_key);
+CREATE TABLE IF NOT EXISTS chat_agents (
+	chat_id TEXT NOT NULL, user_id TEXT NOT NULL, session_key TEXT NOT NULL, cursor INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (chat_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS chat_agents_by_session ON chat_agents (session_key);
 `;
 
 let db: SqlDatabase | undefined;
@@ -83,6 +93,7 @@ function database() {
 		const chatColumns = (db.prepare("PRAGMA table_info(chats)").all() as Row[]).map(c => String(c.name));
 		if (!chatColumns.includes("tenant_id")) db.exec("ALTER TABLE chats ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'work'");
 		if (!chatColumns.includes("project_id")) db.exec("ALTER TABLE chats ADD COLUMN project_id TEXT");
+		if (!chatColumns.includes("private")) db.exec("ALTER TABLE chats ADD COLUMN private INTEGER NOT NULL DEFAULT 0");
 	}
 	return db;
 }
@@ -110,6 +121,7 @@ function toChat(row: Row): Chat {
 		piCursor: Number(row.pi_cursor),
 		consolidatedAt: str(row.consolidated_at),
 		projectId: str(row.project_id),
+		private: Boolean(row.private),
 	};
 }
 
@@ -132,11 +144,68 @@ export function getChat(id: string) {
 	return row && toChat(row);
 }
 
+/** The chat a session answers in: an asker's agent for the chat, or an older chat's shared pi session. */
 export function chatOfSession(key: string) {
 	// Asked on every finished run: no need to create the database before the first chat.
 	if (!db && !platform().sqlExists("chats")) return undefined;
-	const row = database().prepare("SELECT * FROM chats WHERE session_key = ?").get(key) as Row | undefined;
+	const row = (database().prepare("SELECT * FROM chats WHERE session_key = ?").get(key) ??
+		database().prepare("SELECT c.* FROM chats c JOIN chat_agents a ON a.chat_id = c.id WHERE a.session_key = ?").get(key)) as Row | undefined;
 	return row && toChat(row);
+}
+
+/** The agentic chats a person is in, in a tenant: what their agents may see. */
+export function agenticChatIds(userId: string, tenant: string) {
+	if (!db && !platform().sqlExists("chats")) return [];
+	return (database().prepare("SELECT c.id FROM chats c JOIN members m ON m.chat_id = c.id AND m.user_id = ? WHERE c.private = 0 AND c.tenant_id = ? ORDER BY c.updated_at DESC LIMIT 100").all(userId, tenant) as Row[]).map((r) => String(r.id));
+}
+
+/** Whether a person (or their agent) may read a chat in the archive: a member of an agentic chat. */
+export function chatReadable(userId: string, chatId: string) {
+	const chat = getChat(chatId);
+	return Boolean(chat && !chat.private && memberIds(chatId).includes(userId));
+}
+
+/** How a chat is labeled in the archive. */
+export function chatArchiveInfo(chat: Chat): ConversationInfo {
+	let projectId = chat.projectId;
+	try {
+		projectId = projectIdOf(resolveSafe(chat.folder), chat.projectId, chat.tenantId ?? "work");
+	} catch {
+		/* a folder outside the tenant root keeps its explicit project */
+	}
+	return { conversation: `chat:${chat.id}`, tenantId: chat.tenantId ?? "work", projectId, kind: "chat", title: chatTitle(chat) };
+}
+
+/** A chat message's sender in the archive and in agents' transcripts: its author, or whose agent answered. */
+const senderOf = (message: AgentMessage) => {
+	const agent = message.agentOf as { username?: string } | undefined;
+	if (message.role === "assistant") return { name: agent?.username ? `${agent.username}'s agent` : "pi" };
+	const author = message.author as { id?: string; username?: string } | undefined;
+	return { id: author?.id, name: author?.username ?? "someone" };
+};
+
+/** Archive (or re-archive after an edit) a message of an agentic chat; pi replies still working wait. */
+function archiveMessage(chat: Chat, message: ChatMessage) {
+	if (chat.private || message.status === "working") return;
+	try {
+		archiveChatMessage(chatArchiveInfo(chat), message.id, message.message, senderOf(message.message));
+	} catch (error) {
+		console.error("archive: chat message", (error as Error).message);
+	}
+}
+
+/** Copy every agentic chat into the archive (the one-time import); returns how many messages. */
+export function importChatsToArchive() {
+	if (!db && !platform().sqlExists("chats")) return 0;
+	let count = 0;
+	for (const row of database().prepare("SELECT * FROM chats WHERE private = 0").all() as Row[]) {
+		const chat = toChat(row);
+		for (const message of chatMessages(chat.id, 100_000)) {
+			archiveMessage(chat, message);
+			count++;
+		}
+	}
+	return count;
 }
 
 export function setChatProject(chatId: string, projectId: string) {
@@ -161,7 +230,7 @@ export function markChatConsolidated(id: string, at = new Date().toISOString()) 
 }
 
 const textOf = (message: AgentMessage) => contentText(message.content as never) || (typeof message.content === "string" ? message.content : "");
-const authorName = (message: AgentMessage) => (message.role === "assistant" ? "pi" : ((message.author as { username?: string } | undefined)?.username ?? "someone"));
+const authorName = (message: AgentMessage) => senderOf(message).name;
 
 /** Plain-text transcript, "author: text" per message. */
 export function transcript(messages: ChatMessage[]) {
@@ -217,6 +286,9 @@ export interface ChatDeps {
 	editSession: (meta: SessionMeta, pick: (messages: AgentMessage[]) => Rewrite | undefined) => Promise<boolean>;
 	/** Remove a message from a session now, or once its run ends; resolves true when queued. */
 	deleteFromSession: (meta: SessionMeta, request: Omit<PendingDelete, "id">) => Promise<boolean>;
+	/** A person's agent thread in a project (created on first use); see threads.ts. */
+	agentThread: (user: User, projectId?: string) => Promise<SessionMeta>;
+	generateTitle: (text: string) => Promise<string>;
 }
 
 const MENTION = /(^|\s)@([\w.-]+)/g;
@@ -232,11 +304,16 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			.prepare("INSERT INTO messages (chat_id, message, status, session_key, created_at) VALUES (?, ?, ?, ?, ?)")
 			.run(chatId, JSON.stringify(message), extra.status ?? null, extra.sessionKey ?? null, at);
 		database().prepare("UPDATE chats SET updated_at = ? WHERE id = ?").run(at, chatId);
-		return { id: Number(result.lastInsertRowid), chatId, message, ...extra, createdAt: at } as ChatMessage;
+		const inserted = { id: Number(result.lastInsertRowid), chatId, message, ...extra, createdAt: at } as ChatMessage;
+		const chat = getChat(chatId);
+		if (chat) archiveMessage(chat, inserted);
+		return inserted;
 	};
 	const update = (message: ChatMessage) => {
 		database().prepare("UPDATE messages SET message = ?, status = ?, session_key = ? WHERE id = ?").run(JSON.stringify(message.message), message.status ?? null, message.sessionKey ?? null, message.id);
 		database().prepare("UPDATE chats SET updated_at = ? WHERE id = ?").run(now(), message.chatId);
+		const chat = getChat(message.chatId);
+		if (chat) archiveMessage(chat, message);
 	};
 
 	/** Live event to every member; a push to the others when it is someone's message. */
@@ -287,31 +364,43 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		return turn;
 	};
 
-	/** Hand the human messages since pi's last turn to its session (created on first mention), and post a "working" reply. */
+	/**
+	 * Hand everything said since the asker's agent last spoke to it (its session is created on the
+	 * asker's first mention), and post a "working" reply labeled as the asker's agent.
+	 */
 	const performAskPi = async (chat: Chat, user: User, upTo: number, options: { model?: { provider: string; id: string }; thinkingLevel?: string } = {}) => {
-		// pi knows its own replies; it only needs what people said since.
-		const fresh = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id > ? AND id <= ? ORDER BY id").all(chat.id, chat.piCursor, upTo) as Row[])
+		const agent = database().prepare("SELECT * FROM chat_agents WHERE chat_id = ? AND user_id = ?").get(chat.id, user.id) as Row | undefined;
+		const cursor = agent ? Number(agent.cursor) : 0;
+		const ownKey = agent ? String(agent.session_key) : undefined;
+		// The agent knows its own replies; it needs what people and the other agents said since.
+		const fresh = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id > ? AND id <= ? ORDER BY id").all(chat.id, cursor, upTo) as Row[])
 			.map(toMessage)
-			.filter((m) => m.message.role !== "assistant");
-		database().prepare("UPDATE chats SET pi = 1, pi_cursor = ? WHERE id = ?").run(upTo, chat.id);
+			.filter((m) => !(m.message.role === "assistant" && (m.status === "working" || (ownKey && m.sessionKey === ownKey))));
+		database().prepare("UPDATE chats SET pi = 1 WHERE id = ?").run(chat.id);
 		// Shown at once; any failure below (no harness, bad folder, pi not starting) turns it into an error in the chat.
-		const pending = insert(chat.id, { role: "assistant", content: [], timestamp: Date.now() }, { status: "working", sessionKey: chat.sessionKey });
+		const pending = insert(chat.id, { role: "assistant", content: [], timestamp: Date.now(), agentOf: { id: user.id, username: user.username } }, { status: "working", sessionKey: ownKey });
 		fanOut(chat, "chat_message", pending);
 		try {
-			let meta = chat.sessionKey ? store.session(chat.sessionKey) : undefined;
+			let meta = ownKey ? store.session(ownKey) : undefined;
 			let intro = "";
-			if (!meta) {
+			if (!meta || meta.deleted) {
 				const cwd = resolveSafe(chat.folder);
 				if (cwd === config.chatFolder) ensureChatFolder();
-				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, name: chatTitle({ ...chat, pi: true }), projectId: chat.projectId });
-				database().prepare("UPDATE chats SET session_key = ? WHERE id = ?").run(meta.key, chat.id);
-				chat = { ...chat, sessionKey: meta.key, pi: true };
-				addMembers(chat, []);
+				const created = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, name: `${chatTitle(chat, user.id)} · ${user.username}'s agent`, projectId: chat.projectId });
+				meta = store.upsertSession({ ...created, thread: "chat" });
+				database().prepare("INSERT INTO chat_agents (chat_id, user_id, session_key, cursor) VALUES (?, ?, ?, 0) ON CONFLICT (chat_id, user_id) DO UPDATE SET session_key = excluded.session_key").run(chat.id, user.id, meta.key);
 				pending.sessionKey = meta.key;
 				update(pending);
 				const people = memberIds(chat.id).map((id) => store.userById(id)?.username ?? "unknown");
-				intro = `You are pi, taking part in a group chat with ${people.join(", ")}. Each message below is prefixed with its author. Reply to what is asked of you; your reply is posted back to the chat.\n\n`;
+				intro = [
+					`You are ${user.username}'s agent, taking part in a group chat with ${people.join(", ")}.`,
+					`Each message below is prefixed with its author; "<name>'s agent" lines are the other people's agents.`,
+					`You act for ${user.username}, who asked you with @pi. Reply to what is asked of you; your reply is posted to the chat for everyone.`,
+					"",
+					"",
+				].join("\n");
 			}
+			database().prepare("UPDATE chat_agents SET cursor = ? WHERE chat_id = ? AND user_id = ?").run(upTo, chat.id, user.id);
 			await deps.promptSession(meta, user, { text: intro + transcript(fresh) });
 			return true;
 		} catch (error) {
@@ -323,18 +412,20 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		}
 	};
 
-	/** pi finished a run in a chat's session: fill in the oldest reply still marked working. */
+	/** An agent finished a run in a chat: fill in its oldest reply still marked working. */
 	deps.onRun((key, outcome) => {
 		const chat = chatOfSession(key);
 		if (!chat) return;
-		const row = database().prepare("SELECT * FROM messages WHERE chat_id = ? AND status = 'working' ORDER BY id LIMIT 1").get(chat.id) as Row | undefined;
+		const row = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND status = 'working' AND session_key = ? ORDER BY id LIMIT 1").get(chat.id, key) ??
+			database().prepare("SELECT * FROM messages WHERE chat_id = ? AND status = 'working' ORDER BY id LIMIT 1").get(chat.id)) as Row | undefined;
 		if (!row) return;
 		const reply = toMessage(row);
 		reply.status = outcome.kind === "finished" ? "done" : outcome.kind;
 		const text = outcome.kind === "aborted" ? "Stopped." : outcome.text;
-		reply.message = outcome.message ? { ...outcome.message, author: undefined } : { ...reply.message, content: [{ type: "text", text }] };
+		const agentOf = reply.message.agentOf;
+		reply.message = outcome.message ? { ...outcome.message, author: undefined, agentOf } : { ...reply.message, content: [{ type: "text", text }] };
 		update(reply);
-		fanOut(chat, "chat_update", reply, outcome.kind === "aborted" ? undefined : { author: "pi", text: outcome.kind === "error" ? `Error: ${text}` : text });
+		fanOut(chat, "chat_update", reply, outcome.kind === "aborted" ? undefined : { author: authorName(reply.message), text: outcome.kind === "error" ? `Error: ${text}` : text });
 		completed.get(chat.id)?.();
 	});
 	// Chats post pi's replies themselves; memory runs are background work.
@@ -343,38 +434,44 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	const configSchema = z.object({ model: z.object({ provider: z.string().min(1), id: z.string().min(1) }).optional(), thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional() });
 	const sendSchema = configSchema.extend({ text: z.string().trim().min(1).max(50_000) });
 
-	/** Start a chat: with only @pi it is a plain session; with people it is a chat (pi joins if mentioned). */
+	/**
+	 * Start a conversation: with nobody else it goes to the caller's agent thread in the project; with
+	 * people it is a chat, agentic unless `private` (and the caller's agent answers if asked).
+	 */
 	router.post("/chats", async (req, res) => {
 		const user = req.user!;
 		const body = z
-			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional(), projectId: z.string().optional() })
+			.object({ ...configSchema.shape, text: z.string().trim().min(1).max(50_000), pi: z.boolean().default(false), private: z.boolean().default(false), userIds: z.array(z.string()).max(50).default([]), folder: z.string().max(4000).optional(), projectId: z.string().optional() })
 			.parse(req.body);
 		const projectId = checkProject(body.projectId, req.user!);
 		const project = projectId ? tenantProjects().find((p) => p.id === projectId) : undefined;
 		if (body.userIds.some(id => !isTenantMember(id))) throw new HttpError(400, "Cannot add members from another tenant");
 		const others = [...new Set(body.userIds)].filter((id) => id !== user.id && store.userById(id));
-		if (!body.pi && others.length === 0) throw new HttpError(400, "Mention @pi or at least one person");
-		const cwd = body.folder ? resolveSafe(body.folder) : project && !project.general ? project.cwd : ensureChatFolder();
-		if (!statSync(cwd).isDirectory()) throw new HttpError(400, "Not a folder");
-
 		if (others.length === 0) {
-			const meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, model: body.model, thinkingLevel: body.thinkingLevel, projectId });
+			// Only the agent: that is the caller's agent thread in the project.
+			const meta = await deps.agentThread(user, projectId);
 			await deps.promptSession(meta, user, { text: body.text });
 			return void res.json({ session: meta.key });
 		}
+		const cwd = body.folder ? resolveSafe(body.folder) : project && !project.general ? project.cwd : ensureChatFolder();
+		if (!statSync(cwd).isDirectory()) throw new HttpError(400, "Not a folder");
 
 		const at = now();
 		const id = randomUUID();
-		database().prepare("INSERT INTO chats (id, folder, pi, created_by, created_at, updated_at, tenant_id, project_id) VALUES (?, ?, 0, ?, ?, ?, ?, ?)").run(id, toRel(cwd), user.id, at, at, tenantId(), projectId ?? null);
+		database().prepare("INSERT INTO chats (id, folder, pi, created_by, created_at, updated_at, tenant_id, project_id, private) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)").run(id, toRel(cwd), user.id, at, at, tenantId(), projectId ?? null, body.private ? 1 : 0);
 		const chat = getChat(id)!;
 		addMembers(chat, [user.id, ...others]);
 		const first = insert(id, { role: "user", content: [{ type: "text", text: body.text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
 		fanOut(chat, "chat_message", first, { author: user.username, text: body.text, except: user.id });
-		if (body.pi) void askPi(chat, user, first.id, body).catch((error) => console.error("chat: pi failed", error));
+		if (body.pi && !chat.private) void askPi(chat, user, first.id, body).catch((error) => console.error("chat: pi failed", error));
 		res.json({ chat: id });
 	});
 
-	/** The chat list: chats the caller is in, plus their sessions as pi-only chats. */
+	/**
+	 * The conversation list: the chats the caller is in, their agent threads and side threads. Other
+	 * sessions (from before agent threads, scheduled jobs, chat agents) are reached from the file
+	 * explorer and the archive, not listed here.
+	 */
 	router.get("/chats", (req, res) => {
 		const user = req.user!;
 		const rows = database()
@@ -397,6 +494,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 				title: chatTitle(chat, user.id),
 				folder: chat.folder,
 				pi: chat.pi,
+				private: chat.private,
 				members: memberIds(chat.id).map((id) => ({ id, username: store.userById(id)?.username ?? "unknown" })),
 				running: Boolean(row.working),
 				updatedAt: chat.updatedAt,
@@ -408,10 +506,26 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			};
 		});
 		const sessions = Object.values(store.data.sessions)
-			.filter((meta) => !linked.has(meta.key) && !meta.applet && involved(user, meta))
+			.filter((meta) => !linked.has(meta.key) && !meta.deleted && (meta.thread === "main" || meta.thread === "side") && meta.ownerId === user.id && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
-				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
+				return {
+					kind: "session" as const,
+					id: meta.key,
+					title: s.name || s.firstMessage || "Untitled session",
+					folder: s.path,
+					harness: s.harness,
+					running: s.running,
+					live: s.live,
+					updatedAt: s.updatedAt,
+					memory: Boolean(meta.memory),
+					thread: meta.thread,
+					parentKey: meta.parentKey,
+					sideStatus: meta.sideStatus,
+					canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""),
+					projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)),
+					canMove: false,
+				};
 			});
 		// ?project= narrows the list to one project; a pending move shows on the item.
 		const project = typeof req.query.project === "string" ? req.query.project : undefined;
@@ -431,7 +545,9 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		const left = memberIds(chat.id);
 		if (!left.length) {
 			database().prepare("DELETE FROM messages WHERE chat_id = ?").run(chat.id);
+			database().prepare("DELETE FROM chat_agents WHERE chat_id = ?").run(chat.id);
 			database().prepare("DELETE FROM chats WHERE id = ?").run(chat.id);
+			forgetConversation(`chat:${chat.id}`);
 		}
 		store.data.moveRequests = (store.data.moveRequests ?? []).filter((m) => !(m.kind === "chat" && m.itemId === chat.id && (!left.length || m.requestedBy === user.id)));
 		for (const m of store.data.moveRequests ?? []) if (m.kind === "chat" && m.itemId === chat.id) m.waitingFor = m.waitingFor.filter((id) => id !== user.id);
@@ -445,9 +561,43 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	router.get("/chats/:id", (req, res) => {
 		const chat = membership(String(req.params.id), req.user!);
 		res.json({
-			chat: { ...chat, projectId: projectIdOf(resolveSafe(chat.folder), chat.projectId), title: chatTitle(chat, req.user!.id), members: memberIds(chat.id).map((id) => ({ id, username: store.userById(id)?.username ?? "unknown" })) },
+			chat: { ...chat, projectId: projectIdOf(resolveSafe(chat.folder), chat.projectId), title: chatTitle(chat, req.user!.id), customTitle: Boolean(chat.title), members: memberIds(chat.id).map((id) => ({ id, username: store.userById(id)?.username ?? "unknown" })) },
 			messages: chatMessages(chat.id),
 		});
+	});
+
+	const changed = (chat: Chat) => {
+		for (const id of memberIds(chat.id)) deps.sendTo(id, { type: "chat_members", tenantId: chat.tenantId ?? "work", chatId: chat.id });
+	};
+
+	/**
+	 * Rename a chat (an empty title goes back to the members' names), or make it private or agentic.
+	 * Making it private takes it out of the archive at once; making it agentic again archives it.
+	 */
+	router.patch("/chats/:id", (req, res) => {
+		const chat = membership(String(req.params.id), req.user!);
+		const body = z.object({ title: z.string().trim().max(120).nullable().optional(), private: z.boolean().optional() }).strict().parse(req.body);
+		if (body.title !== undefined) database().prepare("UPDATE chats SET title = ? WHERE id = ?").run(body.title || null, chat.id);
+		if (body.private !== undefined && body.private !== chat.private) {
+			database().prepare("UPDATE chats SET private = ? WHERE id = ?").run(body.private ? 1 : 0, chat.id);
+			if (body.private) forgetConversation(`chat:${chat.id}`);
+			else for (const message of chatMessages(chat.id, 100_000)) archiveMessage(getChat(chat.id)!, message);
+		}
+		const next = getChat(chat.id)!;
+		if (body.title !== undefined && !next.private) relabelConversation(`chat:${next.id}`, { title: chatTitle(next) });
+		changed(next);
+		res.json({ chat: { ...next, title: chatTitle(next, req.user!.id), customTitle: Boolean(next.title) } });
+	});
+
+	/** Name a chat from what was said in it. */
+	router.post("/chats/:id/title", async (req, res) => {
+		const chat = membership(String(req.params.id), req.user!);
+		const title = await deps.generateTitle(transcript(chatMessages(chat.id, 30)));
+		database().prepare("UPDATE chats SET title = ? WHERE id = ?").run(title, chat.id);
+		const next = getChat(chat.id)!;
+		if (!next.private) relabelConversation(`chat:${next.id}`, { title });
+		changed(next);
+		res.json({ title });
 	});
 
 	/** Post a message; @username adds that person, @pi asks pi with everything said since its last turn. */
@@ -462,7 +612,8 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		database().prepare("UPDATE members SET last_read = ? WHERE chat_id = ? AND user_id = ?").run(message.id, chat.id, user.id);
 		chat = getChat(chat.id)!;
 		fanOut(chat, "chat_message", message, { author: user.username, text, except: user.id });
-		if (names.includes("pi")) void askPi(chat, user, message.id, options).catch((error) => console.error("chat: pi failed", error));
+		// Private chats have no agent; @pi there is just text.
+		if (names.includes("pi") && !chat.private) void askPi(chat, user, message.id, options).catch((error) => console.error("chat: pi failed", error));
 		res.json({ message });
 	});
 
@@ -519,6 +670,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		message.message = { ...message.message, content };
 		message.editedAt = now();
 		database().prepare("UPDATE messages SET message = ?, edited_at = ? WHERE id = ?").run(JSON.stringify(message.message), message.editedAt, message.id);
+		archiveMessage(chat, message);
 		fanOut(chat, "chat_update", message);
 		res.json({ message });
 	});
@@ -550,6 +702,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			}
 		}
 		database().prepare("DELETE FROM messages WHERE id = ?").run(message.id);
+		forgetChatMessage(`chat:${chat.id}`, message.id);
 		for (const userId of memberIds(chat.id)) {
 			if (isTenantMember(userId, chat.tenantId ?? "work")) deps.sendTo(userId, { type: "chat_delete", tenantId: chat.tenantId ?? "work", chatId: chat.id, messageId: message.id });
 		}

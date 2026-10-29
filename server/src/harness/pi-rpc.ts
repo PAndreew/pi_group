@@ -80,7 +80,7 @@ class RpcProcess {
 
 	constructor(args: string[], cwd: string, sessionKey?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
-		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("cloudflare-assistance.mjs")];
+		if (sessionKey) args = [...args, ...extension("context-window.mjs"), ...extension("threads.mjs"), ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("cloudflare-assistance.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		this.child = platform().sandbox.spawn(command, argv, {
 			cwd,

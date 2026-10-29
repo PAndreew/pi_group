@@ -14,6 +14,7 @@ import { mountJobs } from "./jobs.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
 import { mountMemory } from "./memory.js";
+import { generateTitle, mountThreads } from "./threads.js";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
@@ -547,6 +548,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			shares: meta.shares.map((s) => ({ ...s, username: store.userById(s.userId)?.username ?? "unknown" })),
 			access: accessOf(user, meta),
 			projectId: projectIdOf(meta.cwd, meta.projectId, meta.tenantId ?? "work"),
+			thread: meta.thread,
+			parentKey: meta.parentKey,
+			sideStatus: meta.sideStatus,
 		};
 	};
 
@@ -894,6 +898,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const { key, meta, access, adapter } = load(req);
 		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can delete this session");
 		const purged = await adapter.deleteSession(meta.id, meta.cwd);
+		threads.forgetSession(meta);
 		if (purged) store.removeSession(key);
 		else {
 			meta.deleted = true;
@@ -931,6 +936,24 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		}
 		throw new HttpError(503, "No agent harness is available");
 	};
+	/** A session's messages with prompt authors: its live state when running, else its transcript. */
+	const messagesOf = async (meta: SessionMeta) => {
+		const adapter = adapterOf(meta.harness);
+		const live = adapter.live(meta.id);
+		const messages = live?.state.messages ?? (await adapter.readSession(meta.id, meta.cwd))?.messages ?? [];
+		const ledger = store.session(meta.key)?.authorship;
+		return ledger ? attributeMessages(ledger, messages) : messages;
+	};
+	const threads = mountThreads(router, {
+		createSession,
+		promptSession,
+		harnessFor,
+		onRun: (listener) => void hub.onRun(listener),
+		messagesOf,
+		summary,
+		canRead: (user, meta) => Boolean(accessOf(user, meta)),
+		canWrite: (user, meta) => canWrite(accessOf(user, meta)),
+	});
 	const chatDeps = {
 		createSession,
 		promptSession,
@@ -942,6 +965,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		editSession,
 		deleteFromSession,
 		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
+		agentThread: threads.agentThreadFor,
+		generateTitle,
 	};
 	chats = mountChats(router, chatDeps);
 	mountMemory(router, chatDeps);
