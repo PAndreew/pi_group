@@ -2,6 +2,7 @@ import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, MoreVertical, Tr
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { BrowserPanel } from "@/components/browser-panel"
 import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { UploadedPreviews } from "@/components/attachment-preview"
 import { ComposerTools } from "@/components/composer-tools"
@@ -22,7 +23,11 @@ import { api, type Chat, type ChatMessage } from "@/lib/api"
 import { ConversationHeader } from "@/lib/nav-slot"
 import { uploadDir } from "@/lib/attachments"
 import { useNav } from "@/lib/nav"
-import { messageText } from "@/lib/steps"
+import { buildRuns, messageText } from "@/lib/steps"
+import { useSessionStream } from "@/hooks/use-session-stream"
+import { StepsDialog } from "@/components/step-dialog"
+import { STEP_ICON } from "@/components/step-strip"
+import { List } from "lucide-react"
 import { subscribeUserEvents } from "@/lib/user-stream"
 import { useProjects } from "@/lib/projects"
 import { cn } from "@/lib/utils"
@@ -31,13 +36,28 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-di
 
 function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode; actions?: React.ReactNode }) {
   const text = messageText(m.message.content)
+  const { state } = useSessionStream(m.sessionKey)
+  const [details, setDetails] = useState<{ failed: boolean; index: number | null } | null>(null)
+  const runs = state ? buildRuns(state.messages, state) : []
+  const run = runs.find((run) => run.steps.some((step) => step.message && step.message.timestamp === m.message.timestamp))
+    ?? (m.status === "working" ? runs.at(-1) : undefined)
+  const steps = run?.steps ?? []
+  const failed = steps.filter((step) => step.status === "error")
+  const shownSteps = details?.failed ? failed : steps
+  const current = steps.findLast((step) => step.status === "running") ?? steps.at(-1)
+  const Icon = current ? STEP_ICON[current.kind] : Loader2
   return (
     <div className="flex items-start gap-2">
       <PiAvatar />
       <div className="min-w-0 max-w-[85%]">
-      <div className="agent-message agent-bubble grid min-w-0 gap-1 rounded-2xl rounded-tl-sm px-3 py-2">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Beezy</span>
+        <div className="mb-1 flex min-h-8 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="font-medium text-gray-500 dark:text-gray-300">Beezy</span>
+          <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label="Open detailed steps" title="Open detailed steps"><List className="size-4" /></button>
+          <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-300" title="Open all steps">
+            {m.status === "working" ? <><Icon className="size-3.5" />{steps.length} steps</> : <>Total: {steps.length}</>}
+          </button>
+          <button type="button" onClick={() => setDetails({ failed: true, index: null })} className={failed.length ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300"} title="Open failed step details">{m.status === "working" ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}</button>
+          {m.status === "working" && <span className="running-shimmer">Running…</span>}
           <span>{time(m.createdAt)}{m.editedAt && " · edited"}</span>
           {onWatch && (
             <button type="button" className="ml-auto flex items-center gap-1 hover:text-foreground" onClick={onWatch}>
@@ -45,11 +65,8 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
             </button>
           )}
         </div>
-        {m.status === "working" ? (
-          <span className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Beezy is working…
-          </span>
-        ) : m.status === "error" ? (
+        <div className={cn("grid min-w-0 gap-1", m.status !== "working" && "agent-message agent-bubble rounded-2xl rounded-tl-sm px-3 py-2")}>
+        {m.status === "working" ? null : m.status === "error" ? (
           <span className="flex items-start gap-1.5 text-sm text-destructive">
             <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {text || "The run failed."}
           </span>
@@ -61,6 +78,7 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
         {children}
       </div>
       {actions}
+      <StepsDialog steps={shownSteps} open={details !== null} index={details?.index ?? null} onIndex={(index) => setDetails((value) => value && { ...value, index })} onClose={() => setDetails(null)} />
       </div>
     </div>
   )
@@ -74,9 +92,14 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
       <div className="flex justify-end">
         <ReplyStack text={text} align="end" className="max-w-[85%]">
           {(body) => (
-            <div className="min-w-0 rounded-2xl rounded-tr-sm bg-blue-50 px-3 py-2 text-sm text-black">
-              <MessageBody text={body} folder={folder} />
-              <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
+            <div className="min-w-0">
+              <div className="mb-1 flex min-h-8 items-center justify-end gap-2 text-xs font-medium">
+                {author?.username}{author && <AuthorAvatar id={author.id} name={author.username} />}
+              </div>
+              <div className="rounded-2xl rounded-tr-sm bg-blue-50 px-3 py-2 text-sm text-black">
+                <MessageBody text={body} folder={folder} />
+                <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
+              </div>
             </div>
           )}
         </ReplyStack>
@@ -87,10 +110,12 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
       {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8" />}
       <ReplyStack text={text} className="max-w-[85%]">
         {(body) => (
-          <div className="min-w-0 rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm">
-            {showName && <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">{author?.username}</div>}
-            <MessageBody text={body} folder={folder} />
-            <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
+          <div className="min-w-0">
+            {showName && <div className="mb-1 flex min-h-8 items-center text-xs font-medium">{author?.username}</div>}
+            <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm">
+              <MessageBody text={body} folder={folder} />
+              <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
+            </div>
           </div>
         )}
       </ReplyStack>
@@ -111,6 +136,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const { uploadFolder } = useProjects()
   const nav = useNav()
   const [chat, setChat] = useState<Chat>()
+  const [browserShown, setBrowserShown] = useState(false)
   const interactions = useInteractions(chat?.sessionKey)
   const [messages, setMessages] = useState<ChatMessage[]>()
   const stick = useRef(true)
@@ -368,7 +394,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           hash="paths"
           placeholder={editing ? "Edit message…" : "Message: @someone and $folder"}
           agent={<AgentToggle checked={agent} onChange={setAgent} />}
-          controls={<ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={agent} />}
+          controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={agent} />}
           onFiles={(files) => void attach(files)}
           onSubmit={(message) => (editing ? saveEdit(message.raw) : send(agent && !message.pi ? `@pi ${message.raw}` : message.raw))}
         />
@@ -380,6 +406,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           />
         )}
       </div>
+      {browserShown && chat?.sessionKey && <div className="h-[50vh] shrink-0 border-t"><BrowserPanel sessionKey={chat.sessionKey} picks={0} onPick={(ref) => setText((text) => `${text}${text ? "\n" : ""}${JSON.stringify(ref)}`)} onClose={() => setBrowserShown(false)} /></div>}
       <ForwardDialog text={forwarding} from={{ kind: "chat", id: chatId }} onOpenChange={(o) => !o && setForwarding(undefined)} />
     </div>
   )

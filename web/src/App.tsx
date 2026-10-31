@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Settings, Sun, Users, Vault } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Settings, Sun, Users, Vault } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -348,7 +348,7 @@ export default function App() {
     <AuthProvider>
       <TooltipProvider>
         <Gate />
-        <Toaster position="top-center" richColors closeButton />
+        <Toaster position="top-center" closeButton icons={{ success: <Check className="size-4 text-green-600" />, info: <Check className="size-4 text-green-600" />, warning: <X className="size-4 text-red-600" />, error: <X className="size-4 text-red-600" /> }} />
       </TooltipProvider>
     </AuthProvider>
   )
