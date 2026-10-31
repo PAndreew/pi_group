@@ -271,7 +271,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <ConversationHeader className="gap-2 px-2 py-1.5">
-        <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={nav.home} aria-label="Back to chats">
+        <Button variant="ghost" size="icon-sm" onClick={nav.home} aria-label="Back to chats">
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">

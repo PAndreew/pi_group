@@ -1,4 +1,4 @@
-import { Code, Download, Eye, FileQuestion, Loader2, Pencil, Save, X } from "lucide-react"
+import { ArrowLeft, Code, Download, Eye, FileQuestion, Loader2, Pencil, Save, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { CodeBlock, languageFor } from "@/components/code-block"
@@ -148,7 +148,7 @@ function TextEditor({ path, text, mtime, onSaved, onClose }: { path: string; tex
   )
 }
 
-export function FileViewer({ path }: { path: string }) {
+export function FileViewer({ path, onClose }: { path: string; onClose?: () => void }) {
   const kind = kindOf(path)
   const needsText = kind === "html" || kind === "markdown" || kind === "csv" || kind === "text"
   const [{ text, mtime, error, binary, tooBig }, setLoaded] = useText(path, needsText)
@@ -218,8 +218,9 @@ export function FileViewer({ path }: { path: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium" title={path}>
-          {name}
+        {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Back from preview"><ArrowLeft /></Button>}
+        <span className="min-w-0 flex-1 truncate text-sm" title={path}>
+          {onClose && <span className="text-muted-foreground">{path.slice(0, path.length - name.length)}</span>}<strong>{name}</strong>
         </span>
         {needsText && text !== undefined && !editing && (
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
@@ -233,12 +234,10 @@ export function FileViewer({ path }: { path: string }) {
             <span className="hidden sm:inline">{source ? "Preview" : "Source"}</span>
           </Button>
         )}
-        <Button asChild variant="outline" size="sm">
-          <a href={api.downloadUrl(path)}>
-            <Download />
-            <span className="hidden sm:inline">Download</span>
-          </a>
+        <Button asChild variant="ghost" size="icon-sm">
+          <a href={api.downloadUrl(path)} aria-label="Download file" title="Download file"><Download /></a>
         </Button>
+        {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close preview" title="Close preview"><X /></Button>}
       </div>
       <div className={editing ? "min-h-0 flex-1" : "min-h-0 flex-1 overflow-auto"}>{body}</div>
     </div>

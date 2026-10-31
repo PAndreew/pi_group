@@ -184,10 +184,6 @@ html[data-editing] body { padding-bottom: 0; }
 .dark .agent-bubble .hljs-title, .dark .agent-bubble .hljs-section, .dark .agent-bubble .hljs-function { color: #6f42c1; }
 .dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
 
-@font-face { font-family: Lato; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/lato-regular.ttf') format('truetype'); }
-@font-face { font-family: Lato; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/lato-bold.ttf') format('truetype'); }
-.font-lato { font-family: Lato, sans-serif; }
-
 .scrollbar-thin { scrollbar-width: thin; }
 
 /* Soften content at the navbar and composer instead of drawing dividers. */

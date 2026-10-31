@@ -17,13 +17,19 @@ export function WorkspaceSidebar({ folder, sessionKey, lastEdit, onLastEdit, cla
     <aside className={cn("flex min-h-0 flex-col overflow-y-auto border-r", className)} aria-label="Menu">
       <div className="p-2">
         <ComposerTools sessionKey={sessionKey} folder={folder} placement="sidebar" />
-        {lastEdit && <button type="button" onClick={onLastEdit} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"><FileText className="size-4 shrink-0" /><span className="truncate">Last edited: {lastEdit.split("/").pop()}</span></button>}
       </div>
       <div className="flex flex-col items-start gap-2 border-t p-3">
-        <span className="font-lato text-xs font-medium text-muted-foreground">Tenant</span>
+        <span className="text-xs font-medium text-muted-foreground">Tenant</span>
         <TenantPicker />
-        <span className="font-lato mt-2 text-xs font-medium text-muted-foreground">Running sessions</span>
+        <span className="mt-2 text-xs font-medium text-muted-foreground">Running sessions</span>
         {children}
+        {lastEdit && <>
+          <span className="mt-2 text-xs font-medium text-muted-foreground">Last edited</span>
+          <button type="button" onClick={onLastEdit} title={lastEdit} className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent">
+            <FileText className="size-4 shrink-0" />
+            <span className="truncate">{lastEdit.split("/").pop()}</span>
+          </button>
+        </>}
       </div>
     </aside>
   )
