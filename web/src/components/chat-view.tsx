@@ -35,7 +35,7 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
     <div className="flex items-start gap-2">
       <PiAvatar />
       <div className="min-w-0 max-w-[85%]">
-      <div className="grid min-w-0 gap-1 rounded-2xl rounded-tl-sm border bg-card px-3 py-2">
+      <div className="agent-message agent-bubble grid min-w-0 gap-1 rounded-2xl rounded-tl-sm px-3 py-2">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">Beezy</span>
           <span>{time(m.createdAt)}{m.editedAt && " · edited"}</span>
@@ -74,8 +74,8 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
       <div className="flex justify-end">
         <ReplyStack text={text} align="end" className="max-w-[85%]">
           {(body) => (
-            <div className="min-w-0 rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
-              <MessageBody text={body} folder={folder} tinted />
+            <div className="min-w-0 rounded-2xl rounded-tr-sm bg-blue-50 px-3 py-2 text-sm text-black">
+              <MessageBody text={body} folder={folder} />
               <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
             </div>
           )}

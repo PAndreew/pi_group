@@ -1,5 +1,6 @@
 import {
   Eye,
+  Globe,
   Loader2,
   MoreVertical,
   Pencil,
@@ -72,9 +73,9 @@ function UserBubble({ message, folder }: { message: AgentMessage; folder?: strin
     <div className="flex items-start justify-end gap-2">
       <ReplyStack text={text} align="end" className="max-w-[88%]">
         {(body) => (
-          <div className="rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+          <div className="rounded-2xl rounded-br-sm bg-blue-50 px-3.5 py-2 text-sm text-black">
             <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
-            <MessageBody text={body} folder={folder} tinted />
+            <MessageBody text={body} folder={folder} />
             <ImageGallery images={images} />
           </div>
         )}
@@ -167,17 +168,17 @@ function AgentBubble({
   return (
     <div className="flex items-start gap-2">
       <PiAvatar />
-      <div className="agent-bubble max-w-[88%] min-w-0 rounded-2xl rounded-bl-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+      <div className="agent-message agent-bubble max-w-[88%] min-w-0 rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">
         <div className="mb-1 text-xs font-semibold">Beezy</div>
         <StepStrip steps={run.steps} onOpen={onOpen} onAll={() => onOpen(null)} />
         {run.answer && (
           <div>
             <Markdown text={run.answer} base={folder} />
-            {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary-foreground/60 align-middle" />}
+            {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current align-middle" />}
           </div>
         )}
         {answered.map((a) => (
-          <div key={a.dialog.id} className="mt-2 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs">
+          <div key={a.dialog.id} className="mt-2 rounded-lg bg-current/10 px-2.5 py-1.5 text-xs">
             <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
             <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
           </div>
@@ -497,6 +498,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               {!connected && <span className="text-amber-600">· reconnecting…</span>}
             </div>
           </div>
+          <Button variant="ghost" size="icon-sm" onClick={() => setBrowserShown((shown) => !shown)} aria-label={browserShown ? "Hide browser" : "Open browser"} title={browserShown ? "Hide browser" : "Open browser"} aria-pressed={browserShown}>
+            <Globe />
+          </Button>
           {summary && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

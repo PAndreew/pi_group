@@ -211,7 +211,7 @@ function Workspace() {
     <NavContext.Provider value={nav}>
       <NavSlotContext.Provider value={null}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b [&_button]:text-base [&_button_svg]:size-5 sm:px-3">
+        <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
           <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><Menu /></Button>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">

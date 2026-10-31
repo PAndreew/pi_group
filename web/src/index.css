@@ -168,6 +168,10 @@ html[data-editing] body { padding-bottom: 0; }
 
 /* Agent answers sit in a primary-colored bubble like the user's: tint blocks from its text color
    and use the opposite theme's syntax colors. */
+.agent-message { background-color: #000; color: #fef9c3; border: none; }
+.dark .agent-message { background-color: #fef9c3; color: #000; }
+.agent-message :is(.text-muted-foreground, .text-foreground) { color: inherit; }
+
 .agent-bubble .prose-pi :where(:not(pre) > code, pre) { background-color: color-mix(in oklch, currentColor 14%, transparent); }
 .agent-bubble .prose-pi :where(blockquote) { color: inherit; opacity: 0.8; }
 .agent-bubble .prose-pi :where(blockquote, th, td) { border-color: color-mix(in oklch, currentColor 30%, transparent); }

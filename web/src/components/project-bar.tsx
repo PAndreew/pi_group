@@ -201,7 +201,7 @@ export function ProjectSwitcher({ className, onSelect }: { className?: string; o
     <nav className={cn("flex min-w-0 items-center gap-0.5", className)} aria-label="Projects">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="min-w-0 max-w-full text-base font-normal [&_svg]:size-5" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title="Switch project">
+          <Button variant="ghost" size="sm" className="min-w-0 max-w-full text-sm font-normal [&_svg]:size-4" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title="Switch project">
             <FolderKanban className="shrink-0" />
             <span className="shrink-0">Project:</span>
             <span className="truncate">{active?.name ?? "Projects"}</span>
