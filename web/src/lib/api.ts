@@ -401,6 +401,15 @@ export class ApiError extends Error {
   }
 }
 
+export interface LinkPreview {
+  url: string
+  title?: string
+  description?: string
+  image?: string
+  siteName?: string
+  icon?: string
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: "same-origin", headers: { "X-Pi-Group": "1", "X-Pi-Tenant": activeTenant() } }
   if (body instanceof FormData) init.body = body
@@ -451,6 +460,7 @@ export const api = {
   updateUser: (id: string, change: { password?: string; role?: Role }) => request<{ user: User }>("PATCH", `/api/users/${id}`, change),
   deleteUser: (id: string) => request("DELETE", `/api/users/${id}`),
 
+  linkPreview: (url: string) => request<LinkPreview>("GET", `/api/link-preview?${q({ url })}`),
   fsInfo: () => request<{ root: string; rootName: string }>("GET", "/api/fs/info"),
   list: (path: string) => request<{ path: string; entries: FsEntry[] }>("GET", `/api/fs/list?${q({ path })}`),
   saveText: (path: string, content: string, mtime?: number) => request<{ path: string; size: number; mtime: number }>("PUT", "/api/fs/text", { path, content, mtime }),

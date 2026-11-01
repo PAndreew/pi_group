@@ -151,6 +151,16 @@ html[data-editing] body { padding-bottom: 0; }
 .prose-pi > :first-child { @apply mt-0; }
 .prose-pi > :last-child { @apply mb-0; }
 
+/* Categorical chart colors (fixed order, validated for color-vision deficiency), stepped per theme. */
+.viz-root {
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-4: #eda100;
+  --viz-5: #e87ba4; --viz-6: #008300; --viz-7: #4a3aa7; --viz-8: #e34948;
+}
+.dark .viz-root {
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500;
+  --viz-5: #d55181; --viz-6: #008300; --viz-7: #9085e9; --viz-8: #e66767;
+}
+
 /* highlight.js tokens, light + dark */
 .hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
 .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #d73a49; }
