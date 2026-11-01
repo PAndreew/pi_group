@@ -1,4 +1,4 @@
-import { Check, Folder, Link2, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react"
+import { Check, Folder, FolderKanban, Link2, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -201,7 +201,9 @@ export function ProjectSwitcher({ className, onSelect }: { className?: string; o
     <nav className={cn("flex min-w-0 items-center gap-0.5", className)} aria-label="Projects">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="font-lato min-w-0 max-w-full text-base [&_svg]:size-5" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title="Switch project">
+          <Button variant="ghost" size="sm" className="min-w-0 max-w-full text-sm font-normal [&_svg]:size-4" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title="Switch project">
+            <FolderKanban className="shrink-0" />
+            <span className="shrink-0">Project:</span>
             <span className="truncate">{active?.name ?? "Projects"}</span>
           </Button>
         </DropdownMenuTrigger>

@@ -2,6 +2,7 @@ import {
   Eye,
   GitBranch,
   GitMerge,
+  List,
   Loader2,
   Sparkles,
   MoreVertical,
@@ -41,7 +42,7 @@ import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/l
 import { MoveDialog, type MoveTarget } from "@/components/project-move"
 import { ShareDialog } from "@/components/share-dialog"
 import { StepsDialog } from "@/components/step-dialog"
-import { StepStrip } from "@/components/step-strip"
+import { STEP_ICON, STEP_LABEL } from "@/components/step-strip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -75,10 +76,12 @@ function UserBubble({ message, folder }: { message: AgentMessage; folder?: strin
     <div className="flex items-start justify-end gap-2">
       <ReplyStack text={text} align="end" className="max-w-[88%]">
         {(body) => (
-          <div className="rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
-            <div className="mb-1 text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
-            <MessageBody text={body} folder={folder} tinted />
-            <ImageGallery images={images} />
+          <div className="min-w-0">
+            <div className="mb-1 text-right text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
+            <div className="rounded-2xl rounded-br-sm bg-blue-50 px-3.5 py-2 text-sm text-black">
+              <MessageBody text={body} folder={folder} />
+              <ImageGallery images={images} />
+            </div>
           </div>
         )}
       </ReplyStack>
@@ -159,7 +162,7 @@ function AgentBubble({
   folder,
 }: {
   run: Run
-  onOpen: (index: number | null) => void
+  onOpen: (index: number | null, failed?: boolean) => void
   question?: ExtensionDialog
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
@@ -167,31 +170,42 @@ function AgentBubble({
   /** The session folder, for links to files the agent wrote. */
   folder?: string
 }) {
+  const current = run.steps.findLast((step) => step.status === "running") ?? run.steps.at(-1)
+  const Icon = current ? STEP_ICON[current.kind] : Loader2
+  const failed = run.steps.filter((step) => step.status === "error")
   return (
     <div className="flex items-start gap-2">
       <PiAvatar />
-      <div className="agent-bubble max-w-[88%] min-w-0 rounded-2xl rounded-bl-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
-        <div className="mb-1 text-xs font-semibold">Beezy</div>
-        <StepStrip steps={run.steps} onOpen={onOpen} onAll={() => onOpen(null)} />
+      <div className="max-w-[88%] min-w-0">
+        <div className="mb-1 flex min-h-8 flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-gray-500 dark:text-gray-300">Beezy</span>
+          <button type="button" onClick={() => onOpen(null)} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label="Open detailed steps" title="Open detailed steps">
+            <List className="size-4" />
+          </button>
+          {run.running && <span className="running-shimmer">Running…</span>}
+          <button type="button" onClick={() => onOpen(null)} className="inline-flex items-center gap-1 rounded px-1 py-1 text-gray-500 hover:bg-accent dark:text-gray-300" title="Open all steps">
+            {run.running ? <><Icon className="size-3.5" aria-label={current ? STEP_LABEL[current.kind] : "Starting"} />{run.steps.length} steps</> : <>Total: {run.steps.length}</>}
+          </button>
+          <button type="button" onClick={() => onOpen(null, true)} className={cn("rounded px-1 py-1 hover:bg-accent", failed.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300")} title="Open failed step details">
+            {run.running ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}
+          </button>
+        </div>
+      {(run.answer || question || answered.length > 0 || interactions) && <div className="agent-message agent-bubble rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">
         {run.answer && (
           <div>
             <Markdown text={run.answer} base={folder} />
-            {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary-foreground/60 align-middle" />}
+            {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current align-middle" />}
           </div>
         )}
         {answered.map((a) => (
-          <div key={a.dialog.id} className="mt-2 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs">
+          <div key={a.dialog.id} className="mt-2 rounded-lg bg-current/10 px-2.5 py-1.5 text-xs">
             <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
             <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
           </div>
         ))}
         {interactions}
         {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
-        {run.running && !run.answerStreaming && !question && (
-          <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
-            <Loader2 className="size-3 animate-spin" /> working…
-          </div>
-        )}
+      </div>}
       </div>
     </div>
   )
@@ -215,7 +229,7 @@ function RunView({
 }: {
   run: Run
   folder?: string
-  onOpen: (index: number | null) => void
+  onOpen: (index: number | null, failed?: boolean) => void
   question?: ExtensionDialog
   onAnswer?: (answer: DialogAnswer) => void
   answered?: Answered[]
@@ -285,7 +299,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [summary, setSummary] = useState<SessionSummary>()
   const [models, setModels] = useState<ModelInfo[]>([])
   /** Steps modal of one run; `step` is the expanded step, null shows just the grid. */
-  const [open, setOpen] = useState<{ run: number; step: number | null } | null>(null)
+  const [open, setOpen] = useState<{ run: number; step: number | null; failed?: boolean } | null>(null)
   const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
   const [reply, setReply] = useState<ReplyTarget>()
@@ -580,7 +594,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 onDelete={canWrite ? (message, text) => void deletePrompt(message, text) : undefined}
                 pendingDelete={Boolean(run.user && state?.pendingDeletes?.some((d) => d.text === messageText(run.user!.content) && (d.timestamp === undefined || d.timestamp === run.user!.timestamp)))}
                 selfId={user?.id}
-                onOpen={(step) => setOpen({ run: index, step })}
+                onOpen={(step, failed) => setOpen({ run: index, step, failed })}
                 question={run === lastRun ? question : undefined}
                 onAnswer={run === lastRun && question && canWrite ? answer(question) : undefined}
                 answered={answered.filter((a) => a.runKey === run.key)}
@@ -703,7 +717,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
         </div>
       )}
 
-      <StepsDialog steps={openRun?.steps ?? []} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
+      <StepsDialog steps={(openRun?.steps ?? []).filter((step) => !open?.failed || step.status === "error")} open={Boolean(openRun)} index={open?.step ?? null} onIndex={(step) => setOpen((current) => current && { ...current, step })} onClose={() => setOpen(null)} />
       {summary && <ShareDialog session={summary} open={shareOpen} onOpenChange={setShareOpen} onSaved={setSummary} />}
       <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} onMoved={() => void api.session(sessionKey).then(({ session }) => setSummary(session), () => {})} />
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />

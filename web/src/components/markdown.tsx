@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react"
+import { FileIcon } from "@react-symbols/icons/utils"
 import { memo, useContext, useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
@@ -49,7 +49,7 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
                   nav!.openFile(file)
                 }}
               >
-                <FileText className="size-3.5 shrink-0 self-center" />
+                <FileIcon fileName={file.split("/").pop() ?? file} autoAssign width={18} height={18} className="shrink-0 self-center" aria-hidden="true" />
                 {children}
               </a>
             )

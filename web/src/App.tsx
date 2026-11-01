@@ -1,5 +1,5 @@
-import { Activity, ArrowLeft, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Settings, Sun, Users, Vault } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Settings, Sun, Users, Vault } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
 import { ChatList } from "@/components/chat-list"
@@ -150,16 +150,25 @@ function Workspace() {
   const [vaultOpen, setVaultOpen] = useState(false)
   const [assistanceOpen, setAssistanceOpen] = useState(false)
 
+  const previewReturn = useRef<Route | null>(null)
+  const closePreview = () => {
+    setRoute(previewReturn.current ?? { chat: undefined, session: undefined, file: undefined, app: undefined })
+    previewReturn.current = null
+  }
+
   const nav: Nav = useMemo(
     () => ({
       home: () => setRoute({ chat: undefined, session: undefined, file: undefined, app: undefined }),
       openChat: (id) => setRoute({ chat: id, session: undefined, file: undefined, app: undefined }),
       openSession: (key, folder) => setRoute({ session: key, chat: undefined, file: undefined, app: undefined, ...(folder !== undefined ? { folder } : {}) }),
-      openFile: (path) => setRoute({ file: path, chat: undefined, session: undefined, app: undefined }),
+      openFile: (path) => {
+        if (!route.file) previewReturn.current = { ...route, file: undefined }
+        setRoute({ file: path, chat: undefined, session: undefined, app: undefined })
+      },
       openApplet: (slug) => setRoute({ app: slug, chat: undefined, session: undefined, file: undefined }),
       newSession: (folder) => setNewFolder(folder),
     }),
-    [setRoute],
+    [setRoute, route],
   )
 
   /** Explorer → New session: create with the saved defaults, or ask for them first. */
@@ -184,7 +193,7 @@ function Workspace() {
   }
 
   const back = (
-    <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={nav.home} aria-label="Back to chats">
+    <Button variant="ghost" size="icon-sm" onClick={nav.home} aria-label="Back to chats">
       <ArrowLeft />
     </Button>
   )
@@ -202,7 +211,7 @@ function Workspace() {
     <NavContext.Provider value={nav}>
       <NavSlotContext.Provider value={null}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base [&_button]:text-base [&_button_svg]:size-5 sm:px-3">
+        <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
           <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><Menu /></Button>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -267,7 +276,7 @@ function Workspace() {
         </header>
         <Sheet open={!wide && drawerOpen} onOpenChange={setDrawerOpen}>
           <SheetContent className="gap-0" aria-describedby={undefined}>
-            <SheetTitle className="font-lato border-b px-4 py-3">Menu</SheetTitle>
+            <SheetTitle className="border-b px-4 py-3">Menu</SheetTitle>
             <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} className="min-h-0 flex-1"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>
           </SheetContent>
         </Sheet>
@@ -281,15 +290,7 @@ function Workspace() {
             ) : route.session ? (
               <SessionView key={route.session} sessionKey={route.session} header={back} onDeleted={nav.home} />
             ) : route.file ? (
-              <div className="flex h-full flex-col">
-                <div className="flex items-center gap-1 border-b px-2 py-1">
-                  {back}
-                  <span className="truncate text-xs text-muted-foreground">/{route.file}</span>
-                </div>
-                <div className="min-h-0 flex-1">
-                  <FileViewer path={route.file} />
-                </div>
-              </div>
+              <FileViewer path={route.file} onClose={closePreview} />
             ) : route.app ? (
               <AppletView key={route.app} slug={route.app} header={back} />
             ) : (
@@ -347,7 +348,7 @@ export default function App() {
     <AuthProvider>
       <TooltipProvider>
         <Gate />
-        <Toaster position="top-center" richColors closeButton />
+        <Toaster position="top-center" closeButton icons={{ success: <Check className="size-4 text-green-600" />, info: <Check className="size-4 text-green-600" />, warning: <X className="size-4 text-red-600" />, error: <X className="size-4 text-red-600" /> }} />
       </TooltipProvider>
     </AuthProvider>
   )
