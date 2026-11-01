@@ -19,7 +19,7 @@ import { NavSlotContext } from "@/lib/nav-slot"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -241,14 +241,22 @@ function Workspace() {
                 {notifications.enabled ? <Bell /> : <BellOff />}
                 {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : notificationsUnavailable()}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
-                <Settings /> Settings
-              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger><Settings /> Model settings</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                    <Settings /> Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setAssistanceOpen(true)}>
+                    <Brain /> Cloudflare assistance
+                  </DropdownMenuItem>
+                  {user?.role === "admin" && <DropdownMenuItem onSelect={() => void consolidate()}>
+                    <Brain /> Consolidate memory now
+                  </DropdownMenuItem>}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
                 <Users /> Profile picture
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setAssistanceOpen(true)}>
-                <Brain /> Cloudflare assistance
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setVaultOpen(true)}>
                 <Vault /> Secret vault
@@ -260,9 +268,6 @@ function Workspace() {
                 <>
                   <DropdownMenuItem onSelect={() => setUsersOpen(true)}>
                     <Users /> Manage users
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void consolidate()}>
-                    <Brain /> Consolidate memory now
                   </DropdownMenuItem>
                 </>
               )}
@@ -276,7 +281,7 @@ function Workspace() {
         </header>
         <Sheet open={!wide && drawerOpen} onOpenChange={setDrawerOpen}>
           <SheetContent className="gap-0" aria-describedby={undefined}>
-            <SheetTitle className="border-b px-4 py-3">Menu</SheetTitle>
+            <SheetTitle className="border-b px-4 py-3 font-normal">Menu</SheetTitle>
             <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} className="min-h-0 flex-1"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>
           </SheetContent>
         </Sheet>

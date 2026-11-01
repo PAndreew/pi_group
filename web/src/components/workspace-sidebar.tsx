@@ -14,7 +14,7 @@ export function WorkspaceSidebar({ folder, sessionKey, lastEdit, onLastEdit, cla
   children?: React.ReactNode
 }) {
   return (
-    <aside className={cn("flex min-h-0 flex-col overflow-y-auto border-r", className)} aria-label="Menu">
+    <aside className={cn("flex min-h-0 flex-col overflow-y-auto border-r font-normal [&_.font-medium]:font-normal", className)} aria-label="Menu">
       <div className="p-2">
         <ComposerTools sessionKey={sessionKey} folder={folder} placement="sidebar" />
       </div>

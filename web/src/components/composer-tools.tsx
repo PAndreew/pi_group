@@ -40,7 +40,7 @@ export function ComposerTools({
   const pendingApplets = usePendingApplets()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
   const icon = (name: Panel, label: string, node: React.ReactNode) => (
-    <Button key={name} variant="ghost" size="icon" className="h-auto min-h-10 w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left [&_svg]:size-4" data-active={panel === name} onClick={() => setPanel(name)} aria-label={label} title={label}>
+    <Button key={name} variant="ghost" size="icon" className="h-auto min-h-10 w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left font-normal [&_svg]:size-4" data-active={panel === name} onClick={() => setPanel(name)} aria-label={label} title={label}>
       {node}<span>{label}</span>
     </Button>
   )
