@@ -7,6 +7,9 @@ import { attachBrowser, browserRoutes, closeBrowsers } from "./browser.js";
 import { capabilityRoutes } from "./capabilities.js";
 import { closeChats } from "./chats.js";
 import { config } from "./config.js";
+import { activeMutations, deploymentGate, draining } from "./deployment.js";
+import { activeJobs } from "./jobs.js";
+import { activeMemory } from "./memory.js";
 import { fileRoutes, HttpError } from "./files.js";
 import { linkPreviewRoutes } from "./link-preview.js";
 import { PiDurableAdapter } from "./harness/pi-durable.js";
@@ -37,6 +40,13 @@ app.use((_req, res, next) => {
 	next();
 });
 app.use(express.json({ limit: "60mb" }));
+// Readiness is independent of login and is only available over loopback.
+app.get("/healthz", (req, res) => {
+	if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress ?? "")) return void res.sendStatus(404);
+	res.setHeader("Cache-Control", "no-store");
+	res.status(ready ? 200 : 503).json({ ready, release: process.env.BEEZY_RELEASE ?? "legacy", draining: draining(), busy: activeMutations() + activeJobs() + activeMemory() + adapters.flatMap((a) => a.liveSessions()).filter((s) => s.state.running || s.state.queue.steering.length || s.state.queue.followUp.length).length });
+});
+app.use(deploymentGate);
 app.use(authenticate);
 
 const api = express.Router();
@@ -99,7 +109,8 @@ server.on("upgrade", (req, socket) => {
 });
 
 // Adapters load in the background so the UI is reachable at once (pi-ai's model catalog is large).
-void Promise.all(adapters.map((a) => a.init().catch((error) => console.error(`${a.id} init failed:`, error))));
+let ready = false;
+void Promise.all(adapters.map((a) => a.init())).then(() => { ready = true; }).catch((error) => console.error("Adapter initialization failed:", error));
 
 let stopping = false;
 async function shutdown() {

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { draining } from "./deployment.js";
 import { lookup } from "node:dns/promises";
 import { statSync } from "node:fs";
 import net from "node:net";
@@ -21,6 +22,9 @@ import { inTenant } from "./tenant-context.js";
  * propose_scheduled_job tool (extensions/scheduled-jobs.mjs); a proposal never runs until a person
  * approves it, and scripts need an admin's approval. See docs/scheduled-jobs.md.
  */
+
+let deploymentJobs = 0;
+export const activeJobs = () => deploymentJobs;
 
 const MAX_JOBS_PER_OWNER = 20;
 const MAX_OUTPUT = 20_000;
@@ -271,6 +275,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 	const performJob = async (job: Job) => {
 		if (running.has(job.id)) return;
 		running.add(job.id);
+		deploymentJobs++;
 		changed(job);
 		const started = Date.now();
 		const log: string[] = [];
@@ -290,6 +295,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 			log.push(`Failed: ${(error as Error).message}`);
 		} finally {
 			running.delete(job.id);
+			deploymentJobs--;
 		}
 		const current = store.data.jobs.find((j) => j.id === job.id);
 		if (!current) return;
@@ -313,6 +319,7 @@ export function mountJobs(router: Router, deps: JobDeps) {
 	for (const job of store.data.jobs) if (!job.nextRunAt) plan(job);
 	// Every 20 s; a run missed while the server was down happens once, at startup.
 	const tick = () => {
+		if (draining()) return;
 		const now = Date.now();
 		for (const job of store.data.jobs) {
 			if (!job.nextRunAt || Date.parse(job.nextRunAt) > now || running.has(job.id)) continue;

@@ -178,6 +178,15 @@ html[data-editing] body { padding-bottom: 0; }
 
 /* Agent answers sit in a primary-colored bubble like the user's: tint blocks from its text color
    and use the opposite theme's syntax colors. */
+@keyframes pause-shimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.pause-shimmer { animation: pause-shimmer 1.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pause-shimmer { animation: none; }
+}
+
 @keyframes running-shimmer {
   from { background-position: 200% center; }
   to { background-position: -200% center; }

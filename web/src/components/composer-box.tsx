@@ -1,4 +1,4 @@
-import { ArrowUp, CircleStop, Loader2 } from "lucide-react"
+import { SendHorizontal, Pause } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 /**
@@ -41,13 +41,8 @@ export function ComposerBox({
       <div className="flex items-center gap-1 p-2">
         {agent}
         <div className="flex min-w-0 flex-1 items-center justify-evenly">{controls}</div>
-        {onStop && (
-          <Button className="composer-icon size-10 shrink-0 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]" variant="destructive" size="icon" onClick={onStop} aria-label="Stop the agent">
-            <CircleStop />
-          </Button>
-        )}
-        <Button className="composer-send size-10 shrink-0 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]" size="icon" onClick={onSend} disabled={sending || !canSend} aria-label="Send">
-          {sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+        <Button className="composer-send size-10 shrink-0 disabled:opacity-35 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]" size="icon" onClick={onStop ?? onSend} disabled={!onStop && (sending || !canSend)} aria-label={onStop ? "Pause the agent" : "Send"}>
+          {onStop ? <Pause className="pause-shimmer" /> : <SendHorizontal />}
         </Button>
       </div>
     </div>

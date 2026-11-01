@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, ExternalLink, Folder, FolderInput, Loader2, Lock, MoreVertical, Sparkles, TriangleAlert } from "lucide-react"
+import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, MoreVertical, TriangleAlert } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -17,8 +17,7 @@ import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } fro
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
 import { MentionComposer, PiAvatar } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
 import { api, type Chat, type ChatMessage } from "@/lib/api"
 import { ConversationHeader } from "@/lib/nav-slot"
@@ -35,14 +34,7 @@ import { cn } from "@/lib/utils"
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
-/** Who an agent reply is from: the viewer's own agent, someone else's, or (older chats) the shared Beezy. */
-export function agentName(m: ChatMessage, selfId?: string) {
-  const agent = m.message.agentOf as { id?: string; username?: string } | undefined
-  if (!agent?.username) return "Beezy"
-  return agent.id === selfId ? "Your agent" : `${agent.username}'s agent`
-}
-
-function PiMessage({ m, name, folder, onWatch, children, actions }: { m: ChatMessage; name: string; folder?: string; onWatch?: () => void; children?: React.ReactNode; actions?: React.ReactNode }) {
+function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode; actions?: React.ReactNode }) {
   const text = messageText(m.message.content)
   const { state } = useSessionStream(m.sessionKey)
   const [details, setDetails] = useState<{ failed: boolean; index: number | null } | null>(null)
@@ -59,7 +51,7 @@ function PiMessage({ m, name, folder, onWatch, children, actions }: { m: ChatMes
       <PiAvatar />
       <div className="min-w-0 max-w-[85%]">
         <div className="mb-1 flex min-h-8 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="font-medium text-gray-500 dark:text-gray-300">{name}</span>
+          <span className="font-medium text-gray-500 dark:text-gray-300">Beezy</span>
           <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label="Open detailed steps" title="Open detailed steps"><List className="size-4" /></button>
           <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-300" title="Open all steps">
             {m.status === "working" ? <><Icon className="size-3.5" />{steps.length} steps</> : <>Total: {steps.length}</>}
@@ -98,12 +90,9 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
   if (own)
     return (
       <div className="flex justify-end">
-        <ReplyStack text={text} align="end" className="max-w-[85%]">
+        <ReplyStack text={text} align="end" className="max-w-[85%]" header={<div className="mb-1 flex min-h-8 items-center justify-end gap-2 text-xs font-medium">{author?.username}{author && <AuthorAvatar id={author.id} name={author.username} />}</div>}>
           {(body) => (
             <div className="min-w-0">
-              <div className="mb-1 flex min-h-8 items-center justify-end gap-2 text-xs font-medium">
-                {author?.username}{author && <AuthorAvatar id={author.id} name={author.username} />}
-              </div>
               <div className="rounded-2xl rounded-tr-sm bg-blue-50 px-3 py-2 text-sm text-black">
                 <MessageBody text={body} folder={folder} />
                 <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
@@ -116,10 +105,9 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
   return (
     <div className="flex items-start gap-2">
       {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8" />}
-      <ReplyStack text={text} className="max-w-[85%]">
+      <ReplyStack text={text} className="max-w-[85%]" header={(showName || Boolean(parseReply(text))) && <div className="mb-1 flex min-h-8 items-center text-xs font-medium">{author?.username}</div>}>
         {(body) => (
           <div className="min-w-0">
-            {showName && <div className="mb-1 flex min-h-8 items-center text-xs font-medium">{author?.username}</div>}
             <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm">
               <MessageBody text={body} folder={folder} />
               <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
@@ -155,9 +143,6 @@ export function ChatView({ chatId }: { chatId: string }) {
   /** A Beezy reply being sent on to other sessions. */
   const [forwarding, setForwarding] = useState<string>()
   const [agent, setAgent] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const [titleDraft, setTitleDraft] = useState("")
-  const [naming, setNaming] = useState(false)
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -303,44 +288,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   }
 
   const watch = chat?.sessionKey ? () => nav.openSession(chat.sessionKey!, chat.folder) : undefined
-  /** The session behind an agent reply, for the person whose agent it is (or an older chat's shared one). */
-  const watchReply = (m: ChatMessage) => {
-    const agent = m.message.agentOf as { id?: string } | undefined
-    if (agent) return agent.id === user?.id && m.sessionKey ? () => nav.openSession(m.sessionKey!, chat?.folder) : undefined
-    return watch
-  }
   const [moving, setMoving] = useState<MoveTarget>()
-  const saveTitle = async (title: string | null) => {
-    setRenaming(false)
-    if (!chat) return
-    try {
-      setChat({ ...chat, ...(await api.updateChat(chat.id, { title })).chat, members: chat.members })
-    } catch (error) {
-      toast.error((error as Error).message)
-    }
-  }
-  const generateTitle = async () => {
-    if (!chat) return
-    setNaming(true)
-    try {
-      const { title } = await api.generateChatTitle(chat.id)
-      setChat({ ...chat, title, customTitle: true })
-    } catch (error) {
-      toast.error((error as Error).message)
-    } finally {
-      setNaming(false)
-    }
-  }
-  const setPrivate = async (value: boolean) => {
-    if (!chat) return
-    try {
-      setChat({ ...chat, ...(await api.updateChat(chat.id, { private: value })).chat, members: chat.members })
-      if (value) setAgent(false)
-      toast.success(value ? "Private: no agent sees this chat, and it is not archived" : "Agentic: your agents can see this chat, and @pi asks the asker's agent")
-    } catch (error) {
-      toast.error((error as Error).message)
-    }
-  }
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -349,42 +297,10 @@ export function ChatView({ chatId }: { chatId: string }) {
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
-          {renaming && chat ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void saveTitle(titleDraft.trim() || null)
-              }}
-            >
-              <Input
-                autoFocus
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={() => void saveTitle(titleDraft.trim() || null)}
-                onKeyDown={(e) => e.key === "Escape" && setRenaming(false)}
-                placeholder="Title (empty: the names)"
-                maxLength={120}
-                className="h-7 text-sm"
-              />
-            </form>
-          ) : (
-            <button
-              type="button"
-              className="block max-w-full truncate text-left text-sm font-medium hover:underline"
-              title="Rename"
-              disabled={!chat}
-              onClick={() => {
-                setTitleDraft(chat?.customTitle ? chat.title : "")
-                setRenaming(true)
-              }}
-            >
-              {chat?.title ?? "…"}
-            </button>
-          )}
+          <div className="truncate text-sm font-medium">{chat?.title ?? "…"}</div>
           {chat && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              {chat.private ? <Lock className="size-3 shrink-0" /> : <Bot className="size-3 shrink-0" />}
-              <span className="truncate">{chat.members.map((m) => (m.id === user?.id ? "you" : m.username)).join(", ")}{chat.private ? " · private" : " · agentic"}</span>
+              <span className="truncate">{chat.members.map((m) => (m.id === user?.id ? "you" : m.username)).join(", ")}{chat.pi ? ", Beezy" : ""}</span>
               <span className="flex shrink-0 items-center gap-0.5">
                 · <Folder className="size-3" />/{chat.folder}
               </span>
@@ -392,24 +308,11 @@ export function ChatView({ chatId }: { chatId: string }) {
           )}
         </div>
         {chat && (
-          <Button variant="ghost" size="icon-sm" onClick={() => void generateTitle()} disabled={naming} aria-label="Generate a title" title="Generate a title from the conversation">
-            {naming ? <Loader2 className="animate-spin" /> : <Sparkles />}
-          </Button>
-        )}
-        {chat && (
-          <Button variant="ghost" size="icon-sm" onClick={() => void setPrivate(!chat.private)} aria-label={chat.private ? "Make agentic" : "Make private"} title={chat.private ? "Private: no agent sees it. Click to make it agentic" : "Agentic: your agents see it. Click to make it private"}>
-            {chat.private ? <Lock /> : <Bot />}
-          </Button>
-        )}
-        {chat && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label="Chat actions"><MoreVertical /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => { setTitleDraft(chat.customTitle ? chat.title : ""); setRenaming(true) }}>Rename…</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void setPrivate(!chat.private)}>{chat.private ? <><Bot /> Make agentic</> : <><Lock /> Make private</>}</DropdownMenuItem>
-              <DropdownMenuSeparator />
               {watch && <DropdownMenuItem onSelect={watch}><ExternalLink /> Open agent session</DropdownMenuItem>}
               <DropdownMenuItem onSelect={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })}><FolderInput /> Move to project…</DropdownMenuItem>
             </DropdownMenuContent>
@@ -426,14 +329,14 @@ export function ChatView({ chatId }: { chatId: string }) {
             const author = (m.message.author as { username?: string } | undefined)?.username ?? "Unknown author"
             const content = messageText(m.message.content)
             const assistant = m.message.role === "assistant"
-            const onReply = () => selectReply(setReply, { author: assistant ? agentName(m, user?.id) : author, text: content, sourceId, assistant })
+            const onReply = () => selectReply(setReply, { author: assistant ? "Beezy" : author, text: content, sourceId, assistant })
             if (assistant) {
               const nextReply = messages.slice(i + 1).find((next) => next.message.role === "assistant")
               const cards = interactions.cards.filter((card) => card.createdAt >= m.createdAt && (!nextReply || card.createdAt < nextReply.createdAt))
               const actions = content && m.status !== "working" ? (
                 <MessageActions copy={content} onReply={onReply} onShare={() => setForwarding(content)} onEdit={() => startEdit(m, content)} editBlocked={piWorking ? "Wait until Beezy has finished" : m.status !== "done" ? "Only finished replies can be edited" : undefined} />
               ) : null
-              return <div key={m.id} id={sourceId} {...replySource(content)}><PiMessage m={m} name={agentName(m, user?.id)} folder={chat?.folder} onWatch={watchReply(m)} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
+              return <div key={m.id} id={sourceId} {...replySource(content)}><PiMessage m={m} folder={chat?.folder} onWatch={watch} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
             const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
@@ -483,10 +386,11 @@ export function ChatView({ chatId }: { chatId: string }) {
           value={text}
           onChange={setText}
           busy={sending || uploading}
+          onStop={piWorking && chat?.sessionKey ? () => { void api.abort(chat.sessionKey!).catch((error) => toast.error(error.message)) } : undefined}
           selfId={user?.id}
           hash="paths"
-          placeholder={editing ? "Edit message…" : chat?.private ? "Private message (no agent): @someone and $folder" : "Message: @pi for your agent, @someone and $folder"}
-          agent={<AgentToggle checked={agent && !chat?.private} onChange={setAgent} disabled={chat?.private} />}
+          placeholder={editing ? "Edit message…" : "Message: @someone and $folder"}
+          agent={<AgentToggle checked={agent} onChange={setAgent} />}
           controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={agent} />}
           onFiles={(files) => void attach(files)}
           onSubmit={(message) => (editing ? saveEdit(message.raw) : send(agent && !message.pi ? `@pi ${message.raw}` : message.raw))}

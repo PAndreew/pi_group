@@ -45,11 +45,12 @@ export function jumpToOriginal(from: HTMLElement, quote: string) {
  * `children` receives the text to show in the bubble (the reply without its quote). Tapping the
  * card jumps to the quoted message.
  */
-export function ReplyStack({ text, align = "start", className, children }: { text: string; align?: "start" | "end"; className?: string; children: (body: string) => React.ReactNode }) {
+export function ReplyStack({ text, align = "start", className, header, children }: { text: string; align?: "start" | "end"; className?: string; header?: React.ReactNode; children: (body: string) => React.ReactNode }) {
   const reply = parseReply(text)
   const card = useRef<HTMLButtonElement>(null)
   return (
     <div className={cn("relative isolate flex min-w-0 flex-col",  align === "end" ? "items-end" : "items-start", className)}>
+      {header}
       {reply && (
         <button
           ref={card}
@@ -57,13 +58,13 @@ export function ReplyStack({ text, align = "start", className, children }: { tex
           onClick={() => card.current && jumpToOriginal(card.current, reply.quote)}
           aria-label={`Go to the original message from ${reply.author}`}
           title="Go to the original message"
-          className={cn("relative z-0 -mb-5 max-w-[calc(100%-0.75rem)] cursor-pointer rounded-2xl border border-border/60 bg-muted px-3 pt-2 pb-7 text-left text-xs text-muted-foreground opacity-65 transition-opacity hover:opacity-90 focus-visible:opacity-90 focus-visible:outline-2 focus-visible:outline-ring", align === "end" ? "mr-3" : "ml-3")}
+          className={cn("relative z-0 w-full cursor-pointer rounded-t-xl bg-muted px-3 py-2 text-left text-xs text-muted-foreground opacity-65 transition-opacity hover:opacity-90 focus-visible:opacity-90 focus-visible:outline-2 focus-visible:outline-ring")}
         >
           <span className="block font-medium">{reply.author}</span>
           <span className="line-clamp-3 whitespace-pre-wrap break-words">{reply.quote}</span>
         </button>
       )}
-      <div className="relative z-10 max-w-full">{children(reply ? reply.body : text)}</div>
+      <div className={cn("relative z-10 max-w-full", reply && "w-full [&>div]:rounded-t-none [&>div>div:last-child]:rounded-t-none")}>{children(reply ? reply.body : text)}</div>
     </div>
   )
 }

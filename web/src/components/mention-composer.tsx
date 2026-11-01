@@ -78,12 +78,14 @@ export function MentionComposer({
   agent,
   controls,
   onFiles,
+  onStop,
 }: {
   value: string
   onChange: (value: string) => void
   onSubmit: (message: ParsedMessage) => void | Promise<void>
   placeholder: string
   busy?: boolean
+  onStop?: () => void
   selfId?: string
   /**
    * What $ offers: "folder" picks the folder for a new chat ($path token), "paths" mentions files and
@@ -185,7 +187,7 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <ComposerBox agent={agent} controls={controls} onFiles={onFiles} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
+    <ComposerBox agent={agent} controls={controls} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>

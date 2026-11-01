@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import { draining } from "./deployment.js";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "./auth.js";
 import { type ChatDeps, type ChatMessage, chatMessages, chatOfSession, chatTitle, ensureChatFolder, markChatConsolidated, memberIds, staleChats, transcript } from "./chats.js";
@@ -17,6 +18,8 @@ import { isTenantMember } from "./tenants.js";
  * up to date. The folder's AGENTS.md tells every pi session there to consult them.
  */
 
+let deploymentMemory = 0;
+export const activeMemory = () => deploymentMemory;
 const MAX_TRANSCRIPT = 40_000;
 const RUN_TIMEOUT_MS = 20 * 60_000;
 
@@ -96,9 +99,11 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 
 	/** Fold every stale conversation into memory, one run at a time. */
 	const consolidate = async (before: string) => {
+		if (draining()) return;
 		const id = tenantId();
 		if (running.has(id)) return 0;
 		running.add(id);
+		deploymentMemory++;
 		let count = 0;
 		try {
 			const todo = await candidates(before);
@@ -133,6 +138,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
 			return count;
 		} finally {
 			running.delete(id);
+			deploymentMemory--;
 		}
 	};
 

@@ -1,10 +1,7 @@
 import {
   Eye,
-  GitBranch,
-  GitMerge,
   List,
   Loader2,
-  Sparkles,
   MoreVertical,
   Pencil,
   Pin,
@@ -45,7 +42,7 @@ import { StepsDialog } from "@/components/step-dialog"
 import { STEP_ICON, STEP_LABEL } from "@/components/step-strip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -74,10 +71,9 @@ function UserBubble({ message, folder }: { message: AgentMessage; folder?: strin
   const images = Array.isArray(message.content) && imageRefs(text, folder).length === 0 ? message.content.filter((c: any) => c?.type === "image").map((img: any) => ({ src: `data:${img.mimeType};base64,${img.data}` })) : []
   return (
     <div className="flex items-start justify-end gap-2">
-      <ReplyStack text={text} align="end" className="max-w-[88%]">
+      <ReplyStack text={text} align="end" className="max-w-[88%]" header={<div className="mb-1 text-right text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>}>
         {(body) => (
           <div className="min-w-0">
-            <div className="mb-1 text-right text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>
             <div className="rounded-2xl rounded-br-sm bg-blue-50 px-3.5 py-2 text-sm text-black">
               <MessageBody text={body} folder={folder} />
               <ImageGallery images={images} />
@@ -316,9 +312,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [shareOpen, setShareOpen] = useState(false)
   const [moving, setMoving] = useState<MoveTarget>()
   const [renameOpen, setRenameOpen] = useState(false)
-  const [sideOpen, setSideOpen] = useState(false)
-  const [sideTask, setSideTask] = useState("")
-  const [sideName, setSideName] = useState("")
   const [newName, setNewName] = useState("")
   const [answered, setAnswered] = useState<Answered[]>([])
   const scroller = useRef<HTMLDivElement>(null)
@@ -514,8 +507,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
               {summary && <span>· {summary.harness}</span>}
               {summary?.pinned && <Pin className="size-3" />}
               {summary?.visibility === "shared" && <Share2 className="size-3" />}
-              {summary?.thread === "main" && <span>· your agent</span>}
-              {summary?.thread === "side" && <span>· side thread{summary.sideStatus && summary.sideStatus !== "running" ? ` (${summary.sideStatus === "merged" ? "merged" : summary.sideStatus === "failed" ? "failed" : "stopped"})` : ""}</span>}
               {!connected && <span className="text-amber-600">· reconnecting…</span>}
             </div>
           </div>
@@ -536,19 +527,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 >
                   <Pencil /> Rename
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={!canWrite} onSelect={() => void act(async () => { await api.generateSessionTitle(sessionKey); refresh() }, "Title generated")}>
-                  <Sparkles /> Generate title
-                </DropdownMenuItem>
-                {summary.thread === "main" && (
-                  <DropdownMenuItem disabled={!canWrite} onSelect={() => setSideOpen(true)}>
-                    <GitBranch /> Start side thread…
-                  </DropdownMenuItem>
-                )}
-                {summary.thread === "side" && summary.parentKey && (
-                  <DropdownMenuItem disabled={!canWrite} onSelect={() => void act(() => api.mergeSideThread(sessionKey).then(({ session }) => setSummary(session)), "Its latest answer was posted to your agent thread")}>
-                    <GitMerge /> Merge into agent thread
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setShareOpen(true)}>
                   <Share2 /> Access & sharing
                 </DropdownMenuItem>
@@ -647,7 +625,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
             {canWrite ? (
               <>
                 {running && (
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="hidden" aria-hidden="true">
                     <div className="inline-flex rounded-md border p-0.5">
                       {(["steer", "followUp"] as const).map((m) => (
                         <button
@@ -693,7 +671,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={onKeyDown}
-                    placeholder={editing ? "Edit message…" : running ? (mode === "steer" ? "Steer the agent…" : "Queue a follow-up…") : "Message the agent…"}
+                    placeholder={editing ? "Edit message…" : "Message the agent…"}
                     className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
                     rows={1}
                   />
@@ -722,35 +700,6 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       <MoveDialog item={moving} onOpenChange={(open) => !open && setMoving(undefined)} onMoved={() => void api.session(sessionKey).then(({ session }) => setSummary(session), () => {})} />
       <DeleteSessionDialog session={deleteOpen ? summary : undefined} onOpenChange={setDeleteOpen} onDeleted={onDeleted} />
       <ForwardDialog text={forwarding} from={{ kind: "session", id: sessionKey }} onOpenChange={(o) => !o && setForwarding(undefined)} />
-      <Dialog open={sideOpen} onOpenChange={setSideOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Start a side thread</DialogTitle>
-            <DialogDescription>A separate agent works on this on its own, so this thread stays free. When it finishes, fails or is stopped, its summary is posted here.</DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (!sideTask.trim()) return
-              void act(async () => {
-                await api.startSideThread(sessionKey, sideTask.trim(), sideName.trim() || undefined)
-                setSideOpen(false)
-                setSideTask("")
-                setSideName("")
-              }, "Side thread started")
-            }}
-            className="grid gap-3"
-          >
-            <Textarea value={sideTask} onChange={(e) => setSideTask(e.target.value)} placeholder="The task: goal, relevant files, constraints…" rows={5} autoFocus />
-            <Input value={sideName} onChange={(e) => setSideName(e.target.value)} placeholder="Title (optional, generated otherwise)" maxLength={120} />
-            <DialogFooter>
-              <Button type="submit" disabled={!sideTask.trim()}>
-                <GitBranch /> Start
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>
