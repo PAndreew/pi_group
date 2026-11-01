@@ -201,6 +201,25 @@ html[data-editing] body { padding-bottom: 0; }
   .running-shimmer { animation: none; background: none; -webkit-text-fill-color: currentColor; }
 }
 
+@keyframes bee-buzz {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes bee-wing-left {
+  0%, 100% { content: "<"; }
+  50% { content: "-"; }
+}
+@keyframes bee-wing-right {
+  0%, 100% { content: ">"; }
+  50% { content: "-"; }
+}
+.ascii-bee { width: max-content; animation: bee-buzz 0.3s ease-in-out infinite; }
+.ascii-bee-wing-left::before { content: "<"; animation: bee-wing-left 0.18s steps(1) infinite; }
+.ascii-bee-wing-right::before { content: ">"; animation: bee-wing-right 0.18s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ascii-bee, .ascii-bee-wing-left::before, .ascii-bee-wing-right::before { animation: none; }
+}
+
 .agent-message { background-color: #f3f3f3; color: #20282c; border: none; }
 .agent-message :is(.text-muted-foreground, .text-foreground) { color: inherit; }
 

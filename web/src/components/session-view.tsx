@@ -186,7 +186,16 @@ function AgentBubble({
             {run.running ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}
           </button>
         </div>
-      {(run.answer || question || answered.length > 0 || interactions) && <div className="agent-message agent-bubble rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">
+      {(run.running || run.answer || question || answered.length > 0 || interactions) && <div className="agent-message agent-bubble rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">
+        {run.running && !run.answer && !question && !interactions && (
+          <div role="status" aria-label="Beezy is working" className="py-2 text-amber-600 dark:text-amber-400">
+            <pre aria-hidden="true" className="ascii-bee m-0 font-mono text-xs leading-tight">
+              {" \\ /\n"}
+              <span className="ascii-bee-wing-left" />{"(oo)"}<span className="ascii-bee-wing-right" />
+              {"\n  v"}
+            </pre>
+          </div>
+        )}
         {run.answer && (
           <div>
             <Markdown text={run.answer} base={folder} />
