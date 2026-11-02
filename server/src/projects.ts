@@ -12,6 +12,7 @@ import { accessOf } from "./sessions.js";
 import { saveNow, store, type User } from "./store.js";
 import { tenantId } from "./tenant-context.js";
 import { isTenantMember, tenantAccess, tenantOf } from "./tenants.js";
+import { projectSecretKeys } from "./vault.js";
 
 /*
  * Projects: the context unit sessions and chats are grouped by, within a tenant. Each tenant has a
@@ -239,9 +240,12 @@ export function mountProjects(router: Router, deps: ProjectDeps) {
 		res.json({ project: view(project, req.user!) });
 	});
 
-	/** Delete a project; its sessions and chats fall back to General (or the project holding their folder). */
-	router.delete("/projects/:id", (req, res) => {
+	/** Delete a project; its sessions and chats fall back to General (or the project holding their folder).
+	 * Its vault secrets are not thrown away with it: they have to be moved or deleted first. */
+	router.delete("/projects/:id", async (req, res) => {
 		const project = manage(req);
+		const secrets = await projectSecretKeys(tenantId(), project.id);
+		if (secrets.length) throw new HttpError(409, `Move or delete the project's vault secrets first (${secrets.join(", ")})`);
 		store.data.projects = store.data.projects.filter((p) => p !== project);
 		store.data.moveRequests = store.data.moveRequests.filter((m) => m.to !== project.id);
 		saveNow();

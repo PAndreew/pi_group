@@ -8,8 +8,9 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 import express from "express";
+import type { Project } from "./projects.js";
 
-test("people manage their own vault secrets; an agent reads its session owner's by key", async () => {
+test("people manage their own and their projects' vault secrets; an agent reads its session owner's and project's by key", async () => {
 	const dir = mkdtempSync(path.join(os.tmpdir(), "pi-group-vault-"));
 	const token = randomBytes(24).toString("hex");
 	// The real vault service, in process. Imported by URL: it lives outside this package.
@@ -70,11 +71,34 @@ test("people manage their own vault secrets; an agent reads its session owner's 
 		assert.ok(bridge.BEEZY_VAULT_URL);
 		const agent = (suffix: string, credential = bridge.BEEZY_INTERACTION_TOKEN) => fetch(`${base}/vault-bridge/${encodeURIComponent("pi:s1")}${suffix}`, { headers: { Authorization: `Bearer ${credential}` } }).then(async (r) => ({ status: r.status, body: await r.json() }));
 		assert.deepEqual((await agent("")).body.secrets.map((s: { key: string; description: string; value?: string }) => [s.key, s.description, s.value]), [["GITHUB_TOKEN", "GitHub for acme", undefined]]);
-		assert.deepEqual((await agent("/GITHUB_TOKEN")).body, { key: "GITHUB_TOKEN", value: "ghp_anna" });
+		assert.deepEqual((await agent("/GITHUB_TOKEN")).body, { key: "GITHUB_TOKEN", value: "ghp_anna", scope: "personal" });
 		assert.equal((await agent("/GITHUB_TOKEN", "forged")).status, 403);
 
 		assert.equal((await call(annaCookie, "DELETE", "/vault/secrets/GITHUB_TOKEN")).status, 200);
 		assert.equal((await agent("/GITHUB_TOKEN")).status, 404);
+
+		// Project secrets: shared with the project's members, readable by agents of sessions in it.
+		const at = new Date().toISOString();
+		const project: Project = { tenantId: "work", id: "p-acme", name: "Acme", cwd: path.join(dir, "acme"), createdBy: anna.id, memberIds: [bob.id], createdAt: at, updatedAt: at };
+		const hidden: Project = { ...project, id: "p-hidden", name: "Hidden", cwd: path.join(dir, "hidden"), memberIds: [] };
+		store.data.projects.push(project, hidden);
+		assert.equal((await call(annaCookie, "PUT", "/vault/secrets/DEPLOY_KEY", { value: "dk", description: "Deploys" })).status, 200);
+		assert.equal((await call(annaCookie, "POST", "/vault/secrets/DEPLOY_KEY/move", { project: "p-hidden" })).status, 200);
+		assert.equal((await call(bobCookie, "GET", "/vault/secrets?project=p-hidden")).status, 404, "non-members cannot see a project's secrets");
+		assert.equal((await call(annaCookie, "POST", "/vault/secrets/DEPLOY_KEY/move?project=p-hidden", { project: "p-acme" })).status, 200);
+		assert.deepEqual((await call(annaCookie, "GET", "/vault/secrets")).body.secrets, [], "moving takes it out of the source");
+		assert.deepEqual((await call(bobCookie, "GET", "/vault/secrets/DEPLOY_KEY?project=p-acme")).body.value, "dk", "project members read it");
+		assert.equal((await agent("/DEPLOY_KEY")).status, 404, "a session outside the project does not see it");
+
+		store.upsertSession({ ...store.session("pi:s1")!, projectId: "p-acme" });
+		await call(annaCookie, "PUT", "/vault/secrets/DEPLOY_KEY", { value: "anna-own" });
+		assert.deepEqual((await agent("")).body.secrets.map((s: { key: string; scope: string }) => [s.key, s.scope]), [["DEPLOY_KEY", "personal"], ["DEPLOY_KEY", "project"]]);
+		assert.equal((await agent("/DEPLOY_KEY")).body.value, "anna-own", "personal wins on a clash");
+		assert.equal((await agent("/DEPLOY_KEY?scope=project")).body.value, "dk");
+		assert.equal((await call(annaCookie, "POST", "/vault/secrets/DEPLOY_KEY/move", { project: "p-acme" })).status, 409, "a move never overwrites");
+		assert.equal((await call(bobCookie, "POST", "/vault/secrets/DEPLOY_KEY/move?project=p-acme", { project: null })).status, 200, "a member can take it into their own vault");
+		assert.equal((await agent("/DEPLOY_KEY?scope=project")).status, 404);
+		assert.deepEqual((await call(bobCookie, "GET", "/vault/secrets/DEPLOY_KEY")).body.value, "dk");
 	} finally {
 		await new Promise<void>((resolve) => server.close(() => resolve()));
 		await new Promise<void>((resolve) => vault.close(() => resolve()));

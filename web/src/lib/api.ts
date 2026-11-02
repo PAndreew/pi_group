@@ -466,10 +466,13 @@ export const api = {
   downloadUrl: (path: string) => tenantUrl(`/api/fs/download?${q({ path })}`),
 
   vaultStatus: () => request<{ configured: boolean; reachable: boolean }>("GET", "/api/vault/status"),
-  vaultSecrets: () => request<{ secrets: VaultSecret[] }>("GET", "/api/vault/secrets"),
-  vaultSecret: (key: string) => request<VaultSecret & { value: string }>("GET", `/api/vault/secrets/${enc(key)}`),
-  saveVaultSecret: (key: string, body: { value?: string; description: string }) => request<VaultSecret>("PUT", `/api/vault/secrets/${enc(key)}`, body),
-  deleteVaultSecret: (key: string) => request("DELETE", `/api/vault/secrets/${enc(key)}`),
+  /** `project` picks a project's shared secrets; without it, the caller's own. */
+  vaultSecrets: (project?: string) => request<{ secrets: VaultSecret[] }>("GET", `/api/vault/secrets${project ? `?${q({ project })}` : ""}`),
+  vaultSecret: (key: string, project?: string) => request<VaultSecret & { value: string }>("GET", `/api/vault/secrets/${enc(key)}${project ? `?${q({ project })}` : ""}`),
+  saveVaultSecret: (key: string, body: { value?: string; description: string }, project?: string) => request<VaultSecret>("PUT", `/api/vault/secrets/${enc(key)}${project ? `?${q({ project })}` : ""}`, body),
+  deleteVaultSecret: (key: string, project?: string) => request("DELETE", `/api/vault/secrets/${enc(key)}${project ? `?${q({ project })}` : ""}`),
+  /** Move a secret from `from` to `to`; undefined/null is the caller's own vault. */
+  moveVaultSecret: (key: string, from: string | undefined, to: string | null) => request<VaultSecret>("POST", `/api/vault/secrets/${enc(key)}/move${from ? `?${q({ project: from })}` : ""}`, { project: to }),
 
   harnesses: () => request<{ harnesses: Harness[] }>("GET", "/api/harnesses"),
   models: (harness: string) => request<{ models: ModelInfo[] }>("GET", `/api/harnesses/${enc(harness)}/models`),

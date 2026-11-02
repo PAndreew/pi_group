@@ -1,18 +1,23 @@
-import { Eye, EyeOff, Loader2, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react"
+import { ArrowRightLeft, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { api, type VaultSecret } from "@/lib/api"
+import { useProjects } from "@/lib/projects"
 
 const KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
+const PERSONAL = "personal"
 
 /**
- * The signed-in person's secrets in the separately deployed vault. The agent sees keys and
- * descriptions and reads a value by its key; values are only shown here when asked for.
+ * Secrets in the separately deployed vault: the signed-in person's own, or those shared with a
+ * project (everyone who can open it manages them, and its sessions' agents can read them). The
+ * agent sees keys and descriptions and reads a value by its key; values are only shown here when asked for.
  */
 export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [status, setStatus] = useState<{ configured: boolean; reachable: boolean }>()
@@ -20,9 +25,13 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   /** The secret being edited, or "new" for the add form. */
   const [editing, setEditing] = useState<VaultSecret | "new">()
+  const { projects } = useProjects()
+  /** The project whose secrets are shown; undefined for the person's own. */
+  const [project, setProject] = useState<string>()
+  const scopeName = (id?: string) => (id ? projects.find((p) => p.id === id)?.name ?? "the project" : "Personal")
 
-  const load = () =>
-    api.vaultSecrets().then(
+  const load = (scope = project) =>
+    api.vaultSecrets(scope).then(
       ({ secrets }) => setSecrets(secrets),
       (error) => toast.error(error.message),
     )
@@ -32,16 +41,26 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     setRevealed({})
     setEditing(undefined)
     setSecrets(undefined)
+    setProject(undefined)
     api.vaultStatus().then((s) => {
       setStatus(s)
-      if (s.configured && s.reachable) void load()
+      if (s.configured && s.reachable) void load(undefined)
     }, (error) => toast.error(error.message))
   }, [open])
+
+  const switchTo = (value: string) => {
+    const scope = value === PERSONAL ? undefined : value
+    setProject(scope)
+    setRevealed({})
+    setEditing(undefined)
+    setSecrets(undefined)
+    void load(scope)
+  }
 
   const reveal = async (key: string) => {
     if (revealed[key] !== undefined) return setRevealed((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== key)))
     try {
-      const { value } = await api.vaultSecret(key)
+      const { value } = await api.vaultSecret(key, project)
       setRevealed((r) => ({ ...r, [key]: value }))
     } catch (error) {
       toast.error((error as Error).message)
@@ -49,10 +68,20 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   }
 
   const remove = async (key: string) => {
-    if (!window.confirm(`Delete the secret ${key}? Agents can no longer read it.`)) return
+    if (!window.confirm(`Delete the secret ${key}${project ? ` from ${scopeName(project)}` : ""}? Agents can no longer read it.`)) return
     try {
-      await api.deleteVaultSecret(key)
+      await api.deleteVaultSecret(key, project)
       toast.success("Secret deleted")
+      await load()
+    } catch (error) {
+      toast.error((error as Error).message)
+    }
+  }
+
+  const move = async (key: string, to?: string) => {
+    try {
+      await api.moveVaultSecret(key, project, to ?? null)
+      toast.success(`Moved ${key} to ${scopeName(to)}`)
       await load()
     } catch (error) {
       toast.error((error as Error).message)
@@ -66,7 +95,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         <DialogHeader>
           <DialogTitle>Secret vault</DialogTitle>
           <DialogDescription>
-            Agents see ordinary secret keys and descriptions and can read their values by key. Reserved server credentials, such as the configured Cloudflare assistance key, are hidden from agent tools. Values an agent reads become part of that session’s history, which everyone it is shared with can see.
+            Personal secrets are yours alone. Project secrets are shared with everyone who can open the project, and agents in its sessions can read them. Agents see ordinary secret keys and descriptions and can read their values by key. Reserved server credentials, such as the configured Cloudflare assistance key, are hidden from agent tools. Values an agent reads become part of that session’s history, which everyone it is shared with can see.
           </DialogDescription>
         </DialogHeader>
 
@@ -84,12 +113,29 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 
         {ready && (
           <>
+            <div className="grid gap-1">
+              <Label htmlFor="vault-scope">Secrets of</Label>
+              <Select value={project ?? PERSONAL} onValueChange={switchTo}>
+                <SelectTrigger id="vault-scope" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PERSONAL}>Personal</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      Project: {p.name}
+                      {p.general ? " (everyone in this tenant)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               {!secrets && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
               {secrets?.length === 0 && editing !== "new" && <p className="text-sm text-muted-foreground">No secrets yet.</p>}
               {secrets?.map((s) =>
                 editing !== "new" && editing?.key === s.key ? (
-                  <SecretForm key={s.key} secret={s} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
+                  <SecretForm key={s.key} secret={s} project={project} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
                 ) : (
                   <div key={s.key} className="rounded-md border px-2.5 py-2">
                     <div className="flex items-center gap-1">
@@ -100,6 +146,24 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
                       <Button variant="ghost" size="icon-sm" onClick={() => setEditing(s)} aria-label={`Edit ${s.key}`}>
                         <Pencil />
                       </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" aria-label={`Move ${s.key}`} title="Move to…">
+                            <ArrowRightLeft />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Move to</DropdownMenuLabel>
+                          {project && <DropdownMenuItem onSelect={() => void move(s.key)}>Personal</DropdownMenuItem>}
+                          {projects
+                            .filter((p) => p.id !== project)
+                            .map((p) => (
+                              <DropdownMenuItem key={p.id} onSelect={() => void move(s.key, p.id)}>
+                                Project: {p.name}
+                              </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button variant="ghost" size="icon-sm" onClick={() => void remove(s.key)} aria-label={`Delete ${s.key}`}>
                         <Trash2 />
                       </Button>
@@ -111,10 +175,10 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
               )}
             </div>
             {editing === "new" ? (
-              <SecretForm taken={secrets?.map((s) => s.key) ?? []} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
+              <SecretForm project={project} taken={secrets?.map((s) => s.key) ?? []} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
             ) : (
               <Button variant="outline" onClick={() => setEditing("new")}>
-                <Plus /> Add secret
+                <Plus /> Add {project ? "project" : "personal"} secret
               </Button>
             )}
           </>
@@ -125,7 +189,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 }
 
 /** Add a secret, or change one's description and (optionally) value. */
-function SecretForm({ secret, taken = [], onDone, onCancel }: { secret?: VaultSecret; taken?: string[]; onDone: () => void; onCancel: () => void }) {
+function SecretForm({ secret, project, taken = [], onDone, onCancel }: { secret?: VaultSecret; project?: string; taken?: string[]; onDone: () => void; onCancel: () => void }) {
   const [key, setKey] = useState(secret?.key ?? "")
   const [value, setValue] = useState("")
   const [description, setDescription] = useState(secret?.description ?? "")
@@ -136,7 +200,7 @@ function SecretForm({ secret, taken = [], onDone, onCancel }: { secret?: VaultSe
   const save = async () => {
     setSaving(true)
     try {
-      await api.saveVaultSecret(key, { description: description.trim(), ...(value ? { value } : {}) })
+      await api.saveVaultSecret(key, { description: description.trim(), ...(value ? { value } : {}) }, project)
       toast.success(secret ? "Secret updated" : "Secret saved")
       onDone()
     } catch (error) {
