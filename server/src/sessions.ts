@@ -5,6 +5,7 @@ import path from "node:path";
 import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
+import { generateSessionTitle } from "./session-title.js";
 import { creationOptions } from "./preferences.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
@@ -327,6 +328,21 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 
 	/** Send a prompt as `user`, starting the runtime if needed; while a run is going it is queued as a follow-up unless a mode is given. */
+	const titleSession = async (meta: SessionMeta, fallback?: string) => {
+		const adapter = adapterOf(meta.harness);
+		const state = adapter.live(meta.id)?.state ?? await adapter.readSession(meta.id, meta.cwd);
+		if (!state?.model) throw new HttpError(400, "Select a model before generating a title");
+		const previous = meta.name;
+		const text = state.messages.filter(m => m.role === "user" || m.role === "assistant").map(m => `${m.role}: ${messageText(m)}`).join("\n") || fallback || "";
+		if (!text) throw new HttpError(400, "Session has no messages");
+		const name = await generateSessionTitle(state.model, text);
+		if (meta.name !== previous) return;
+		meta.name = name;
+		save();
+		await adapter.live(meta.id)?.setName(name);
+		return name;
+	};
+
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const live = await ensureLive(meta, adapterOf(meta.harness));
@@ -339,6 +355,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const input = { ...body, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
+		const autoTitle = user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
 		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
 		saveNow();
 		try {
@@ -349,6 +366,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			throw error;
 		}
 		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(input.text), updatedAt: new Date().toISOString() });
+		if (autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 
@@ -856,6 +874,11 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const body = z.object({ level: z.string() }).parse(req.body);
 		await (await ensureLive(meta, adapter)).setThinkingLevel(body.level);
 		res.json({ ok: true });
+	});
+
+	router.post("/sessions/:key/generate-title", async (req, res) => {
+		const { meta } = writable(req);
+		res.json({ name: await titleSession(meta) });
 	});
 
 	router.post("/sessions/:key/name", async (req, res) => {

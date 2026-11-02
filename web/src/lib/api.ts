@@ -6,6 +6,7 @@ export interface SessionDefaults {
   harness: string
   model: { provider: string; id: string }
   thinkingLevel: string
+  autoTitle?: boolean
 }
 
 export interface AssistanceSettings {
@@ -543,6 +544,7 @@ export const api = {
   abort: (key: string) => request("POST", `/api/sessions/${enc(key)}/abort`),
   setModel: (key: string, provider: string, id: string) => request("POST", `/api/sessions/${enc(key)}/model`, { provider, id }),
   setThinking: (key: string, level: string) => request("POST", `/api/sessions/${enc(key)}/thinking`, { level }),
+  generateTitle: (key: string) => request<{ name: string }>("POST", `/api/sessions/${enc(key)}/generate-title`),
   rename: (key: string, name: string) => request("POST", `/api/sessions/${enc(key)}/name`, { name }),
   answerDialog: (key: string, answer: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }) =>
     request("POST", `/api/sessions/${enc(key)}/dialog`, answer),

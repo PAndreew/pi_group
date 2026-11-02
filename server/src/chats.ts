@@ -303,7 +303,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			if (!meta) {
 				const cwd = resolveSafe(chat.folder);
 				if (cwd === config.chatFolder) ensureChatFolder();
-				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, name: chatTitle({ ...chat, pi: true }), projectId: chat.projectId });
+				meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd, ...options, projectId: chat.projectId });
 				database().prepare("UPDATE chats SET session_key = ? WHERE id = ?").run(meta.key, chat.id);
 				chat = { ...chat, sessionKey: meta.key, pi: true };
 				addMembers(chat, []);
@@ -408,7 +408,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			};
 		});
 		const sessions = Object.values(store.data.sessions)
-			.filter((meta) => !linked.has(meta.key) && !meta.applet && involved(user, meta))
+			.filter((meta) => !meta.applet && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
 				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };

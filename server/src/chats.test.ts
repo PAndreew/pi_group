@@ -144,7 +144,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "thanks! @pi also check the cron job" });
 		await until(() => prompts.length === 2, "second prompt");
 		assert.equal(prompts[1].text, "anna: thanks! @pi also check the cron job");
-		assert.ok(!(await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.kind === "session" && c.id === meta.key), "a chat's session is not listed twice");
+		assert.ok((await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.kind === "session" && c.id === meta.key), "a hybrid chat also appears as a regular session");
 
 		// Catch-up after a dropped connection: everything after the last message seen, plus the current state of checked ones.
 		const all = (await call("anna", "GET", `/chats/${chatId}`)).body.messages;

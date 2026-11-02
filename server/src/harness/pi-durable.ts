@@ -30,7 +30,7 @@ const PREAMBLE = [
 ].join("\n");
 
 /** Credentials shared with the pi CLI: ~/.pi/agent/auth.json, one type-tagged credential per provider. */
-class PiAuthFileStore {
+export class PiAuthFileStore {
 	private file = path.join(config.piAgentDir, "auth.json");
 	private chain: Promise<unknown> = Promise.resolve();
 

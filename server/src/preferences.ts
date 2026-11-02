@@ -11,6 +11,7 @@ export type AssistanceSettings = z.infer<typeof assistanceSettingsSchema>;
 export const assistanceDefaults = assistanceSettingsSchema.parse({});
 
 export const sessionDefaultsSchema = z.object({
+	autoTitle: z.boolean().optional(),
 	harness: z.string().min(1).max(80),
 	model: z.object({ provider: z.string().min(1).max(120), id: z.string().min(1).max(200) }),
 	thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]),

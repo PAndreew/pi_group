@@ -1,4 +1,4 @@
-import { Brain, Folder, FolderInput, Loader2, Trash2 } from "lucide-react"
+import { Brain, Folder, FolderInput, Loader2, MoreVertical, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -8,6 +8,7 @@ import { MoveDialog, MoveRequests, type MoveTarget } from "@/components/project-
 import { SwipeActions, type SwipeAction } from "@/components/swipe-actions"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
 import { useChatSearch } from "@/lib/chat-search"
 import { api, type ChatListItem, type SessionSummary } from "@/lib/api"
@@ -76,12 +77,17 @@ export function ChatList({ selected, className, requests }: { selected?: string;
         {requests && <MoveRequests />}
         {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : active && !active.general ? `Nothing in ${active.name} yet. Start a chat below, or move one here.` : "No chats yet. Mention @pi or someone below to start one."}</p>}
         {visible?.map((item) => {
+          const actions: SwipeAction[] = []
+          if (item.canMove) actions.push({ label: `Move ${item.title} to another project`, icon: <FolderInput />, className: "bg-sky-600 hover:bg-sky-700", onClick: () => setMoving({ kind: item.kind, id: item.id, title: item.title, projectId: item.projectId }) })
+          if (item.kind === "session" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => void api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message)) })
+          if (item.kind === "chat" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => setDeletingChat(item) })
           const row = (
+          <div key={item.id} className={cn("flex w-full min-w-0 max-w-full items-center rounded-lg hover:bg-accent", selected === item.id && "bg-accent")}>
           <button
             key={item.id}
             type="button"
             onClick={() => (item.kind === "chat" ? nav.openChat(item.id) : nav.openSession(item.id, item.folder))}
-            className={cn("flex w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-lg px-2 py-2 text-left hover:bg-accent", selected === item.id && "bg-accent")}
+            className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-lg px-2 py-2 text-left"
           >
             <Avatars item={item} selfId={user?.id} />
             <span className="grid min-w-0 flex-1 gap-0.5">
@@ -106,11 +112,22 @@ export function ChatList({ selected, className, requests }: { selected?: string;
               </span>
             </span>
           </button>
+          {actions.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="mr-1 shrink-0" aria-label={`Actions for ${item.title}`}><MoreVertical /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {actions.map((action) => (
+                  <DropdownMenuItem key={action.label} onSelect={action.onClick} className={action.label.startsWith("Delete ") ? "text-destructive focus:text-destructive" : undefined}>
+                    {action.icon}{action.label.startsWith("Delete ") ? "Delete" : "Move to project"}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          </div>
           )
-          const actions: SwipeAction[] = []
-          if (item.canMove) actions.push({ label: `Move ${item.title} to another project`, icon: <FolderInput />, className: "bg-sky-600 hover:bg-sky-700", onClick: () => setMoving({ kind: item.kind, id: item.id, title: item.title, projectId: item.projectId }) })
-          if (item.kind === "session" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => void api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message)) })
-          if (item.kind === "chat" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => setDeletingChat(item) })
           if (!actions.length) return row
           return (
             <SwipeActions key={item.id} actions={actions} open={swiped === item.id} onOpenChange={(open) => setSwiped(open ? item.id : undefined)}>

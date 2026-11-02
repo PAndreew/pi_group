@@ -13,6 +13,7 @@ import { api, type Harness, type ModelInfo } from "@/lib/api"
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { user, saveDefaults } = useAuth()
   const defaults = user?.sessionDefaults
+  const [autoTitle, setAutoTitle] = useState(defaults?.autoTitle ?? false)
   const [harnesses, setHarnesses] = useState<Harness[]>([])
   const [harness, setHarness] = useState<string>()
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -60,7 +61,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const save = async () => {
     setSaving(true)
     try {
-      await saveDefaults({ harness: harness!, model: model!, thinkingLevel: thinking! })
+      await saveDefaults({ harness: harness!, model: model!, thinkingLevel: thinking!, autoTitle })
       toast.success("Settings saved")
       onOpenChange(false)
     } catch (error) {
@@ -101,6 +102,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             {loadingModels ? <Loader2 className="size-4 animate-spin" /> : <ModelPicker models={models} value={model} onChange={pickModel} showProvider />}
           </div>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
+            <Label className="flex items-center gap-2"><input type="checkbox" checked={autoTitle} onChange={e => setAutoTitle(e.target.checked)} /> Automatically generate session titles</Label>
             <Label>Reasoning</Label>
             <ThinkingPicker value={thinking} onChange={setThinking} levels={levels} disabled={loadingModels || levels.length < 2} />
           </div>

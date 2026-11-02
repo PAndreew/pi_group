@@ -4,6 +4,7 @@ import {
   Loader2,
   MoreVertical,
   Pencil,
+  WandSparkles,
   Pin,
   PinOff,
   Power,
@@ -533,6 +534,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   }}
                 >
                   <Pencil /> Edit title
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canWrite} onSelect={() => act(async () => { await api.generateTitle(sessionKey); setSummary((await api.session(sessionKey)).session) })}>
+                  <WandSparkles /> Generate title
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setShareOpen(true)}>
                   <Share2 /> Access & sharing
