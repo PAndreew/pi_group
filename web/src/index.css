@@ -201,21 +201,17 @@ html[data-editing] body { padding-bottom: 0; }
   .running-shimmer { animation: none; background: none; -webkit-text-fill-color: currentColor; }
 }
 
-@keyframes bee-buzz {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
-}
 @keyframes bee-wing-left {
-  0%, 100% { content: "<"; }
-  50% { content: "-"; }
+  0%, 100% { content: "-"; }
+  50% { content: ">"; }
 }
 @keyframes bee-wing-right {
-  0%, 100% { content: ">"; }
-  50% { content: "-"; }
+  0%, 100% { content: "-"; }
+  50% { content: "<"; }
 }
-.ascii-bee { width: max-content; animation: bee-buzz 0.3s ease-in-out infinite; }
-.ascii-bee-wing-left::before { content: "<"; animation: bee-wing-left 0.18s steps(1) infinite; }
-.ascii-bee-wing-right::before { content: ">"; animation: bee-wing-right 0.18s steps(1) infinite; }
+.ascii-bee { width: max-content; }
+.ascii-bee-wing-left::before { content: "-"; animation: bee-wing-left 0.12s steps(1) infinite; }
+.ascii-bee-wing-right::before { content: "-"; animation: bee-wing-right 0.12s steps(1) infinite; }
 @media (prefers-reduced-motion: reduce) {
   .ascii-bee, .ascii-bee-wing-left::before, .ascii-bee-wing-right::before { animation: none; }
 }
@@ -252,7 +248,7 @@ html[data-editing] body { padding-bottom: 0; }
   background: var(--composer-background);
   color: var(--composer-foreground);
   border: none;
-  padding-right: 36px;
+  padding-right: 8px;
 }
 [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-description] { color: inherit; }
 [data-sonner-toaster] [data-sonner-toast]:not(:has([data-icon]))::before {
@@ -262,15 +258,22 @@ html[data-editing] body { padding-bottom: 0; }
 }
 [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-close-button],
 [data-sonner-toaster] [data-sonner-toast][data-styled='true']:hover [data-close-button]:hover {
-  left: auto;
-  right: 6px;
-  top: 6px;
+  position: static;
+  order: 10;
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: center;
+  width: auto;
+  height: auto;
+  padding: 8px 12px;
   transform: none;
   border: none;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
+  border-radius: 999px;
+  background: var(--composer-background);
+  color: var(--composer-foreground);
   box-shadow: none;
+  font: inherit;
+  text-align: center;
 }
 
 [data-composer-box] { background-color: var(--composer-background); color: var(--composer-foreground); }

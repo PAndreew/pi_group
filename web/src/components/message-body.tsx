@@ -1,6 +1,7 @@
 import { Share } from "lucide-react"
 import { ImageGallery } from "@/components/image-gallery"
 import { Markdown } from "@/components/markdown"
+import { WebLink } from "@/components/web-link"
 import { api } from "@/lib/api"
 import { isVideo, mediaRefs, withoutAttachmentList } from "@/lib/attachments"
 import { withoutRefDetails } from "@/lib/element-refs"
@@ -13,9 +14,9 @@ export function Linkified({ text }: { text: string }) {
     <>
       {linkify(text).map((part, i) =>
         "url" in part ? (
-          <a key={i} href={part.href} target="_blank" rel="noreferrer noopener" className="break-all underline underline-offset-2">
+          <WebLink key={i} href={part.href} className="break-all underline underline-offset-2">
             {part.url}
-          </a>
+          </WebLink>
         ) : (
           part.text
         ),

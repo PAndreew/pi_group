@@ -353,7 +353,7 @@ export default function App() {
     <AuthProvider>
       <TooltipProvider>
         <Gate />
-        <Toaster position="top-center" closeButton icons={{ success: <Check className="size-4 text-green-600" />, info: <Check className="size-4 text-green-600" />, warning: <X className="size-4 text-red-600" />, error: <X className="size-4 text-red-600" /> }} />
+        <Toaster position="top-center" closeButton toastOptions={{ closeButtonAriaLabel: "Cancel notification" }} icons={{ close: <span>Cancel</span>, success: <Check className="size-4 text-green-600" />, info: <Check className="size-4 text-green-600" />, warning: <X className="size-4 text-red-600" />, error: <X className="size-4 text-red-600" /> }} />
       </TooltipProvider>
     </AuthProvider>
   )

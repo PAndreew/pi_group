@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
 import { ImageGallery } from "@/components/image-gallery"
+import { WebLink } from "@/components/web-link"
 import { Chart, LinkPreviewCard } from "@/components/rich-blocks"
 import { api } from "@/lib/api"
 import { fileLinkPath } from "@/lib/file-link"
@@ -83,6 +84,7 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
             const file = files ? fileLinkPath(href, base, root) : undefined
             // "#…" links are routes in this app (a shared message's source); they open in place.
             if (href?.startsWith("#")) return <a {...props} href={href}>{children}</a>
+            if (!file && /^https?:\/\//i.test(href ?? "")) return <WebLink {...props} href={href}>{children}</WebLink>
             if (!file) return <a {...props} href={href} target="_blank" rel="noreferrer noopener">{children}</a>
             return (
               <a

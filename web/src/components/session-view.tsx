@@ -187,12 +187,10 @@ function AgentBubble({
           </button>
         </div>
       {(run.running || run.answer || question || answered.length > 0 || interactions) && <div className="agent-message agent-bubble rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm">
-        {run.running && !run.answer && !question && !interactions && (
-          <div role="status" aria-label="Beezy is working" className="py-2 text-amber-600 dark:text-amber-400">
+        {run.running && !run.answer?.trim() && !question && !interactions && (
+          <div role="status" aria-label="Beezy is working" className="py-2 text-black">
             <pre aria-hidden="true" className="ascii-bee m-0 font-mono text-xs leading-tight">
-              {" \\ /\n"}
               <span className="ascii-bee-wing-left" />{"(oo)"}<span className="ascii-bee-wing-right" />
-              {"\n  v"}
             </pre>
           </div>
         )}
@@ -534,7 +532,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     setRenameOpen(true)
                   }}
                 >
-                  <Pencil /> Rename
+                  <Pencil /> Edit title
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setShareOpen(true)}>
                   <Share2 /> Access & sharing
@@ -569,8 +567,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
             {state && runs.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No messages yet. Ask the agent something.</p>}
             {authorFilter !== "all" && <p className="text-xs text-muted-foreground">Showing this author’s prompts with their agent responses. <button className="underline" onClick={() => setAuthorFilter("all")}>Show everyone</button></p>}
             {state && runs.length > 0 && visibleRuns.length === 0 && <p className="text-sm text-muted-foreground">No prompts from this author.</p>}
-            {visibleRuns.map(({ run, index }) => (
-              <RunView
+            {visibleRuns.map(({ run, index }) => {
+              const cards = interactions.cards.filter((card) => run.steps.some((step) => step.toolCall?.id === card.toolCallId))
+              return <RunView
                 key={run.key}
                 run={run}
                 folder={summary?.path}
@@ -585,9 +584,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 question={run === lastRun ? question : undefined}
                 onAnswer={run === lastRun && question && canWrite ? answer(question) : undefined}
                 answered={answered.filter((a) => a.runKey === run.key)}
-                interactions={<InteractionCards cards={interactions.cards.filter((card) => run.steps.some((step) => step.toolCall?.id === card.toolCallId))} canWrite={canWrite} onResolved={interactions.onResolved} />}
+                interactions={cards.length > 0 ? <InteractionCards cards={cards} canWrite={canWrite} onResolved={interactions.onResolved} /> : undefined}
               />
-            ))}
+            })}
             {state?.notice?.level === "error" && !running && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -712,7 +711,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename session</DialogTitle>
+            <DialogTitle>Edit session title</DialogTitle>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -725,7 +724,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
             }}
             className="grid gap-4"
           >
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+            <Input aria-label="Session title" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
             <DialogFooter>
               <Button type="submit">Save</Button>
             </DialogFooter>

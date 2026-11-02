@@ -2,23 +2,9 @@ import { Clock, Copy, Pencil, Reply, Share, SmilePlus, Trash2, X } from "lucide-
 import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { copyText } from "@/lib/clipboard"
 
 export const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "🔥", "👀", "✅"]
-
-/** Clipboard API where allowed (HTTPS, localhost), else the old selection trick for plain-HTTP LAN use. */
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const area = Object.assign(document.createElement("textarea"), { value: text, readOnly: true })
-    area.style.cssText = "position:fixed;opacity:0"
-    document.body.append(area)
-    area.select()
-    const ok = document.execCommand("copy")
-    area.remove()
-    if (!ok) throw new Error("Copy is not available here")
-  }
-}
 
 const round = "grid size-8 shrink-0 place-items-center rounded-full transition-colors focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-35 [&_svg]:size-4"
 
