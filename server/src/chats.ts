@@ -174,6 +174,8 @@ export function transcript(messages: ChatMessage[]) {
 
 export function chatTitle(chat: Chat, viewerId?: string) {
 	if (chat.title) return chat.title;
+	const sessionName = chat.sessionKey ? store.session(chat.sessionKey)?.name : undefined;
+	if (sessionName) return sessionName;
 	const names = memberIds(chat.id)
 		.filter((id) => id !== viewerId)
 		.map((id) => store.userById(id)?.username ?? "unknown");

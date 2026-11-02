@@ -139,6 +139,9 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(meta.ownerId, bob.id);
 		assert.deepEqual(meta.shares, [{ userId: anna.id, access: "write" }], "chat members can follow pi's session");
 		assert.equal(chat.chat.title, "bob, pi");
+		meta.name = "Cron investigation";
+		assert.equal((await call("anna", "GET", `/chats/${chatId}`)).body.chat.title, "Cron investigation", "hybrid chats display their agent session's generated title");
+		meta.name = undefined;
 
 		// The next mention only carries what was said since pi's last turn.
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "thanks! @pi also check the cron job" });

@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, MoreVertical, TriangleAlert } from "lucide-react"
+import { ArrowLeft, ExternalLink, Folder, FolderInput, Loader2, MoreVertical, TriangleAlert, WandSparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -313,6 +313,12 @@ export function ChatView({ chatId }: { chatId: string }) {
               <Button variant="ghost" size="icon-sm" aria-label="Chat actions"><MoreVertical /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {chat.sessionKey && <DropdownMenuItem onSelect={() => {
+                void api.generateTitle(chat.sessionKey!).then(({ name }) => {
+                  setChat(current => current ? { ...current, title: name } : current)
+                  toast.success("Title generated")
+                }).catch(error => toast.error(error.message))
+              }}><WandSparkles /> Generate title</DropdownMenuItem>}
               {watch && <DropdownMenuItem onSelect={watch}><ExternalLink /> Open agent session</DropdownMenuItem>}
               <DropdownMenuItem onSelect={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })}><FolderInput /> Move to project…</DropdownMenuItem>
             </DropdownMenuContent>

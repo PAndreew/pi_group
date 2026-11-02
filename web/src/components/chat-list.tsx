@@ -1,4 +1,4 @@
-import { Brain, Folder, FolderInput, Loader2, MoreVertical, Trash2 } from "lucide-react"
+import { Brain, Folder, FolderInput, Loader2, MoreVertical, Trash2, WandSparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -118,6 +118,12 @@ export function ChatList({ selected, className, requests }: { selected?: string;
                 <Button variant="ghost" size="icon-sm" className="mr-1 shrink-0" aria-label={`Actions for ${item.title}`}><MoreVertical /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {item.kind === "session" && item.canMove && <DropdownMenuItem onSelect={() => {
+                  void api.generateTitle(item.id).then(({ name }) => {
+                    setItems(current => current?.map(row => row.id === item.id ? { ...row, title: name } : row))
+                    toast.success("Title generated")
+                  }).catch(error => toast.error(error.message))
+                }}><WandSparkles /> Generate title</DropdownMenuItem>}
                 {actions.map((action) => (
                   <DropdownMenuItem key={action.label} onSelect={action.onClick} className={action.label.startsWith("Delete ") ? "text-destructive focus:text-destructive" : undefined}>
                     {action.icon}{action.label.startsWith("Delete ") ? "Delete" : "Move to project"}
