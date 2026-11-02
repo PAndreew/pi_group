@@ -14,25 +14,25 @@ export interface Person {
 export interface ParsedMessage {
   /** What was typed, mentions included. */
   raw: string
-  /** Without the @ and $ mentions. */
+  /** Without the @ and /folder mentions. */
   text: string
   pi: boolean
   people: Person[]
   folder?: string
 }
 
-/** Folder mentions keep spaces as no-break spaces so a $path stays one token. */
+/** Folder mentions keep spaces as no-break spaces so a /path stays one token. */
 const NBSP = "\u00a0"
 const MENTION = /(^|\s)@([\w.-]+)/g
-const FOLDER = /(^|\s)\$(\S+)/g
+const FOLDER = /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)/g
 
 let directory: Promise<Person[]> | undefined
 const people = () => (directory ??= api.directory().then((d) => d.users, () => []))
 
-/** `raw` with its $folder mention (if any) replaced by `folder`, placed first. */
+/** `raw` with its /folder mention (if any) replaced by `folder`, placed first. */
 export function withFolder(raw: string, folder: string): string {
   const rest = raw.replace(FOLDER, (_all, lead) => lead).replace(/^[ 	]+/, "")
-  return `$${folder.replaceAll(" ", NBSP)} ${rest}`
+  return `/${folder.replaceAll(" ", NBSP)} ${rest}`
 }
 
 export function parseMessage(raw: string, everyone: Person[]): ParsedMessage {
@@ -57,12 +57,12 @@ type Suggestion =
 
 /** The token being typed at the caret, if it is a mention. */
 function activeToken(value: string, caret: number) {
-  const match = /(^|\s)([@$/])([^\s@$]*)$/.exec(value.slice(0, caret))
-  return match ? { trigger: match[2] as "@" | "$" | "/", query: match[3], start: caret - match[3].length - 1 } : undefined
+  const match = /(^|\s)([@/])((?:[^\s@]|\u00a0)*)$/.exec(value.slice(0, caret))
+  return match ? { trigger: match[2] as "@" | "/", query: match[3], start: caret - match[3].length - 1 } : undefined
 }
 
 /**
- * A message box with @ (pi and people), $ (fuzzy folders or files) and / (skills) suggestions.
+ * A message box with @ (pi and people), / (fuzzy folders or files) and /skill: (skills) suggestions.
  * Enter sends, Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
  */
 export function MentionComposer({
@@ -88,7 +88,7 @@ export function MentionComposer({
   onStop?: () => void
   selfId?: string
   /**
-   * What $ offers: "folder" picks the folder for a new chat ($path token), "paths" mentions files and
+   * What / offers: "folder" picks the folder for a new chat (/path token), "paths" mentions files and
    * folders, inserted as `paths` relative to `folder` so pi can open them.
    */
   hash?: "folder" | "paths" | "off"
@@ -118,7 +118,7 @@ export function MentionComposer({
       setIndex(0)
       return
     }
-    if (token.trigger === "/") {
+    if (token.trigger === "/" && token.query.startsWith("skill:")) {
       let alive = true
       const request = sessionKey ? api.tools(sessionKey) : api.toolsAt(folder)
       void request.then((r) => {
@@ -168,7 +168,7 @@ export function MentionComposer({
             ? `/skill:${s.name} `
             : s.kind === "path"
               ? `\`${relativePath(folder, s.path)}${s.type === "dir" ? "/" : ""}\` `
-              : `$${s.path.replaceAll(" ", NBSP)} `
+              : `/${s.path.replaceAll(" ", NBSP)} `
     const next = value.slice(0, token.start) + insert + value.slice(caret)
     const at = token.start + insert.length
     onChange(next)
@@ -189,7 +189,7 @@ export function MentionComposer({
   return (
     <ComposerBox agent={agent} controls={controls} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
-        <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md" role="listbox">
+        <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
