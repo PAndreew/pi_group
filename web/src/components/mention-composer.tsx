@@ -1,4 +1,4 @@
-import { File, Folder, X } from "lucide-react"
+import { File, Folder, Trash2, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
@@ -67,8 +67,8 @@ function activeToken(value: string, caret: number) {
  * Enter sends, Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
  */
 export function MentionComposer({
-  value,
-  onChange,
+  value: rawValue,
+  onChange: onRawChange,
   onSubmit,
   placeholder,
   busy,
@@ -100,6 +100,11 @@ export function MentionComposer({
   /** Files or images pasted into the box. */
   onFiles?: (files: File[]) => void
 }) {
+  // Only completed folder tokens become pills; the token being searched stays editable.
+  const folderToken = hash === "folder" ? /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)[ \t\n]/.exec(rawValue) : null
+  const selectedFolder = folderToken?.[2].replaceAll(NBSP, " ")
+  const value = folderToken ? rawValue.slice(0, folderToken.index) + folderToken[1] + rawValue.slice(folderToken.index + folderToken[0].length) : rawValue
+  const onChange = (next: string) => onRawChange(selectedFolder ? withFolder(next, selectedFolder) : next)
   const input = useRef<HTMLTextAreaElement>(null)
   const dictation = useSilentDictation((text) => {
     onChange(text)
@@ -177,8 +182,9 @@ export function MentionComposer({
               ? `\`${relativePath(folder, s.path)}${s.type === "dir" ? "/" : ""}\` `
               : `/${s.path.replaceAll(" ", NBSP)} `
     const next = value.slice(0, token.start) + insert + value.slice(caret)
-    const at = token.start + insert.length
-    onChange(next)
+    const at = s.kind === "folder" ? token.start : token.start + insert.length
+    if (s.kind === "folder") onRawChange(withFolder(value.slice(0, token.start) + value.slice(caret), s.path))
+    else onChange(next)
     setToken(undefined)
     requestAnimationFrame(() => {
       input.current?.focus()
@@ -188,7 +194,7 @@ export function MentionComposer({
 
   const submit = async () => {
     if (busy || !value.trim()) return
-    await onSubmit(parseMessage(value, everyone))
+    await onSubmit(parseMessage(rawValue, everyone))
   }
 
   const open = Boolean(token) && options.length > 0
@@ -201,7 +207,9 @@ export function MentionComposer({
     const update = () => {
       const viewportTop = window.visualViewport?.offsetTop ?? 0
       const top = Math.max(viewportTop, header?.getBoundingClientRect().bottom ?? 0)
-      const bottom = anchor?.getBoundingClientRect().top ?? 0
+      // Measure the actual list edge: its containing block can have padding/borders,
+      // and keyboard-driven scrolling moves it without resizing the anchor.
+      const bottom = list.getBoundingClientRect().bottom
       list.style.maxHeight = `${Math.max(0, Math.min(256, bottom - top - 8))}px`
     }
     update()
@@ -209,11 +217,13 @@ export function MentionComposer({
     if (anchor) observer.observe(anchor)
     if (header) observer.observe(header)
     window.addEventListener("resize", update)
+    window.addEventListener("scroll", update, true)
     window.visualViewport?.addEventListener("resize", update)
     window.visualViewport?.addEventListener("scroll", update)
     return () => {
       observer.disconnect()
       window.removeEventListener("resize", update)
+      window.removeEventListener("scroll", update, true)
       window.visualViewport?.removeEventListener("resize", update)
       window.visualViewport?.removeEventListener("scroll", update)
     }
@@ -223,7 +233,7 @@ export function MentionComposer({
     <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
         <ul ref={suggestions} className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
-          <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
+          <li className="sticky top-0 z-10 flex justify-end bg-[var(--composer-background)]"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
               <button
@@ -262,6 +272,15 @@ export function MentionComposer({
             </li>
           ))}
         </ul>
+      )}
+      {selectedFolder && (
+        <div className="px-3 pt-2">
+          <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => { onRawChange(value); setToken(undefined); input.current?.focus() }}>
+            <Folder className="size-3.5 shrink-0" />
+            <span className="truncate">/{selectedFolder}</span>
+            <Trash2 className="size-3.5 shrink-0 text-muted-foreground" />
+          </button>
+        </div>
       )}
       <Textarea
         ref={input}
