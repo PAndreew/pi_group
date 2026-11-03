@@ -77,7 +77,9 @@ if (existsSync(config.webDist)) {
 	app.get(/^(?!\/api\/).*/, (_req, res) => {
 		// HTML must always discover the latest hashed assets after a local deployment.
 		res.setHeader("Cache-Control", "no-store");
-		res.sendFile(path.join(config.webDist, "index.html"), { cacheControl: false });
+		// Releases live under ~/.local: resolve relative to the trusted root so
+		// sendFile's dotfile protection does not reject the installation path.
+		res.sendFile("index.html", { root: config.webDist, cacheControl: false });
 	});
 } else {
 	app.get("/", (_req, res) => void res.type("text").send("pi_group API is running. Build the web app (npm run build) or use the Vite dev server."));
