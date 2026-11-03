@@ -69,7 +69,18 @@ export const config = {
 	webDist: path.resolve(env("WEB_DIST", path.join(import.meta.dirname, "..", "..", "web", "dist"))),
 };
 
+// Kept outside the common config surface; never inherited by agent/terminal children.
+export const lipreadConfig = {
+	serviceUrl: process.env.LIPREAD_SERVICE_URL ?? '',
+	serviceToken: process.env.LIPREAD_SERVICE_TOKEN ?? '',
+	llmApiKey: process.env.LIPREAD_LLM_API_KEY ?? '',
+	llmModel: process.env.LIPREAD_LLM_MODEL ?? '',
+	llmUrl: process.env.LIPREAD_LLM_URL ?? 'https://api.openai.com/v1/chat/completions',
+};
+
 // Agent processes, terminals and job scripts inherit process.env; keep server credentials out.
+delete process.env.LIPREAD_SERVICE_TOKEN;
+delete process.env.LIPREAD_LLM_API_KEY;
 delete process.env.VAULT_TOKEN;
 delete process.env.VAULT_MASTER_KEY;
 delete process.env.CLOUDFLARE_API_TOKEN;

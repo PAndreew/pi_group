@@ -1,12 +1,13 @@
 import express from 'express';
 import { z } from 'zod';
 import { requireAuth } from './auth.js';
+import { lipreadConfig } from './config.js';
 
-export function lipreadRoutes() {
+export function lipreadRoutes(settings = lipreadConfig) {
   const router = express.Router();
   const active = new Set<string>();
   let transcribing = false;
-  const service = () => process.env.LIPREAD_SERVICE_URL && process.env.LIPREAD_SERVICE_TOKEN ? { url: process.env.LIPREAD_SERVICE_URL.replace(/\/$/, ''), token: process.env.LIPREAD_SERVICE_TOKEN } : undefined;
+  const service = () => settings.serviceUrl && settings.serviceToken ? { url: settings.serviceUrl.replace(/\/$/, ''), token: settings.serviceToken } : undefined;
   router.get('/lipread/config', requireAuth, async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     let ready = false;
@@ -17,7 +18,7 @@ export function lipreadRoutes() {
         ready = response.ok && (await response.json() as { ready?: boolean }).ready === true;
       } catch { /* Offline is a status, not a reason to load a model in the browser. */ }
     }
-    res.json({ mode: 'server', ready, correction: Boolean(process.env.LIPREAD_LLM_API_KEY && process.env.LIPREAD_LLM_MODEL) });
+    res.json({ mode: 'server', ready, correction: Boolean(settings.llmApiKey && settings.llmModel) });
   });
   const readClip = express.raw({ type: ['video/*', 'application/octet-stream'], limit: '12mb' });
   router.post('/lipread/transcribe', requireAuth, (req, res, next) => {
@@ -53,15 +54,15 @@ export function lipreadRoutes() {
   });
   router.post('/lipread/correct', requireAuth, async (req, res) => {
     const { text } = z.object({ text: z.string().trim().min(1).max(4000) }).parse(req.body);
-    const key = process.env.LIPREAD_LLM_API_KEY;
-    const model = process.env.LIPREAD_LLM_MODEL;
+    const key = settings.llmApiKey;
+    const model = settings.llmModel;
     if (!key || !model) return void res.status(503).json({ error: 'LLM correction is not configured' });
     const user = req.user!.id;
     if (active.has(user)) return void res.status(429).json({ error: 'A correction is already running' });
     active.add(user);
     res.setHeader('Cache-Control', 'no-store');
     try {
-      const response = await fetch(process.env.LIPREAD_LLM_URL || 'https://api.openai.com/v1/chat/completions', {
+      const response = await fetch(settings.llmUrl || 'https://api.openai.com/v1/chat/completions', {
         method: 'POST', signal: AbortSignal.timeout(20_000),
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, temperature: 0, max_tokens: 512, messages: [
