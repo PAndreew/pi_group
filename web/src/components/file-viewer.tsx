@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { CodeBlock, languageFor } from "@/components/code-block"
 import { Markdown } from "@/components/markdown"
+import { PreviewErrorBoundary } from "@/components/preview-error-boundary"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
 import { formatBytes } from "@/lib/utils"
@@ -170,9 +171,11 @@ export function FileViewer({ path, onClose }: { path: string; onClose?: () => vo
   else if (kind === "audio") body = <audio src={url} controls className="mx-auto mt-8 w-full max-w-md" />
   else if (kind === "pdf")
     body = (
-      <Suspense fallback={<Loader2 className="mx-auto mt-10 animate-spin" />}>
-        <PdfViewer url={url} />
-      </Suspense>
+      <PreviewErrorBoundary key={path} downloadUrl={api.downloadUrl(path)}>
+        <Suspense fallback={<Loader2 className="mx-auto mt-10 animate-spin" />}>
+          <PdfViewer url={url} />
+        </Suspense>
+      </PreviewErrorBoundary>
     )
   else if (error) body = <p className="p-4 text-sm text-destructive">{error}</p>
   else if (binary || tooBig)
