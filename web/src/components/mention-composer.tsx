@@ -101,8 +101,10 @@ export function MentionComposer({
   /** Files or images pasted into the box. */
   onFiles?: (files: File[]) => void
 }) {
-  // Only completed folder tokens become pills; the token being searched stays editable.
-  const folderToken = hash === "folder" ? /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)[ \t\n]/.exec(rawValue) : null
+  const [editingFolder, setEditingFolder] = useState(false)
+  useEffect(() => { if (!rawValue) setEditingFolder(false) }, [rawValue])
+  // Backspacing a pill unwraps it into ordinary text until another folder is picked.
+  const folderToken = hash === "folder" && !editingFolder ? /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)[ \t\n]/.exec(rawValue) : null
   const selectedFolder = folderToken?.[2].replaceAll(NBSP, " ")
   const value = folderToken ? rawValue.slice(0, folderToken.index) + folderToken[1] + rawValue.slice(folderToken.index + folderToken[0].length) : rawValue
   const onChange = (next: string) => onRawChange(selectedFolder ? withFolder(next, selectedFolder) : next)
@@ -184,13 +186,15 @@ export function MentionComposer({
               : `/${s.path.replaceAll(" ", NBSP)} `
     const next = value.slice(0, token.start) + insert + value.slice(caret)
     const at = s.kind === "folder" ? token.start : token.start + insert.length
-    if (s.kind === "folder") onRawChange(withFolder(value.slice(0, token.start) + value.slice(caret), s.path))
+    if (s.kind === "folder") {
+      setEditingFolder(false)
+      onRawChange(withFolder(value.slice(0, token.start) + value.slice(caret), s.path))
+    }
     else onChange(next)
     setToken(undefined)
-    requestAnimationFrame(() => {
-      input.current?.focus()
-      input.current?.setSelectionRange(at, at)
-    })
+    // Keep mobile focus in the original user gesture, never blur/refocus on a later frame.
+    if (document.activeElement !== input.current) input.current?.focus({ preventScroll: true })
+    requestAnimationFrame(() => input.current?.setSelectionRange(at, at))
   }
 
   const submit = async () => {
@@ -212,13 +216,16 @@ export function MentionComposer({
       const rect = anchor.getBoundingClientRect()
       const ceiling = Math.max(0, header?.getBoundingClientRect().bottom ?? 0) + 3
       const available = Math.max(0, rect.top - 4 - ceiling)
-      const height = Math.min(256, available)
-      list.style.top = `${Math.max(ceiling, rect.top - 4 - height)}px`
+      list.style.top = `${ceiling}px`
       list.style.left = `${rect.left}px`
       list.style.width = `${Math.min(rect.width, 384)}px`
-      list.style.maxHeight = `${height}px`
+      list.style.maxHeight = `${available}px`
     }
-    update()
+    // App viewport sizing runs in animation frames too. Follow its final geometry,
+    // not just the earlier visualViewport event that triggered it.
+    let frame = 0
+    const follow = () => { update(); frame = requestAnimationFrame(follow) }
+    follow()
     const observer = new ResizeObserver(update)
     if (anchor) observer.observe(anchor)
     if (header) observer.observe(header)
@@ -227,6 +234,7 @@ export function MentionComposer({
     window.visualViewport?.addEventListener("resize", update)
     window.visualViewport?.addEventListener("scroll", update)
     return () => {
+      cancelAnimationFrame(frame)
       observer.disconnect()
       window.removeEventListener("resize", update)
       window.removeEventListener("scroll", update, true)
@@ -238,7 +246,7 @@ export function MentionComposer({
   return (
     <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && createPortal(
-        <ul ref={suggestions} className="fixed z-50 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
+        <ul ref={suggestions} className="fixed z-50 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox" onPointerDown={(e) => e.preventDefault()}>
           <li className="sticky top-0 z-10 flex justify-end bg-[var(--composer-background)]"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
@@ -282,9 +290,9 @@ export function MentionComposer({
       <div className="flex min-w-0 items-start gap-1 px-3">
       {selectedFolder && (
         <div className="max-w-[50%] shrink-0 pt-2">
-          <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => { onRawChange(value); setToken(undefined); input.current?.focus() }}>
+          <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { onRawChange(value); setToken(undefined); input.current?.focus() }}>
             <Folder className="size-3.5 shrink-0" />
-            <span className="truncate">/{selectedFolder}</span>
+            <span className="truncate">{selectedFolder}</span>
             <Trash2 className="size-3.5 shrink-0 text-muted-foreground" />
           </button>
         </div>
@@ -292,7 +300,7 @@ export function MentionComposer({
       <Textarea
         ref={input}
         value={value}
-        placeholder={placeholder}
+        placeholder={selectedFolder ? "" : placeholder}
         rows={1}
         className="max-h-48 min-h-12 min-w-0 flex-1 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
@@ -301,8 +309,11 @@ export function MentionComposer({
         onKeyDown={(e) => {
           if (e.key === "Backspace" && selectedFolder && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
             e.preventDefault()
-            onRawChange(value)
+            const editable = `/${selectedFolder.replaceAll(" ", NBSP)}`.slice(0, -1)
+            setEditingFolder(true)
+            onRawChange(`${editable} ${value}`)
             setToken(undefined)
+            requestAnimationFrame(() => input.current?.setSelectionRange(editable.length, editable.length))
             return
           }
           if (open) {
