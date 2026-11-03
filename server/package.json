@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "test": "tsx --test src/*.test.ts",
-    "test:deploy": "tsx --test --test-concurrency=4 $(find src -maxdepth 1 -name '*.test.ts' ! -name 'terminal.test.ts' | sort)",
+    "test:deploy": "node scripts/test-deploy.mjs",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "user": "node dist/cli.js",
