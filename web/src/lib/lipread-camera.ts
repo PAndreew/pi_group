@@ -1,6 +1,11 @@
 import { FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision'
 import { fillLandmarks, similarity, smoothLandmarks, type Landmarks } from './lipread-math'
 
+let sharedDetector: Promise<FaceDetector> | undefined
+export function warmDetector() {
+  return sharedDetector ??= createDetector().catch(error => { sharedDetector = undefined; throw error })
+}
+
 export async function createDetector() {
   return FaceDetector.createFromOptions(await FilesetResolver.forVisionTasks('/lipread/mediapipe'), {
     baseOptions: { modelAssetPath: '/lipread/blaze_face_short_range.tflite', delegate: 'CPU' },

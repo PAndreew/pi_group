@@ -49,6 +49,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
+import { useSilentDictation } from "@/hooks/use-silent-dictation"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
 import { ConversationHeader } from "@/lib/nav-slot"
@@ -306,6 +307,8 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
   const [open, setOpen] = useState<{ run: number; step: number | null; failed?: boolean } | null>(null)
   const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
+  const dictation = useSilentDictation(setText)
+  useEffect(() => () => dictation.cancel(), [sessionKey, dictation.cancel])
   const [reply, setReply] = useState<ReplyTarget>()
   const [editing, setEditing] = useState<EditTarget>()
   /** An agent answer being sent on to other sessions. */
@@ -401,6 +404,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
 
   const canWrite = summary?.access === "owner" || summary?.access === "admin" || summary?.access === "write"
   const running = Boolean(state?.running)
+  useEffect(() => { if (running || sending || editing) dictation.cancel() }, [running, sending, editing, dictation.cancel])
   const title = state?.name || summary?.name || summary?.firstMessage || "New session"
 
   const startEdit = (target: EditTarget) => {
@@ -673,6 +677,9 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                     controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}
                     onFiles={(pasted) => setFiles((fs) => [...fs, ...pasted])}
                     onSend={send}
+                    onDictate={editing ? undefined : dictation.click}
+                    dictationPhase={dictation.phase}
+                    dictationHint={text.trim() && dictation.phase === 'loading' ? undefined : dictation.hint}
                     canSend={Boolean(text.trim()) || (!editing && (files.length > 0 || refs.length > 0))}
                     sending={sending}
                     onStop={running ? () => act(() => api.abort(sessionKey)) : undefined}
@@ -681,7 +688,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                   <PathDropup value={text} folder={summary?.path ?? ""} onChange={setText} />
                   <Textarea
                     value={text}
-                    onChange={(e) => setText(e.target.value)}
+                    onChange={(e) => { dictation.cancel(); setText(e.target.value) }}
                     onKeyDown={onKeyDown}
                     placeholder={editing ? "Edit message…" : "Message the agent…"}
                     className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}

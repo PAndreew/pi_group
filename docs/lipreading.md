@@ -1,6 +1,6 @@
 # Experimental silent dictation
 
-With an empty chat input, click the blue audio-lines **Silent dictation** button in the Send position. Typing replaces it with the normal active Send button. Allow the front camera; recording starts immediately once the camera is ready, independently of model loading. There is no visible camera preview: a red recording indicator and timer show capture status. Mouth a short English phrase, and click Stop & transcribe (10-second limit). Review/edit the result, then Use draft. This appends it to the existing input; the ordinary Send button is still required. Stopping or closing releases the camera. The recognition model stays warm until the page closes/reloads, so reopening does not reinitialize it. Typing is unchanged.
+No modal or camera preview. Beezy preloads the recognition model and face detector when the signed-in chat composer mounts, **before recording** and without requesting camera permission. While warming up, the empty-input Send position shows a disabled blue spinner and a small preparation hint. Once ready it becomes blue audio lines. Click to allow the front camera and record; the same button becomes a red Stop square with an inline timer. Click Stop (or reach the 10-second limit) to transcribe into the ordinary chat input. Edit the draft and press Send normally—nothing auto-sends. Typing at any stage cancels capture/processing and restores Send; late results cannot overwrite the typed draft. Models stay warm until page unload. First-use downloading cannot be eliminated, but it happens before the recording button is enabled.
 
 Requires HTTPS or localhost, a camera, WebAssembly SIMD, and sufficient browser memory. This is an experiment, not reliable dictation. Visually ambiguous words cannot be recovered reliably by an LLM. Names/code are especially difficult. Silent mouthing differs from the voiced footage used in the published evaluations.
 
@@ -27,7 +27,7 @@ Assets are optional, ignored by Git, and occupy approximately 230 MB (plus anoth
 - Author reports ~28.5% WER on 100 LRS3 clips with greedy decoding, NOT silent-mouthing performance. Not independently reproduced here.
 - Pipeline: hidden camera without microphone → raw frame capture (no ML startup dependency) → after Stop, BlazeFace eye/nose/mouth points → 25fps nearest-frame resampling → missing-point interpolation → ±6-frame smoothing with centre correction → least-squares similarity alignment to Auto-AVSR's mean face → 96px mouth region, centre-cropped to 88px grayscale → `(pixel/255 - 0.421)/0.165` → ONNX WASM worker → greedy CTC.
 - Alignment uses deterministic least-squares fitting rather than upstream OpenCV LMEDS; canvas interpolation/grayscale ordering also differs slightly. Validate real accuracy before treating this as equivalent to the reference implementation.
-- Full camera frames exist only in browser memory while recording/preprocessing. Crops and full frames are not uploaded or persisted. Stopping/closing stops camera tracks. Closing clears captured frames; only the recognition model worker remains warm for this page session. No external CDN is used during capture.
+- Full camera frames exist only in browser memory while recording/preprocessing. Crops and full frames are not uploaded or persisted. Stopping, typing or leaving the composer stops camera tracks and clears captured frames. Only the recognition model and static detector remain warm for this page session. No external CDN is used during capture.
 
 ## Run on the phone/laptop instead of the Pi
 
@@ -44,7 +44,7 @@ LIPREAD_LLM_MODEL=your-cheap-fast-model
 LIPREAD_LLM_URL=https://api.openai.com/v1/chat/completions
 ```
 
-Click **Correct with LLM** in the review screen. Only the raw transcript goes to the provider; the key stays server-side. Correction is deliberately explicit, not automatic. The system prompt asks for conservative punctuation/casing/grammar repair and no invented missing content. It cannot guarantee correctness. The original text stays visible. No model/provider is chosen or charged by default. One concurrent request per signed-in user, a 20-second timeout, 4000-character input limit and 512 output-token limit apply. Shared deployments should add a spend quota before enabling it broadly.
+Configuring these variables opts into automatic text correction after recognition, before the draft appears in the ordinary input. The recording hint states when LLM text correction is enabled. Only transcript text goes to the provider; the key stays server-side. Without configuration, recognition remains entirely local. Correction failure preserves the raw draft and adds an inline hint. The system prompt asks for conservative punctuation/casing/grammar repair and no invented missing content. It cannot guarantee correctness; always review the draft. No model/provider is chosen or charged by default. One concurrent request per signed-in user, a 20-second timeout, 4000-character input limit and 512 output-token limit apply. Shared deployments should add a spend quota before enabling it broadly.
 
 ## Tests and benchmark
 
@@ -52,6 +52,8 @@ Click **Correct with LLM** in the review screen. Only the raw transcript goes to
 npm --prefix web test
 # With the Vite development server running on localhost:5173:
 cd web && node test/lipread-benchmark.mjs
+# Mocked browser UI/state regression test against Vite (not a recognition accuracy test):
+node test/lipread-ui.mjs
 ```
 
 Pi 5 8GB, headless Chromium, single-thread WASM: a 25-frame **synthetic constant-image** clip loaded in 3.8s and inferred in 2.8s. This proves model execution, not face preprocessing or recognition quality. Real clip latency may differ; longer clips have different scaling. The synthetic output was empty, as expected. No silent human recording has been evaluated yet.
