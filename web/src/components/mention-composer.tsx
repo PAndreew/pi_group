@@ -1,5 +1,5 @@
 import { File, Folder, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
 import { useSilentDictation } from "@/hooks/use-silent-dictation"
@@ -192,11 +192,37 @@ export function MentionComposer({
   }
 
   const open = Boolean(token) && options.length > 0
+  const suggestions = useRef<HTMLUListElement>(null)
+  useLayoutEffect(() => {
+    if (!open || !suggestions.current) return
+    const list = suggestions.current
+    const anchor = list.offsetParent
+    const header = document.querySelector("header")
+    const update = () => {
+      const viewportTop = window.visualViewport?.offsetTop ?? 0
+      const top = Math.max(viewportTop, header?.getBoundingClientRect().bottom ?? 0)
+      const bottom = anchor?.getBoundingClientRect().top ?? 0
+      list.style.maxHeight = `${Math.max(0, Math.min(256, bottom - top - 8))}px`
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    if (anchor) observer.observe(anchor)
+    if (header) observer.observe(header)
+    window.addEventListener("resize", update)
+    window.visualViewport?.addEventListener("resize", update)
+    window.visualViewport?.addEventListener("scroll", update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", update)
+      window.visualViewport?.removeEventListener("resize", update)
+      window.visualViewport?.removeEventListener("scroll", update)
+    }
+  }, [open])
 
   return (
     <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
-        <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
+        <ul ref={suggestions} className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
