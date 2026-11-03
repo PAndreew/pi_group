@@ -1,0 +1,7 @@
+numpy==1.26.4
+onnxruntime==1.24.3
+mediapipe==0.10.18
+opencv-contrib-python==4.11.0.86
+# MediaPipe imports JAX transitively; bound these to the NumPy 1.x-compatible releases.
+jax==0.4.35
+jaxlib==0.4.35

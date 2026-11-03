@@ -114,7 +114,7 @@ Service setup, updates and development commands: [Operations](docs/operations.md
 
 ## Experimental silent dictation
 
-An optional camera button can read short English lip-movement clips entirely on the device opening Beezy, then insert an editable draft. No microphone or video upload; optional LLM text correction requires separate configuration. This is experimental, not reliable dictation. [Install the model and read the limitations](docs/lipreading.md).
+The empty composer’s audio-lines button records a short silent English clip and inserts an editable draft. A persistent native service on your Beezy server keeps the model warm—no browser model download, microphone, preview or modal. Clips upload to that server after Stop; optional external LLM text correction requires separate configuration. This is experimental, not reliable dictation. [Install the model and read the limitations](docs/lipreading.md).
 
 ## Tenants
 

@@ -9,5 +9,10 @@ data/
 .runtime/
 workspace/
 uploads/
-# Optional lip-reading weights and WASM runtimes, installed by setup-lipread.mjs
+# Legacy browser model assets; native models/runtime live outside this repository.
 web/public/lipread/
+# Python runtime/test artifacts
+__pycache__/
+*.pyc
+lipread/.venv/
+lipread/models/

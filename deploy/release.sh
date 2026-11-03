@@ -61,11 +61,7 @@ git archive "$REF" | tar -x -C "$RELEASE"
 if [[ -f "$ROOT/.env" ]]; then cp "$ROOT/.env" "$RELEASE/.env"; fi
 if [[ -f "$ROOT/server/.env" ]]; then cp "$ROOT/server/.env" "$RELEASE/server/.env"; fi
 (cd "$RELEASE" && npm run setup && npm run build && timeout 180 npm run test:deploy --prefix server && timeout 90 npm test --prefix web)
-# Optional locally installed model assets are deliberately absent from Git.
-if [[ -f "$ROOT/web/public/lipread/ready.json" ]]; then
-  mkdir -p "$RELEASE/web/dist/lipread"
-  cp -a --reflink=auto "$ROOT/web/public/lipread/." "$RELEASE/web/dist/lipread/"
-fi
+# Native lip-reading models live in a separate persistent service, never frontend releases.
 # Preserve paths relative to the original server directory when moving to a release.
 # Evaluate config only (not the application), from the original working directory.
 (cd "$ROOT/server" && node --input-type=module - "$RELEASE" <<'NODE'

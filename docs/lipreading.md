@@ -1,63 +1,91 @@
 # Experimental silent dictation
 
-No modal or camera preview. Beezy preloads the recognition model and face detector when the signed-in chat composer mounts, **before recording** and without requesting camera permission. While warming up, the empty-input Send position shows a disabled blue spinner and a small preparation hint. Once ready it becomes blue audio lines. Click to allow the front camera and record; the same button becomes a red Stop square with an inline timer. Click Stop (or reach the 10-second limit) to transcribe into the ordinary chat input. Edit the draft and press Send normally—nothing auto-sends. Typing at any stage cancels capture/processing and restores Send; late results cannot overwrite the typed draft. Models stay warm until page unload. First-use downloading cannot be eliminated, but it happens before the recording button is enabled.
+## User flow
 
-Requires HTTPS or localhost, a camera, WebAssembly SIMD, and sufficient browser memory. This is an experiment, not reliable dictation. Visually ambiguous words cannot be recovered reliably by an LLM. Names/code are especially difficult. Silent mouthing differs from the voiced footage used in the published evaluations.
+No modal or camera preview. An empty composer shows blue audio lines in the Send position. Click to allow the front camera and record immediately; the button becomes a red Stop square with an inline timer. Stop manually (10-second limit) to transcribe into the ordinary chat input. Edit the draft and press Send normally. Typing cancels recording/upload and prevents a late transcript from replacing typed text. No microphone is used.
 
-## Installation
+**All ML runs in a persistent native service on the Pi**, not in the browser. Refreshing the phone does not reload the model. The camera clip is uploaded to the Pi after Stop. The service processes it in RAM and does not save or log recordings/transcripts. This is a change from the initial browser-local prototype: video now leaves the recording device for your Beezy server. Use HTTPS outside localhost.
 
-From the repository root:
+Silent free-form lip-reading is experimental. Visually ambiguous words cannot be recovered reliably by an LLM. Names/code are particularly difficult. Published accuracy on voiced footage does not establish accuracy for silent mouthing.
+
+## Install the native service
+
+Linux ARM64/x86-64, Python 3.11, Node.js and ffmpeg are needed. On this machine:
 
 ```sh
-npm --prefix web ci
-node web/scripts/setup-lipread.mjs
-npm --prefix web run build
-npm --prefix server run build
+bash lipread/install.sh
+npm run deploy
 ```
 
-Assets are optional, ignored by Git, and occupy approximately 230 MB (plus another copy in web/dist after building). The setup script pins the HF revision and checks SHA-256 for the ONNX model and vocabulary. It downloads Google's versioned BlazeFace short-range model and copies installed MediaPipe/ONNX WASM runtimes. Run the script before building on each installation. No PyTorch, Python environment, or GPU is needed.
+The installer:
 
-**Local deployment:** Beezy's release builder copies installed `web/public/lipread` assets into the candidate release when `ready.json` is present. Weights remain outside Git. On another machine, run the asset setup script before deploying.
+- Downloads/checks the pinned ONNX model and vocabulary into `~/.local/share/beezy-lipread/models` (not Git or frontend assets).
+- Installs the native Python runtime in `~/.local/share/beezy-lipread/.venv`, copies `worker.py`, and enables the user `beezy-lipread.service`.
+- Generates a private bearer token in `~/.config/beezy-lipread/runtime.env` and adds matching `LIPREAD_SERVICE_URL`/`LIPREAD_SERVICE_TOKEN` to the checkout's ignored `.env`. Neither file belongs in Git.
+- Starts an authenticated, **loopback-only** service on port 8792. Beezy's authenticated API proxies requests to it; browsers never receive its bearer token.
 
-## Model and preprocessing
+The model/detector load and warm once at service startup, then stay resident independently of Beezy/browser restarts. The service only reports healthy once warm. To update the worker, rerun the installer and `systemctl --user restart beezy-lipread`; installing over an already-running service does not hot-replace its Python process. No browser model installation or preload is required.
 
-- [eschmechel/auto-avsr-lrs3-vsr-int8-onnx](https://huggingface.co/eschmechel/auto-avsr-lrs3-vsr-int8-onnx), revision `9359b251b8d9b8e2d63bada99013bb92eee3b087`.
-- 203.4 MB decimal, INT8 encoder/CTC model; English vocabulary. Not the 95M AV-HuBERT backbone.
-- Research/non-commercial model terms, according to its model card. Not included in Beezy's source license. Review upstream terms before broader use.
-- Author reports ~28.5% WER on 100 LRS3 clips with greedy decoding, NOT silent-mouthing performance. Not independently reproduced here.
-- Pipeline: hidden camera without microphone → raw frame capture (no ML startup dependency) → after Stop, BlazeFace eye/nose/mouth points → 25fps nearest-frame resampling → missing-point interpolation → ±6-frame smoothing with centre correction → least-squares similarity alignment to Auto-AVSR's mean face → 96px mouth region, centre-cropped to 88px grayscale → `(pixel/255 - 0.421)/0.165` → ONNX WASM worker → greedy CTC.
-- Alignment uses deterministic least-squares fitting rather than upstream OpenCV LMEDS; canvas interpolation/grayscale ordering also differs slightly. Validate real accuracy before treating this as equivalent to the reference implementation.
-- Full camera frames exist only in browser memory while recording/preprocessing. Crops and full frames are not uploaded or persisted. Stopping, typing or leaving the composer stops camera tracks and clears captured frames. Only the recognition model and static detector remain warm for this page session. No external CDN is used during capture.
+```sh
+systemctl --user status beezy-lipread
+journalctl --user -u beezy-lipread
+```
 
-## Run on the phone/laptop instead of the Pi
+To uninstall/disable recognition without removing chat data: `systemctl --user disable --now beezy-lipread`. Ordinary typing still works. The composer reports a missing/offline service inline; no browser fallback downloads a model.
 
-Simply open Beezy there. Camera capture, preprocessing and WASM inference run on **the device opening the page**, not the server. The Pi serves model files. The first load transfers ~203 MB of weights over your connection. Browser HTTP caching may save later transfers; decoded tensors still require much more memory than the file size. WASM is single-threaded to avoid requiring cross-origin isolation. WebGPU is not enabled; support for this model's quantized operations must be tested separately.
+## Processing and bounds
+
+- Browser MediaRecorder records WebM/VP8 where available, or MP4 on Safari, without displaying video.
+- Authenticated `POST /api/lipread/transcribe`: video body, max 12 MB, CSRF/tenant headers, no storage.
+- Native worker: one inference at a time; concurrent clips receive 429 rather than queueing indefinitely. Gateway timeout 90 seconds. Decoder timeout 25 seconds.
+- ffmpeg decodes at 25fps to 480×360, capped at 250 frames. Input uses a private, seekable `/dev/shm` temporary file so Safari MP4 also works; it is unlinked after decoding. Network demuxer protocols are disabled and formats restricted to MP4/WebM.
+- MediaPipe short-range face detection → missing-point interpolation → ±6-frame smoothing with centre correction → similarity alignment to Auto-AVSR's mean face → 88×88 grayscale mouth crops → `(pixel/255 - 0.421)/0.165` → native ONNX Runtime CPU → greedy CTC.
+- No recordings, transcripts, auth headers or request bodies are logged. Raw decoded frames, crops and input bytes are released after each request. ffmpeg may inspect codec metadata but its stderr is not exposed or logged.
+- Cancelling a browser request prevents draft insertion. A native inference already underway may finish its bounded computation; it never inserts text on its own.
+
+## Model and benchmark
+
+[eschmechel/auto-avsr-lrs3-vsr-int8-onnx](https://huggingface.co/eschmechel/auto-avsr-lrs3-vsr-int8-onnx), revision `9359b251b8d9b8e2d63bada99013bb92eee3b087`. 203.4 MB decimal, English encoder/CTC checkpoint. SHA-256 checked by `web/scripts/setup-lipread.mjs` (retained at its original path, now installs native assets only).
+
+Research/non-commercial model terms, according to the model card; not included in Beezy's source license. The author reports ~28.5% WER on 100 LRS3 clips with greedy decoding, not silent-mouthing performance. This has not been independently reproduced here. Deterministic least-squares alignment differs from upstream OpenCV LMEDS; validate real quality before assuming reference accuracy.
+
+Pi 5 8GB, ONNX Runtime 1.24.3, three inference threads:
+
+| Synthetic clip | Native inference |
+|---|---:|
+| 1 second | 0.96 s |
+| 5 seconds | 4.06 s |
+| 10 seconds | 6.47 s |
+
+Load plus warmup: 3.9s, **once per native service start**. Warm service RSS after startup: about 526 MiB; longer inference can increase the runtime arena. A static public portrait encoded as a 1s MP4 exercised decoding, face tracking, cropping and inference in 0.8s twice with the same service PID. Its transcript was empty. These are execution/latency checks, **not silent speech accuracy tests**.
 
 ## Optional text correction
 
-Configure server environment variables, then restart:
+Configure and restart Beezy:
 
 ```dotenv
 LIPREAD_LLM_API_KEY=your-provider-key
 LIPREAD_LLM_MODEL=your-cheap-fast-model
-# Optional OpenAI-compatible chat-completions endpoint:
+# Optional OpenAI-compatible endpoint:
 LIPREAD_LLM_URL=https://api.openai.com/v1/chat/completions
 ```
 
-Configuring these variables opts into automatic text correction after recognition, before the draft appears in the ordinary input. The recording hint states when LLM text correction is enabled. Only transcript text goes to the provider; the key stays server-side. Without configuration, recognition remains entirely local. Correction failure preserves the raw draft and adds an inline hint. The system prompt asks for conservative punctuation/casing/grammar repair and no invented missing content. It cannot guarantee correctness; always review the draft. No model/provider is chosen or charged by default. One concurrent request per signed-in user, a 20-second timeout, 4000-character input limit and 512 output-token limit apply. Shared deployments should add a spend quota before enabling it broadly.
+This opts into automatic correction after recognition, before the draft appears. The recording hint indicates when LLM correction is enabled. Only transcript text goes to that provider; keys remain server-side. Correction failure preserves the raw draft and adds a hint. The prompt requests conservative edits, but cannot guarantee correctness. Always review before Send. No provider/model is chosen or charged by default. One correction per signed-in user at a time, 20-second timeout, 4000-character input and 512-token output limits apply; shared installations should add a spending quota.
 
-## Tests and benchmark
+## Tests
 
 ```sh
+npm --prefix server run build
+npm --prefix server run test:deploy
 npm --prefix web test
-# With the Vite development server running on localhost:5173:
-cd web && node test/lipread-benchmark.mjs
-# Mocked browser UI/state regression test against Vite (not a recognition accuracy test):
-node test/lipread-ui.mjs
+# Against Vite, or TEST_URL pointing at a production build (fake camera and mocked API):
+(cd web && node test/lipread-ui.mjs)
+(cd web && node test/lipread-live-smoke.mjs)
+~/.local/share/beezy-lipread/.venv/bin/python -m unittest discover -s lipread -v
+# Native model benchmark; uses synthetic crops, not an accuracy evaluation:
+OPENBLAS_NUM_THREADS=1 ~/.local/share/beezy-lipread/.venv/bin/python lipread/worker.py --benchmark
 ```
-
-Pi 5 8GB, headless Chromium, single-thread WASM: a 25-frame **synthetic constant-image** clip loaded in 3.8s and inferred in 2.8s. This proves model execution, not face preprocessing or recognition quality. Real clip latency may differ; longer clips have different scaling. The synthetic output was empty, as expected. No silent human recording has been evaluated yet.
 
 ## Omni retirement (2026-11-03)
 
-Before removal, Gitleaks 8.30.1 scanned full Git history and staged source with zero findings. A filesystem scan found credentials only in ignored `server/.env` and `server/gcp-tts-key.json`; neither was tracked. Source was committed and pushed to `PAndreew/omni` at `fafe55caa5fd537bf1b5f0a09ed1f46cdef731c4`, and the remote hash was verified. The Omni services were disabled/stopped and its container, image and source checkout removed. Private credentials, data and user service configuration are preserved in `~/Backups/omni-retired/private-runtime.tgz` (directory 0700, archive 0600). This archive contains secrets: never upload it to GitHub. Other app caches/data were not indiscriminately purged.
+Before removal, Gitleaks 8.30.1 scanned full Git history and staged source with zero findings. A filesystem scan found credentials only in ignored `server/.env` and `server/gcp-tts-key.json`; neither was tracked. Source was committed and pushed to `PAndreew/omni` at `fafe55caa5fd537bf1b5f0a09ed1f46cdef731c4`, and the remote hash was verified. Omni's services, container, image and source checkout were removed. Private credentials/data and user service configuration remain in `~/Backups/omni-retired/private-runtime.tgz` (directory 0700, archive 0600). Never upload this secret archive to GitHub.

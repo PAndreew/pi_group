@@ -1,0 +1,20 @@
+[Unit]
+Description=Beezy persistent native lip-reading service
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/beezy-lipread/runtime.env
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=OMP_NUM_THREADS=1
+Environment=MPLCONFIGDIR=/tmp/beezy-lipread-matplotlib
+ExecStart=%h/.local/share/beezy-lipread/.venv/bin/python %h/.local/share/beezy-lipread/worker.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+MemoryMax=2G
+
+[Install]
+WantedBy=default.target
