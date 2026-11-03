@@ -1,6 +1,5 @@
 import { File, Folder, Trash2, X } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import { useEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
 import { useSilentDictation } from "@/hooks/use-silent-dictation"
@@ -203,50 +202,11 @@ export function MentionComposer({
   }
 
   const open = Boolean(token) && options.length > 0
-  const suggestions = useRef<HTMLUListElement>(null)
-  useLayoutEffect(() => {
-    if (!open || !suggestions.current) return
-    const list = suggestions.current
-    const anchor = input.current?.closest("[data-composer-box]")
-    const header = document.querySelector("header")
-    const update = () => {
-      if (!anchor) return
-      // Both rectangles use viewport coordinates. Do not mix in visualViewport.offsetTop
-      // or measure the popup itself: keyboard panning otherwise collapses the available space.
-      const rect = anchor.getBoundingClientRect()
-      const ceiling = Math.max(0, header?.getBoundingClientRect().bottom ?? 0) + 3
-      const available = Math.max(0, rect.top - 4 - ceiling)
-      list.style.top = `${ceiling}px`
-      list.style.left = `${rect.left}px`
-      list.style.width = `${Math.min(rect.width, 384)}px`
-      list.style.maxHeight = `${available}px`
-    }
-    // App viewport sizing runs in animation frames too. Follow its final geometry,
-    // not just the earlier visualViewport event that triggered it.
-    let frame = 0
-    const follow = () => { update(); frame = requestAnimationFrame(follow) }
-    follow()
-    const observer = new ResizeObserver(update)
-    if (anchor) observer.observe(anchor)
-    if (header) observer.observe(header)
-    window.addEventListener("resize", update)
-    window.addEventListener("scroll", update, true)
-    window.visualViewport?.addEventListener("resize", update)
-    window.visualViewport?.addEventListener("scroll", update)
-    return () => {
-      cancelAnimationFrame(frame)
-      observer.disconnect()
-      window.removeEventListener("resize", update)
-      window.removeEventListener("scroll", update, true)
-      window.visualViewport?.removeEventListener("resize", update)
-      window.visualViewport?.removeEventListener("scroll", update)
-    }
-  }, [open])
 
   return (
     <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
-      {open && createPortal(
-        <ul ref={suggestions} className="fixed z-50 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox" onPointerDown={(e) => e.preventDefault()}>
+      {open && (
+        <ul className="absolute bottom-full left-0 z-[100] mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox" onPointerDown={(e) => e.preventDefault()}>
           <li className="sticky top-0 z-10 flex justify-end bg-[var(--composer-background)]"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
@@ -285,7 +245,7 @@ export function MentionComposer({
               </button>
             </li>
           ))}
-        </ul>, document.body
+        </ul>
       )}
       <div className="flex min-w-0 items-start gap-1 px-3">
       {selectedFolder && (
@@ -312,8 +272,11 @@ export function MentionComposer({
             const editable = `/${selectedFolder.replaceAll(" ", NBSP)}`.slice(0, -1)
             setEditingFolder(true)
             onRawChange(`${editable} ${value}`)
-            setToken(undefined)
-            requestAnimationFrame(() => input.current?.setSelectionRange(editable.length, editable.length))
+            setToken(activeToken(editable, editable.length))
+            requestAnimationFrame(() => {
+              input.current?.setSelectionRange(editable.length, editable.length)
+              setToken(activeToken(editable, editable.length))
+            })
             return
           }
           if (open) {

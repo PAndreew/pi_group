@@ -289,7 +289,7 @@ function Workspace() {
         <div className="flex min-h-0 flex-1">
           {wide && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="w-64 shrink-0"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
           {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex lg:hidden 2xl:flex 2xl:w-72" />}
-          <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <main className={`min-h-0 min-w-0 flex-1 ${inside ? "overflow-hidden" : "overflow-visible"}`}>
             {route.chat ? (
               <ChatView key={route.chat} chatId={route.chat} />
             ) : route.session ? (
