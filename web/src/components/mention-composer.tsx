@@ -1,5 +1,6 @@
 import { File, Folder, Trash2, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
 import { useSilentDictation } from "@/hooks/use-silent-dictation"
@@ -202,15 +203,20 @@ export function MentionComposer({
   useLayoutEffect(() => {
     if (!open || !suggestions.current) return
     const list = suggestions.current
-    const anchor = list.offsetParent
+    const anchor = input.current?.closest("[data-composer-box]")
     const header = document.querySelector("header")
     const update = () => {
-      const viewportTop = window.visualViewport?.offsetTop ?? 0
-      const top = Math.max(viewportTop, header?.getBoundingClientRect().bottom ?? 0)
-      // Measure the actual list edge: its containing block can have padding/borders,
-      // and keyboard-driven scrolling moves it without resizing the anchor.
-      const bottom = list.getBoundingClientRect().bottom
-      list.style.maxHeight = `${Math.max(0, Math.min(256, bottom - top - 8))}px`
+      if (!anchor) return
+      // Both rectangles use viewport coordinates. Do not mix in visualViewport.offsetTop
+      // or measure the popup itself: keyboard panning otherwise collapses the available space.
+      const rect = anchor.getBoundingClientRect()
+      const ceiling = Math.max(0, header?.getBoundingClientRect().bottom ?? 0) + 3
+      const available = Math.max(0, rect.top - 4 - ceiling)
+      const height = Math.min(256, available)
+      list.style.top = `${Math.max(ceiling, rect.top - 4 - height)}px`
+      list.style.left = `${rect.left}px`
+      list.style.width = `${Math.min(rect.width, 384)}px`
+      list.style.maxHeight = `${height}px`
     }
     update()
     const observer = new ResizeObserver(update)
@@ -231,8 +237,8 @@ export function MentionComposer({
 
   return (
     <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
-      {open && (
-        <ul ref={suggestions} className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
+      {open && createPortal(
+        <ul ref={suggestions} className="fixed z-50 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
           <li className="sticky top-0 z-10 flex justify-end bg-[var(--composer-background)]"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
@@ -271,10 +277,11 @@ export function MentionComposer({
               </button>
             </li>
           ))}
-        </ul>
+        </ul>, document.body
       )}
+      <div className="flex min-w-0 items-start gap-1 px-3">
       {selectedFolder && (
-        <div className="px-3 pt-2">
+        <div className="max-w-[50%] shrink-0 pt-2">
           <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => { onRawChange(value); setToken(undefined); input.current?.focus() }}>
             <Folder className="size-3.5 shrink-0" />
             <span className="truncate">/{selectedFolder}</span>
@@ -287,11 +294,17 @@ export function MentionComposer({
         value={value}
         placeholder={placeholder}
         rows={1}
-        className="max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3"
+        className="max-h-48 min-h-12 min-w-0 flex-1 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
         onSelect={(e) => setToken(activeToken(value, e.currentTarget.selectionStart))}
         onBlur={() => setTimeout(() => setToken(undefined), 100)}
         onKeyDown={(e) => {
+          if (e.key === "Backspace" && selectedFolder && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
+            e.preventDefault()
+            onRawChange(value)
+            setToken(undefined)
+            return
+          }
           if (open) {
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault()
@@ -315,6 +328,7 @@ export function MentionComposer({
           }
         }}
       />
+      </div>
     </ComposerBox>
   )
 }

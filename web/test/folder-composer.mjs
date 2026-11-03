@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict'
+import { chromium } from 'playwright'
+const browser = await chromium.launch()
+try {
+  const page = await browser.newPage({ viewport: { width: 390, height: 360 }, isMobile: true })
+  await page.route('**/api/**', route => route.fulfill({ json: { users: [], folders: Array.from({ length: 40 }, (_, i) => `folder-${i}`) } }))
+  await page.goto(`${process.env.TEST_URL || 'http://127.0.0.1:5173'}/test/fixtures/folder-composer.html`)
+  const input = page.locator('textarea')
+  await input.fill('/')
+  const list = page.getByRole('listbox')
+  await list.waitFor()
+  for (const height of [360, 280, 500]) {
+    await page.setViewportSize({ width: 390, height })
+    await page.waitForTimeout(100)
+    const box = await list.boundingBox()
+    assert.ok(box.y >= 51, 'popup stops 3px below navbar')
+    assert.ok(box.height > 60, 'popup is not a narrow stripe')
+    await page.getByRole('option').last().scrollIntoViewIfNeeded()
+    assert.ok(await list.evaluate(el => el.scrollTop > 0), 'last folder scrolls into view')
+    await page.getByRole('button', { name: 'Dismiss suggestions' }).click()
+    await input.fill('')
+    await input.fill('/')
+    await list.waitFor()
+  }
+  await page.getByRole('option').first().click()
+  const pill = page.getByRole('button', { name: 'Remove folder folder-0' })
+  await pill.waitFor()
+  await input.fill('hello')
+  const pillBox = await pill.boundingBox(), inputBox = await input.boundingBox()
+  assert.ok(pillBox.x < inputBox.x && pillBox.y < inputBox.y + inputBox.height, 'pill sits inline before text')
+  await input.press('Home')
+  await input.press('Backspace')
+  assert.equal(await pill.count(), 0, 'backspace removes pill')
+  assert.equal(await input.inputValue(), 'hello', 'message remains intact')
+  console.log('PASS: navbar bounds, scrolling, inline pill and Backspace')
+} finally { await browser.close() }
