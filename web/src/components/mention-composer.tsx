@@ -2,7 +2,7 @@ import { File, Folder, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
-const LipreadButton = lazy(() => import("@/components/lipread-button").then(m => ({ default: m.LipreadButton })))
+const LipreadDialog = lazy(() => import("@/components/lipread-button").then(m => ({ default: m.LipreadDialog })))
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { cn, relativePath } from "@/lib/utils"
@@ -101,6 +101,7 @@ export function MentionComposer({
   onFiles?: (files: File[]) => void
 }) {
   const input = useRef<HTMLTextAreaElement>(null)
+  const [dictating, setDictating] = useState(false)
   const [everyone, setEveryone] = useState<Person[]>([])
   const [token, setToken] = useState<ReturnType<typeof activeToken>>()
   const [options, setOptions] = useState<Suggestion[]>([])
@@ -188,7 +189,8 @@ export function MentionComposer({
   const open = Boolean(token) && options.length > 0
 
   return (
-    <ComposerBox agent={agent} controls={<>{controls}<Suspense fallback={null}><LipreadButton onInsert={(text) => { onChange(value + (value && !/\s$/.test(value) ? " " : "") + text); requestAnimationFrame(() => input.current?.focus()) }} /></Suspense></>} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
+    <ComposerBox agent={agent} controls={controls} onDictate={() => setDictating(true)} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
+      {dictating && <Suspense fallback={<p role="status" className="p-2 text-sm">Opening silent dictation…</p>}><LipreadDialog onClose={() => setDictating(false)} onInsert={(text) => { onChange(value + (value && !/\s$/.test(value) ? " " : "") + text); requestAnimationFrame(() => input.current?.focus()) }} /></Suspense>}
       {open && (
         <ul className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox">
           <li className="flex justify-end"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>

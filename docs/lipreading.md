@@ -1,6 +1,6 @@
 # Experimental silent dictation
 
-Click the camera-shaped **Silent dictation** button in the chat composer. Allow the front camera, wait for the model, click Start recording, mouth a short English phrase, and click Stop & transcribe (10-second limit). Review/edit the result, then Use draft. This appends it to the existing input; the ordinary Send button is still required. Closing the dialog releases the camera and model. Typing is unchanged.
+With an empty chat input, click the blue audio-lines **Silent dictation** button in the Send position. Typing replaces it with the normal active Send button. Allow the front camera; recording starts automatically once the camera/model are ready. Mouth a short English phrase, and click Stop & transcribe (10-second limit). Review/edit the result, then Use draft. This appends it to the existing input; the ordinary Send button is still required. Closing the dialog releases the camera and model. Typing is unchanged.
 
 Requires HTTPS or localhost, a camera, WebAssembly SIMD, and sufficient browser memory. This is an experiment, not reliable dictation. Visually ambiguous words cannot be recovered reliably by an LLM. Names/code are especially difficult. Silent mouthing differs from the voiced footage used in the published evaluations.
 

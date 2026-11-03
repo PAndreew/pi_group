@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] })
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   page.on('pageerror', e => console.error('Browser error:', e.stack))
@@ -25,17 +25,52 @@ try {
   })
   // Deterministically simulate denied permission without needing a real camera.
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Camera permission denied', 'NotAllowedError') }
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      if (!window.allowTestCamera) throw new DOMException('Camera permission denied', 'NotAllowedError')
+      const stream = await original(constraints)
+      window.testCameraTrack = stream.getVideoTracks()[0]
+      return stream
+    }
   })
   await page.goto(process.env.TEST_URL || 'http://127.0.0.1:5173')
   const composer = page.locator('[data-composer-box] textarea')
+  const dictate = page.getByRole('button', { name: 'Silent dictation', exact: true })
+  await dictate.waitFor()
+  assert.equal(await dictate.isEnabled(), true)
+  assert.equal(await dictate.evaluate(el => getComputedStyle(el).color), 'oklch(0.623 0.214 259.815)')
   await composer.fill('Existing draft')
-  await page.getByRole('button', { name: 'Silent dictation', exact: true }).click()
+  assert.equal(await dictate.count(), 0, 'typing replaces dictation with Send')
+  assert.equal(await page.getByRole('button', { name: 'Send', exact: true }).isEnabled(), true)
+  await composer.fill('')
+  await dictate.click()
   await page.getByRole('alert').filter({ hasText: 'Camera permission denied' }).waitFor({ timeout: 60000 })
   await page.getByRole('button', { name: 'Close camera' }).click()
-  assert.equal(await composer.inputValue(), 'Existing draft')
+  assert.equal(await composer.inputValue(), '')
   await composer.fill('Typing still works')
   assert.equal(await composer.inputValue(), 'Typing still works')
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
-  console.log('PASS: camera permission error, close, preserved draft, normal typing, mobile width')
+  await composer.fill('')
+  await page.evaluate(() => {
+    window.allowTestCamera = true
+    const OriginalWorker = window.Worker
+    window.Worker = class extends OriginalWorker {
+      constructor(url, options) { super(url, options); this.isLipread = String(url).includes('lipread.worker') }
+      postMessage(data, ...rest) {
+        if (this.isLipread && !data.pixels) { setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data: { ready: true } })), 0); return }
+        super.postMessage(data, ...rest)
+      }
+    }
+  })
+  await dictate.click()
+  const stop = page.getByRole('button', { name: 'Stop & transcribe' })
+  await stop.waitFor({ timeout: 60000 })
+  assert.equal(await page.getByRole('button', { name: 'Start recording', exact: true }).count(), 0, 'recording starts without a second click')
+  await page.waitForTimeout(1200)
+  await stop.click()
+  await stop.waitFor({ state: 'detached' }) // Manual stop leaves recording; synthetic input is not an accuracy test.
+  await page.getByRole('button', { name: 'Close camera' }).click()
+  assert.equal(await page.evaluate(() => window.testCameraTrack.readyState), 'ended')
+  assert.equal(await composer.inputValue(), '')
+  console.log('PASS: blue empty-input action, typing restores Send, auto recording, manual stop, camera cleanup, mobile width')
 } finally { await browser.close() }

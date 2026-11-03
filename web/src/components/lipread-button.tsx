@@ -1,18 +1,11 @@
-import { Camera, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createDetector, captureFrame, prepareCrops, type CapturedFrame } from '@/lib/lipread-camera'
 import type { FaceDetector } from '@mediapipe/tasks-vision'
 import { activeTenant } from '@/lib/tenant'
 
 type Stage = 'loading' | 'ready' | 'recording' | 'decoding' | 'review' | 'error'
-export function LipreadButton({ onInsert }: { onInsert: (text: string) => void }) {
-  const [open, setOpen] = useState(false)
-  return <>
-    <button type="button" className="rounded p-2 hover:bg-accent" title="Experimental silent dictation" aria-label="Silent dictation" onClick={() => setOpen(true)}><Camera className="size-4" /></button>
-    {open && <LipreadDialog onClose={() => setOpen(false)} onInsert={onInsert} />}
-  </>
-}
-function LipreadDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (text: string) => void }) {
+export function LipreadDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (text: string) => void }) {
   const video = useRef<HTMLVideoElement>(null)
   const worker = useRef<Worker | null>(null)
   const detector = useRef<FaceDetector | null>(null)
@@ -45,7 +38,7 @@ function LipreadDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (
         w.onmessage = (event) => {
           if (disposed) return
           if (event.data.error) return fail(event.data.error)
-          if (event.data.ready) setStage('ready')
+          if (event.data.ready) start()
           else { setRaw(event.data.text); setDraft(event.data.text); setStats(s => `${s}; inference ${event.data.seconds.toFixed(1)}s`); setStage('review') }
         }
         const d = await createDetector()
