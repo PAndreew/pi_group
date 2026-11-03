@@ -11,6 +11,7 @@ try {
     let loadSeconds
     worker.onerror = e => { clearTimeout(timer); worker.terminate(); reject(new Error(e.message)) }
     worker.onmessage = e => {
+      if (e.data.progress) return
       if (e.data.ready) {
         loadSeconds = (performance.now() - began) / 1000
         const pixels = new Uint8Array(25 * 88 * 88).fill(107)

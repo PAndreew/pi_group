@@ -1,6 +1,6 @@
 # Experimental silent dictation
 
-With an empty chat input, click the blue audio-lines **Silent dictation** button in the Send position. Typing replaces it with the normal active Send button. Allow the front camera; recording starts automatically once the camera/model are ready. Mouth a short English phrase, and click Stop & transcribe (10-second limit). Review/edit the result, then Use draft. This appends it to the existing input; the ordinary Send button is still required. Closing the dialog releases the camera and model. Typing is unchanged.
+With an empty chat input, click the blue audio-lines **Silent dictation** button in the Send position. Typing replaces it with the normal active Send button. Allow the front camera; recording starts immediately once the camera is ready, independently of model loading. There is no visible camera preview: a red recording indicator and timer show capture status. Mouth a short English phrase, and click Stop & transcribe (10-second limit). Review/edit the result, then Use draft. This appends it to the existing input; the ordinary Send button is still required. Stopping or closing releases the camera. The recognition model stays warm until the page closes/reloads, so reopening does not reinitialize it. Typing is unchanged.
 
 Requires HTTPS or localhost, a camera, WebAssembly SIMD, and sufficient browser memory. This is an experiment, not reliable dictation. Visually ambiguous words cannot be recovered reliably by an LLM. Names/code are especially difficult. Silent mouthing differs from the voiced footage used in the published evaluations.
 
@@ -25,9 +25,9 @@ Assets are optional, ignored by Git, and occupy approximately 230 MB (plus anoth
 - 203.4 MB decimal, INT8 encoder/CTC model; English vocabulary. Not the 95M AV-HuBERT backbone.
 - Research/non-commercial model terms, according to its model card. Not included in Beezy's source license. Review upstream terms before broader use.
 - Author reports ~28.5% WER on 100 LRS3 clips with greedy decoding, NOT silent-mouthing performance. Not independently reproduced here.
-- Pipeline: camera without microphone → BlazeFace eye/nose/mouth points → 25fps nearest-frame resampling → missing-point interpolation → ±6-frame smoothing with centre correction → least-squares similarity alignment to Auto-AVSR's mean face → 96px mouth region, centre-cropped to 88px grayscale → `(pixel/255 - 0.421)/0.165` → ONNX WASM worker → greedy CTC.
+- Pipeline: hidden camera without microphone → raw frame capture (no ML startup dependency) → after Stop, BlazeFace eye/nose/mouth points → 25fps nearest-frame resampling → missing-point interpolation → ±6-frame smoothing with centre correction → least-squares similarity alignment to Auto-AVSR's mean face → 96px mouth region, centre-cropped to 88px grayscale → `(pixel/255 - 0.421)/0.165` → ONNX WASM worker → greedy CTC.
 - Alignment uses deterministic least-squares fitting rather than upstream OpenCV LMEDS; canvas interpolation/grayscale ordering also differs slightly. Validate real accuracy before treating this as equivalent to the reference implementation.
-- Full camera frames exist only in browser memory while recording/preprocessing. Crops and full frames are not uploaded or persisted. Closing the dialog stops tracks and terminates the model worker. No external CDN is used during capture.
+- Full camera frames exist only in browser memory while recording/preprocessing. Crops and full frames are not uploaded or persisted. Stopping/closing stops camera tracks. Closing clears captured frames; only the recognition model worker remains warm for this page session. No external CDN is used during capture.
 
 ## Run on the phone/laptop instead of the Pi
 

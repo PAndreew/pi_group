@@ -25,6 +25,23 @@ try {
   })
   // Deterministically simulate denied permission without needing a real camera.
   await page.addInitScript(() => {
+    const OriginalWorker = window.Worker
+    window.modelWorkerCount = 0
+    window.Worker = class extends OriginalWorker {
+      constructor(url, options) {
+        super(url, options)
+        this.isLipread = String(url).includes('lipread.worker')
+        if (this.isLipread) window.modelWorkerCount++
+      }
+      postMessage(data, ...rest) {
+        if (this.isLipread && !data.pixels) {
+          // Deliberately never ready: camera must not wait for the model.
+          setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data: { progress: { phase: 'download', loaded: 10_000_000, total: 203_000_000 } } })), 0)
+          return
+        }
+        super.postMessage(data, ...rest)
+      }
+    }
     const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
     navigator.mediaDevices.getUserMedia = async (constraints) => {
       if (!window.allowTestCamera) throw new DOMException('Camera permission denied', 'NotAllowedError')
@@ -51,20 +68,13 @@ try {
   assert.equal(await composer.inputValue(), 'Typing still works')
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await composer.fill('')
-  await page.evaluate(() => {
-    window.allowTestCamera = true
-    const OriginalWorker = window.Worker
-    window.Worker = class extends OriginalWorker {
-      constructor(url, options) { super(url, options); this.isLipread = String(url).includes('lipread.worker') }
-      postMessage(data, ...rest) {
-        if (this.isLipread && !data.pixels) { setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data: { ready: true } })), 0); return }
-        super.postMessage(data, ...rest)
-      }
-    }
-  })
+  await page.evaluate(() => { window.allowTestCamera = true })
   await dictate.click()
   const stop = page.getByRole('button', { name: 'Stop & transcribe' })
-  await stop.waitFor({ timeout: 60000 })
+  await stop.waitFor({ timeout: 5000 })
+  assert.equal(await page.locator('video').evaluate(el => getComputedStyle(el).opacity), '0', 'camera preview is hidden')
+  assert.match(await page.locator('[data-model-status]').innerText(), /Downloading model/)
+  assert.equal(await page.evaluate(() => window.modelWorkerCount), 1, 'reopening reuses the model worker')
   assert.equal(await page.getByRole('button', { name: 'Start recording', exact: true }).count(), 0, 'recording starts without a second click')
   await page.waitForTimeout(1200)
   await stop.click()
@@ -72,5 +82,5 @@ try {
   await page.getByRole('button', { name: 'Close camera' }).click()
   assert.equal(await page.evaluate(() => window.testCameraTrack.readyState), 'ended')
   assert.equal(await composer.inputValue(), '')
-  console.log('PASS: blue empty-input action, typing restores Send, auto recording, manual stop, camera cleanup, mobile width')
+  console.log('PASS: hidden preview, recording before model loads, download progress, warm-worker reuse, manual stop and camera cleanup')
 } finally { await browser.close() }

@@ -8,17 +8,32 @@ export async function createDetector() {
   })
 }
 export interface CapturedFrame { image: ImageData; landmarks: Landmarks | null; time: number }
-export function captureFrame(video: HTMLVideoElement, detector: FaceDetector, time: number): CapturedFrame {
+export function captureFrame(video: HTMLVideoElement, detector: FaceDetector | null, time: number): CapturedFrame {
   const canvas = document.createElement('canvas')
   canvas.width = 480; canvas.height = 360
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!
   // Preserve aspect ratio; never stretch widescreen/portrait faces.
   const scale = Math.max(480 / video.videoWidth, 360 / video.videoHeight)
   ctx.drawImage(video, (480 - video.videoWidth * scale) / 2, (360 - video.videoHeight * scale) / 2, video.videoWidth * scale, video.videoHeight * scale)
-  const faces = detector.detectForVideo(canvas, time).detections
+  const faces = detector?.detectForVideo(canvas, time).detections ?? []
   const face = faces.sort((a, b) => (b.boundingBox?.width ?? 0) * (b.boundingBox?.height ?? 0) - (a.boundingBox?.width ?? 0) * (a.boundingBox?.height ?? 0))[0]
   const landmarks = face ? face.keypoints.slice(0, 4).map(p => [p.x * 480, p.y * 360] as [number, number]) : null
   return { image: ctx.getImageData(0, 0, 480, 360), landmarks, time }
+}
+
+// Detect after recording: camera capture never waits for detector/model initialization.
+export async function trackFrames(frames: CapturedFrame[], detector: FaceDetector, cancelled: () => boolean) {
+  const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 360
+  const ctx = canvas.getContext('2d')!
+  for (let i = 0; i < frames.length; i++) {
+    if (cancelled()) throw new Error('Recording cancelled')
+    const frame = frames[i]
+    ctx.putImageData(frame.image, 0, 0)
+    const faces = detector.detectForVideo(canvas, frame.time).detections
+    const face = faces.sort((a, b) => (b.boundingBox?.width ?? 0) * (b.boundingBox?.height ?? 0) - (a.boundingBox?.width ?? 0) * (a.boundingBox?.height ?? 0))[0]
+    frame.landmarks = face ? face.keypoints.slice(0, 4).map(p => [p.x * 480, p.y * 360] as [number, number]) : null
+    if (i % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0))
+  }
 }
 
 /** 25fps resampling, gap interpolation, ±6-frame smoothing, alignment and 88px crop. */
