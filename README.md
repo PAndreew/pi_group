@@ -112,6 +112,10 @@ Each person picks their runtime, provider, model and reasoning level under user 
 
 Service setup, updates and development commands: [Operations](docs/operations.md). How it fits together, and how a deployment swaps the storage and runtime underneath: [Architecture](docs/architecture.md).
 
+## Experimental silent dictation
+
+An optional camera button can read short English lip-movement clips entirely on the device opening Beezy, then insert an editable draft. No microphone or video upload; optional LLM text correction requires separate configuration. This is experimental, not reliable dictation. [Install the model and read the limitations](docs/lipreading.md).
+
 ## Tenants
 
 Use the home toolbar's **Tenant** selector to keep Work and Family conversations, default agent folders and memory separate. Access checks run on the server; OS-level agent isolation is still a separate deployment step. See [tenant setup and boundaries](docs/tenants.md).

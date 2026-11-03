@@ -9,3 +9,5 @@ data/
 .runtime/
 workspace/
 uploads/
+# Optional lip-reading weights and WASM runtimes, installed by setup-lipread.mjs
+web/public/lipread/
