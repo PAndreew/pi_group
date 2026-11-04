@@ -33,10 +33,12 @@ export function NewSessionDialog({
   const [thinking, setThinking] = useState<string>()
   const [name, setName] = useState("")
   const [creating, setCreating] = useState(false)
+  const [memoryPrivate, setMemoryPrivate] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setName("")
+    setMemoryPrivate(false)
     api.harnesses().then(({ harnesses }) => {
       setHarnesses(harnesses)
       setHarness(harnesses.find((x) => x.id === defaults?.harness && x.ok)?.id ?? harnesses.find((x) => x.ok)?.id)
@@ -67,7 +69,7 @@ export function NewSessionDialog({
     if (!harness) return
     setCreating(true)
     try {
-      const { session } = await api.createSession({ harness, path: folder, projectId, name: name.trim() || undefined, model, thinkingLevel: thinking })
+      const { session } = await api.createSession({ harness, path: folder, projectId, memoryPrivate, name: name.trim() || undefined, model, thinkingLevel: thinking })
       onCreated(session)
       onOpenChange(false)
     } catch (error) {
@@ -85,6 +87,7 @@ export function NewSessionDialog({
           <DialogTitle>New session</DialogTitle>
           <DialogDescription className="min-w-0 break-words">in /{folder}</DialogDescription>
         </DialogHeader>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={memoryPrivate} onChange={e => setMemoryPrivate(e.target.checked)} />Private session — reads public memory but never contributes</label>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
             <Label>Runtime</Label>

@@ -60,6 +60,11 @@ export interface SessionMeta {
 	deleted?: boolean;
 	/** When the memory consolidator last folded this session into memory. */
 	consolidatedAt?: string;
+	/** Explicit opt-out from shared project memory (independent of conversation sharing). */
+	memoryPrivate?: boolean;
+	keepLive?: boolean;
+	archivedAt?: string;
+	archiveFile?: string;
 	/** The master session that keeps the consolidated memory. */
 	memory?: boolean;
 	/** The project it was put in; without one it belongs to the project holding its folder (see projects.ts). */

@@ -551,6 +551,12 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 <DropdownMenuItem disabled={!canWrite} onSelect={() => act(async () => setSummary((await api.pin(sessionKey, !summary.pinned)).session))}>
                   {summary.pinned ? <PinOff /> : <Pin />} {summary.pinned ? "Allow idle shutdown" : "Keep running in background"}
                 </DropdownMenuItem>
+                <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => act(async () => { await api.sessionRetention(sessionKey, { keepLive: !summary.keepLive }); setSummary((await api.session(sessionKey)).session) })}>
+                  {summary.keepLive ? "Allow automatic archiving" : "Keep live — don't archive"}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => act(async () => { await api.sessionRetention(sessionKey, { memoryPrivate: !summary.memoryPrivate }); setSummary((await api.session(sessionKey)).session) })}>
+                  {summary.memoryPrivate ? "Include in public project memory" : "Make private — exclude from memory"}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" disabled={!canWrite || !state?.live} onSelect={() => act(() => api.stop(sessionKey), "Session process stopped")}>
                   <Power /> Stop process

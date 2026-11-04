@@ -77,6 +77,9 @@ export interface SessionSummary {
   live: boolean
   running: boolean
   pinned: boolean
+  memoryPrivate?: boolean
+  keepLive?: boolean
+  archivedAt?: string
   owner?: string
   visibility: "private" | "shared"
   shares: { userId: string; username: string; access: Access }[]
@@ -493,8 +496,11 @@ export const api = {
   projectMoves: () => request<{ moves: MoveRequest[] }>("GET", "/api/projects/moves"),
   answerMove: (id: string, approve: boolean) => request<{ moved: boolean }>("POST", `/api/projects/moves/${enc(id)}`, { approve }),
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
-  /** Admins: fold every conversation not yet in memory into it now. */
-  consolidateMemory: () => request<{ started: boolean; pending?: number; reason?: string }>("POST", "/api/memory/consolidate", { all: true }),
+  projectMemory: (id: string) => request<{ intervalHours: number; lastRun?: string; running: boolean; error?: string; master: string }>("GET", `/api/memory/${enc(id)}`),
+  setMemorySchedule: (id: string, intervalHours: number) => request("PATCH", `/api/memory/${enc(id)}`, { intervalHours }),
+  consolidateMemory: (id: string) => request<{ started: boolean }>("POST", `/api/memory/${enc(id)}/consolidate`, {}),
+  memoryArchives: (id: string) => request<{ sessions: { key: string; title: string; archivedAt: string }[] }>("GET", `/api/memory/${enc(id)}/archives`),
+  sessionRetention: (key: string, body: { memoryPrivate?: boolean; keepLive?: boolean; archived?: false }) => request("PATCH", `/api/sessions/${enc(key)}/retention`, body),
   chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),
   /** Leave a chat; it is deleted once nobody is left in it. */
   deleteChat: (id: string) => request<{ ok: true; deleted: boolean }>("DELETE", `/api/chats/${enc(id)}`),
@@ -531,7 +537,7 @@ export const api = {
   deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   lastEdit: (scope: { session: string } | { project: string }) => request<{ file: string | null; sessionKey?: string }>("GET", `/api/sessions/last-edit?${q(scope)}`),
-  createSession: (body: { harness: string; path: string; projectId?: string; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
+  createSession: (body: { harness: string; path: string; projectId?: string; memoryPrivate?: boolean; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>
     request<{ session: SessionSummary }>("POST", "/api/sessions", body),
   eventsUrl: (key: string) => tenantUrl(`/api/sessions/${enc(key)}/events`),
   tools: (key: string) => request<SessionTools>("GET", `/api/sessions/${enc(key)}/tools`),

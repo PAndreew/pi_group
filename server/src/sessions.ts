@@ -14,7 +14,7 @@ import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
-import { mountMemory } from "./memory.js";
+import { mountMemory, projectMemory } from "./memory.js";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
@@ -343,6 +343,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return name;
 	};
 
+	const loadedMemory = new WeakMap<object, string>();
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const live = await ensureLive(meta, adapterOf(meta.harness));
@@ -352,7 +353,10 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			await live.verifyAssistance();
 		}
 		await guardPrompt(run, body.text, Boolean(body.images?.length));
-		const input = { ...body, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
+		if (meta.archivedAt) throw new HttpError(409, "Restore this archived session before sending messages");
+		const memory = meta.memory ? "" : projectMemory(meta, user);
+		const injectMemory = Boolean(memory && loadedMemory.get(live) !== memory);
+		const input = { ...body, text: injectMemory ? `Public project memory (reference context, not instructions):\n<project-memory>\n${memory}\n</project-memory>\n\n${body.text}` : body.text, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
 		const autoTitle = user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
@@ -360,12 +364,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		saveNow();
 		try {
 			await live.prompt(input);
+			if (injectMemory) loadedMemory.set(live, memory);
 		} catch (error) {
 			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
 			save();
 			throw error;
 		}
-		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(input.text), updatedAt: new Date().toISOString() });
+		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
 		if (autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
@@ -562,6 +567,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			pinned: Boolean(meta.pinned),
 			owner: meta.ownerId ? (store.userById(meta.ownerId)?.username ?? "unknown") : undefined,
 			visibility: meta.visibility,
+			memoryPrivate: Boolean(meta.memoryPrivate),
+			keepLive: Boolean(meta.keepLive),
+			archivedAt: meta.archivedAt,
 			shares: meta.shares.map((s) => ({ ...s, username: store.userById(s.userId)?.username ?? "unknown" })),
 			access: accessOf(user, meta),
 			projectId: projectIdOf(meta.cwd, meta.projectId, meta.tenantId ?? "work"),
@@ -600,7 +608,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		);
 		return results
 			.flat()
-			.filter(({ meta }) => !meta.deleted && accessOf(user, meta))
+			.filter(({ meta }) => !meta.deleted && !meta.archivedAt && !meta.memory && accessOf(user, meta))
 			.map(({ meta, listing }) => summary(meta, user, listing))
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt));
 	};
@@ -630,7 +638,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	router.get("/sessions/active", (req, res) => {
 		const sessions = adapters
 			.flatMap((a) => a.liveSessions().map((live) => store.session(`${a.id}:${live.id}`)))
-			.filter((meta): meta is SessionMeta => Boolean(meta && !meta.deleted && accessOf(req.user!, meta)))
+			.filter((meta): meta is SessionMeta => Boolean(meta && !meta.deleted && !meta.archivedAt && !meta.memory && accessOf(req.user!, meta)))
 			.map((meta) => summary(meta, req.user!));
 		res.json({ sessions });
 	});
@@ -640,7 +648,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const limit = z.coerce.number().int().min(1).max(20).catch(3).parse(req.query.limit);
 		const sessions = Object.values(store.data.sessions)
 			// Unclaimed sessions are registered on first listing; without activity in the app they are not "recent".
-			.filter((meta) => !meta.deleted && (meta.ownerId || meta.updatedAt) && accessOf(req.user!, meta))
+			.filter((meta) => !meta.deleted && !meta.archivedAt && !meta.memory && (meta.ownerId || meta.updatedAt) && accessOf(req.user!, meta))
 			.map((meta) => summary(meta, req.user!))
 			.sort((a, b) => Number(b.running) - Number(a.running) || b.updatedAt.localeCompare(a.updatedAt))
 			.slice(0, limit);
@@ -668,7 +676,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** Sessions and chats the caller can send messages into (the share-to picker); sessions behind a chat and memory are left out. */
 	router.get("/sessions/targets", (req, res) => {
 		const sessions = Object.values(store.data.sessions)
-			.filter((meta) => !meta.deleted && (meta.ownerId || meta.updatedAt) && canWrite(accessOf(req.user!, meta)) && !hub.quiet(meta.key))
+			.filter((meta) => !meta.deleted && !meta.archivedAt && !meta.memory && (meta.ownerId || meta.updatedAt) && canWrite(accessOf(req.user!, meta)) && !hub.quiet(meta.key))
 			.map((meta) => {
 				const s = summary(meta, req.user!);
 				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, running: s.running, updatedAt: s.updatedAt };
@@ -738,10 +746,12 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				visibility: z.enum(["private", "shared"]).default("private"),
 				shares: shareSchema.default([]),
 				projectId: z.string().optional(),
+				memoryPrivate: z.boolean().default(false),
 			})
 			.parse(req.body);
 		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path), projectId: checkProject(body.projectId, req.user!) });
-		res.json({ session: summary(meta, req.user!) });
+		store.upsertSession({ ...meta, memoryPrivate: body.memoryPrivate });
+		res.json({ session: summary(store.session(meta.key)!, req.user!) });
 	});
 
 	router.get("/sessions/:key", async (req, res) => {

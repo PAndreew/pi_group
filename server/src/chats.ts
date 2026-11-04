@@ -156,6 +156,11 @@ export function staleChats(before: string) {
 	return (database().prepare("SELECT * FROM chats WHERE updated_at < ? AND (consolidated_at IS NULL OR consolidated_at < updated_at) AND EXISTS (SELECT 1 FROM messages WHERE chat_id = chats.id)").all(before) as Row[]).map(toChat);
 }
 
+/** Legacy tenant-wide coverage is not valid for project memory. */
+export function resetChatConsolidation(tenant: string) {
+	database().prepare("UPDATE chats SET consolidated_at = NULL WHERE COALESCE(tenant_id, 'work') = ?").run(tenant);
+}
+
 export function markChatConsolidated(id: string, at = new Date().toISOString()) {
 	database().prepare("UPDATE chats SET consolidated_at = ? WHERE id = ?").run(at, id);
 }
@@ -194,9 +199,8 @@ export function ensureChatFolder() {
 				"# Chat folder",
 				"",
 				`This folder belongs to the ${tenantOf()?.name ?? "Work"} tenant. Do not mix its conversation context or memory with other tenants.`,
-				"Long-term memory of earlier conversations lives in `MEMORY.md`",
-				"(an index, one line per conversation) and in `memory/` (one file per conversation).",
-				"Read `MEMORY.md` when earlier context, decisions or preferences could help, and open the matching file in `memory/` for details.",
+				"Public project context is in `MEMORY.md` (compact master context) and timestamped snapshots in `memory/`.",
+				"Private sessions must never contribute to public memory. Consult snapshots only when more detail is needed.",
 				"",
 			].join("\n"),
 		);
@@ -410,7 +414,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			};
 		});
 		const sessions = Object.values(store.data.sessions)
-			.filter((meta) => !meta.applet && involved(user, meta))
+			.filter((meta) => !meta.applet && !meta.memory && !meta.archivedAt && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
 				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };

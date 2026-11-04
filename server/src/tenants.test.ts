@@ -16,7 +16,6 @@ test("tenant boundaries cover direct URLs, chats, sessions, sharing, files, jobs
   process.env.DATA_DIR = dataDir;
   process.env.FS_ROOT = workRoot;
   process.env.CHAT_FOLDER = path.join(workRoot, "chat");
-  process.env.MEMORY_AFTER_DAYS = "7";
   // Seed legacy metadata before loading: migration must assign it only to Work.
   writeFileSync(path.join(dataDir, "db.json"), JSON.stringify({ sessions: { "pi:legacy": { key: "pi:legacy", id: "legacy", harness: "pi", cwd: workRoot, visibility: "private", shares: [], createdAt: "2020-01-01" } } }));
   const { loadStore, store, saveNow } = await import("./store.js");
@@ -99,12 +98,14 @@ test("tenant boundaries cover direct URLs, chats, sessions, sharing, files, jobs
       store.data.jobs.push({ tenantId: tenant.id, id, ownerId: owner.id, name: id, cwd: tenant.root, schedule: "every 1d", steps: [], enabled: false, failures: 0, createdAt: "2020-01-01", updatedAt: "2020-01-01" });
     }
     assert.deepEqual((await call("andris", "GET", "/jobs")).body.jobs.map((j: any) => j.id), ["old-family"]);
-    assert.equal((await call("andris", "GET", "/memory")).body.pending, 1);
+    assert.equal((await call("andris", "GET", "/memory/general-family")).status, 200);
+    assert.equal((await call("andris", "GET", "/memory/general-work")).status, 404);
     const search = (await call("andris", "GET", "/folders/search?q=chat")).body;
     assert.ok(search.folders.every((p: string) => !p.includes("work")));
     await call("andris", "POST", "/tenants/switch", { id: "work" });
     assert.deepEqual((await call("andris", "GET", "/jobs")).body.jobs.map((j: any) => j.id), ["old-work"]);
-    assert.equal((await call("andris", "GET", "/memory")).body.pending, 1);
+    assert.equal((await call("andris", "GET", "/memory/general-work")).status, 200);
+    assert.equal((await call("andris", "GET", "/memory/general-family")).status, 404);
     assert.equal((await call("andris", "GET", `/chats/${familyChat.body.chat}`)).status, 404);
     assert.equal((await call("andris", "GET", `/sessions/${familySession.body.session.key}`)).status, 404);
     assert.ok((await call("andris", "GET", "/chats")).body.chats.every((c: any) => c.id !== familyChat.body.chat));

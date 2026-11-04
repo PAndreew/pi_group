@@ -34,6 +34,9 @@ export interface Project {
 	links?: string[];
 	general?: boolean;
 	createdBy: string;
+	/** Zero disables automatic consolidation; manual runs remain available. */
+	memoryIntervalHours?: number;
+	memoryLastRun?: string;
 	/** Explicit project access; never grants access to conversations. Absent on projects from
 	 * before sharing existed: those stay open to the whole tenant until their creator shares them. */
 	memberIds?: string[];

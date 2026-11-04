@@ -118,6 +118,8 @@ The empty composer’s audio-lines button records a short silent English clip an
 
 ## Tenants
 
+Project memory keeps a compact `MEMORY.md` in each project's own folder, with timestamped snapshots and restorable session archives. Configure periodic or manual runs in **Model settings → Project memory**; mark sessions **Private** to exclude them or **Keep live** to prevent archiving. See [project memory](docs/project-memory.md).
+
 Use the home toolbar's **Tenant** selector to keep Work and Family conversations, default agent folders and memory separate. Access checks run on the server; OS-level agent isolation is still a separate deployment step. See [tenant setup and boundaries](docs/tenants.md).
 
 ## Secrets

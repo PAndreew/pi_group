@@ -52,8 +52,6 @@ export const config = {
 	enableDurable: bool("ENABLE_DURABLE", true),
 	/** Shared folder for chats started without a #folder; also holds the consolidated memory. Inside FS_ROOT. */
 	get chatFolder() { return currentTenant()?.chatFolder ?? path.resolve(env("CHAT_FOLDER", path.join(path.resolve(env("FS_ROOT", os.homedir())), "pi-chat"))); },
-	/** Consolidate chats untouched for this many days into the memory session; 0 turns it off. */
-	memoryAfterDays: num("MEMORY_AFTER_DAYS", 0),
 	/** Contact for push services (mailto: or https:). Keys are generated into DATA_DIR/vapid.json unless set. */
 	vapidSubject: env("VAPID_SUBJECT", "https://github.com/PAndreew/pi_group"),
 	vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",

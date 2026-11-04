@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import { once } from "node:events";
 import { test } from "node:test";
@@ -30,6 +31,11 @@ function fakeHarness() {
 			prompt: async (input: PromptInput) => {
 				assert.equal(state.running, false, "chat prompts must wait for the active turn");
 				prompts.push({ id, cwd, text: input.text });
+				if (input.text.startsWith("Consolidate public project context")) {
+					const stage = input.text.match(/Only edit (.*?)\/master\.md and/)![1];
+					writeFileSync(path.join(stage, "master.md"), "# Project context\nDeploy decisions are recorded here.");
+					writeFileSync(path.join(stage, "snapshot.md"), "# Snapshot\n" + input.text.slice(-500));
+				}
 				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }] });
 				state.running = true;
 				status();
@@ -215,21 +221,56 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		const files = await call("anna", "GET", "/folders/search?q=apisrvts&files=1");
 		assert.deepEqual(files.body.entries[0], { path: "projects/api-server/server.ts", type: "file" });
 
-		// Memory: an admin can consolidate everything now; the master session gets one prompt per conversation.
+		const privateSession = (await call("anna", "POST", "/sessions", { harness: "pi", path: "projects/api-server", memoryPrivate: true })).body.session;
+		assert.equal(privateSession.memoryPrivate, true);
+		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "private-secret-not-for-memory" });
+		// Project memory replaces the tenant-wide endpoint.
 		await until(async () => !(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "pi to finish");
-		assert.equal((await call("anna", "POST", "/memory/consolidate", { all: true })).status, 403);
-		const started = await call("chat-admin", "POST", "/memory/consolidate", { all: true });
-		assert.equal(started.body.started, true);
-		await until(async () => Boolean((await call("chat-admin", "GET", "/memory")).body.lastRun), "consolidation");
-		const status = (await call("chat-admin", "GET", "/memory")).body;
-		assert.equal(status.lastRun.error, undefined);
-		const master = store.session(status.sessionKey)!;
-		assert.equal(master.memory, true);
-		assert.equal(master.ownerId, admin.id);
-		const memoryPrompts = prompts.filter((p) => p.text.startsWith("Consolidate"));
-		assert.ok(memoryPrompts.some((p) => /anna: hello bob, the deploy failed/.test(p.text) && /pi: reply to f1/.test(p.text)));
-		const again = await call("chat-admin", "POST", "/memory/consolidate", { all: true });
-		assert.equal(again.body.pending, 0, "consolidated conversations are not repeated");
+		await until(() => adapter.liveSessions().every(s => !s.state.running), "all sessions idle");
+		// Old one-on-one sessions can archive; private and keep-live sessions cannot.
+		const soloMeta = store.session(solo.body.session)!;
+		adapter.live(soloMeta.id)!.state.messages.push({ role: "assistant", content: [{ type: "text", text: "early-important-fact " + "context ".repeat(9000) + " late-important-fact" }] });
+		store.upsertSession({ ...soloMeta, updatedAt: "2020-01-01T00:00:00.000Z" });
+		Object.defineProperty(adapter.live(soloMeta.id)!, "lastActivity", { value: Date.parse("2020-01-01T00:00:00.000Z"), writable: true });
+		const endpoint = "/memory/general-work";
+		assert.equal((await call("anna", "POST", `${endpoint}/consolidate`, {})).status, 403);
+		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 24 })).status, 200);
+		assert.equal((await call("chat-admin", "GET", endpoint)).body.intervalHours, 24);
+		assert.equal((await call("chat-admin", "POST", `${endpoint}/consolidate`, {})).body.started, true);
+		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "consolidation");
+		const status = (await call("chat-admin", "GET", endpoint)).body;
+		assert.equal(status.error, undefined);
+		assert.ok(status.lastRun);
+		assert.match(status.master, /Deploy decisions/);
+		const consolidatedPrompts = prompts.filter(p => p.text.startsWith("Consolidate"));
+		assert.ok(!consolidatedPrompts.some(p => p.text.includes("private-secret-not-for-memory")));
+		assert.ok(consolidatedPrompts.some(p => p.text.includes("early-important-fact")));
+		assert.ok(consolidatedPrompts.some(p => p.text.includes("late-important-fact")));
+		const { archiveEligible } = await import("./memory.js");
+		assert.equal(archiveEligible({ ...soloMeta, keepLive: true }), false);
+		assert.equal(archiveEligible({ ...soloMeta, memoryPrivate: true }), false);
+		assert.equal(archiveEligible({ ...soloMeta, updatedAt: new Date().toISOString() }), false);
+		assert.equal(archiveEligible({ ...soloMeta, authorship: undefined }), false);
+		assert.ok(store.session(soloMeta.key)!.archivedAt);
+		assert.ok(existsSync(store.session(soloMeta.key)!.archiveFile!));
+		const archive = JSON.parse(gunzipSync(readFileSync(store.session(soloMeta.key)!.archiveFile!)).toString());
+		assert.deepEqual(archive.messages, adapter.live(soloMeta.id)!.state.messages);
+		assert.ok(!(await call("anna", "GET", "/chats")).body.chats.some((c: any) => c.id === soloMeta.key));
+		assert.equal((await call("anna", "POST", `/sessions/${soloMeta.key}/prompt`, { text: "blocked" })).status, 409);
+		assert.equal((await call("anna", "PATCH", `/sessions/${soloMeta.key}/retention`, { memoryPrivate: true })).status, 409);
+		assert.equal((await call("bob", "PATCH", `/sessions/${soloMeta.key}/retention`, { archived: false })).status, 404);
+		assert.equal((await call("anna", "GET", `${endpoint}/archives`)).body.sessions.length, 1);
+		await call("anna", "PATCH", `/sessions/${soloMeta.key}/retention`, { archived: false });
+		assert.equal(store.session(soloMeta.key)!.archivedAt, undefined);
+		assert.equal(store.session(soloMeta.key)!.keepLive, true);
+		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "read public context" });
+		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>")));
+		assert.equal(store.session(privateSession.key)!.consolidatedAt, undefined);
+		const count = prompts.filter(p => p.text.startsWith("Consolidate")).length;
+		await call("chat-admin", "POST", `${endpoint}/consolidate`, {});
+		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "repeat consolidation");
+		assert.equal(prompts.filter(p => p.text.startsWith("Consolidate")).length, count, JSON.stringify(prompts.filter(p => p.text.startsWith("Consolidate")).map(p => p.text.match(/Source:.*?chunk/s)?.[0])));
+		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 0 })).status, 200);
 
 		// Deleting a chat removes it for the one deleting; it is gone once the last member deletes it.
 		const doomed = (await call("anna", "POST", "/chats", { text: "temporary", userIds: [bob.id] })).body.chat;

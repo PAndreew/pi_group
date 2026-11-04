@@ -23,7 +23,7 @@ The idempotent script keeps existing conversations and accounts in Work, adds th
 
 Memberships live in `db.json`'s `tenants[].memberIds`; session and job metadata have `tenantId`; chat rows have `tenant_id` (legacy default: `work`). Back up both stores together. Additional tenant definitions can be provisioned in the same metadata; there is not yet a general tenant-admin UI.
 
-Default chat working folders and memory master sessions are per tenant. Existing Work folders and memories are preserved, not copied to Family. Scheduled jobs and deferred forwarding carry the originating tenant; user streams are pinned to the tenant in which they opened. Provider credentials and installed extensions remain shared.
+Default chat working folders are per tenant. [Project memory](project-memory.md) masters, snapshots, archives and schedules are per project within that tenant; the former tenant-wide memory worker is retired. Existing Work folders and memories are preserved, not copied to Family. Scheduled jobs and deferred forwarding carry the originating tenant; user streams are pinned to the tenant in which they opened. Provider credentials and installed extensions remain shared.
 
 ## Trust boundary
 
