@@ -278,7 +278,7 @@ html[data-editing] body { padding-bottom: 0; }
 
 [data-composer-box] { background-color: var(--composer-background); color: var(--composer-foreground); }
 [data-composer-box] .composer-icon { color: var(--composer-icon); background-color: transparent; }
-[data-composer-box] > div,
+[data-composer-box] > div:not([data-suggestions]),
 [data-composer-box] > div > div { background-color: transparent; }
 [data-composer-box] .composer-icon:is([data-active="true"], :active, :focus-visible) { color: var(--composer-active); }
 [data-composer-box] textarea::placeholder { color: var(--composer-placeholder); }
