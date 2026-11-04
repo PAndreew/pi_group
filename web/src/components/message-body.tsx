@@ -43,14 +43,14 @@ function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
             key={i}
             href={`#${new URLSearchParams({ file: part.path })}`}
             title={missing.has(part.path) ? `/${part.path} was moved or deleted` : `Open /${part.path}`}
-            className={cn("inline-flex max-w-full items-baseline gap-1 align-bottom underline underline-offset-2", missing.has(part.path) && "line-through opacity-60")}
+            className={cn("break-all underline underline-offset-2", missing.has(part.path) && "line-through opacity-60")}
             onClick={(e) => {
               e.preventDefault()
               nav.openFile(part.path)
             }}
           >
-            <FileIcon fileName={part.path.split("/").pop() ?? part.path} autoAssign width={16} height={16} className="shrink-0 self-center" aria-hidden="true" />
-            <span className="truncate">{part.path.split("/").pop()}</span>
+            <FileIcon fileName={part.path.split("/").pop() ?? part.path} autoAssign width={16} height={16} className="mr-1 inline-block align-text-bottom" aria-hidden="true" />
+            <span>{part.path.split("/").pop()}</span>
           </a>
         ) : (
           <Linkified key={i} text={part.text} />
