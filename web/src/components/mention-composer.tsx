@@ -206,8 +206,10 @@ export function MentionComposer({
   return (
     <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
       {open && (
-        <ul className="absolute bottom-full left-0 z-[100] mb-1 max-h-64 w-full max-w-sm overflow-y-auto rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] p-1 shadow-md" role="listbox" onPointerDown={(e) => e.preventDefault()}>
-          <li className="sticky top-0 z-10 flex justify-end bg-[var(--composer-background)]"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></li>
+        <div data-suggestions className="absolute bottom-full left-0 z-[100] mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md" onPointerDown={(e) => e.preventDefault()}>
+        <div className="flex shrink-0 justify-end px-1 pt-1"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1.5 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></div>
+        {/* Rows scrolled past the edges fade out, like the chat list. */}
+        <ul className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2" role="listbox">
           {options.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
               <button
@@ -246,6 +248,7 @@ export function MentionComposer({
             </li>
           ))}
         </ul>
+        </div>
       )}
       <div className="flex min-w-0 items-start gap-1 px-3">
       {selectedFolder && (

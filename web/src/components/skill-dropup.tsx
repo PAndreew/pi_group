@@ -22,7 +22,7 @@ export function SkillDropup({ value, sessionKey, onChange }: { value: string; se
 
   return (
     <div
-      className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
+      className="absolute bottom-full left-0 z-20 mb-1 flex max-h-64 w-full flex-col rounded-md border bg-popover shadow-md"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault()
@@ -30,11 +30,12 @@ export function SkillDropup({ value, sessionKey, onChange }: { value: string; se
         }
       }}
     >
-      <div className="flex justify-end">
-        <button type="button" aria-label="Dismiss skill suggestions" className="rounded p-1 hover:bg-accent" onClick={() => setDismissed(value)}>
+      <div className="flex shrink-0 justify-end px-1 pt-1">
+        <button type="button" aria-label="Dismiss skill suggestions" className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}>
           <X className="size-4" />
         </button>
       </div>
+      <div className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2">
       {skills.map((skill) => (
         <button
           type="button"
@@ -46,6 +47,7 @@ export function SkillDropup({ value, sessionKey, onChange }: { value: string; se
           /skill:{skill.name}
         </button>
       ))}
+      </div>
     </div>
   )
 }

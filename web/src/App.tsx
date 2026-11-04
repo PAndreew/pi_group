@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, Brain, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Settings, Sun, Users, Vault } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -16,16 +16,13 @@ import { WorkspaceSidebar } from "@/components/workspace-sidebar"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { ChatSearchProvider } from "@/lib/chat-search"
 import { NavSlotContext } from "@/lib/nav-slot"
-import { SettingsDialog } from "@/components/settings-dialog"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { PasswordDialog, UsersDialog } from "@/components/users-dialog"
-import { AssistanceDialog } from "@/components/assistance-dialog"
-import { VaultDialog } from "@/components/vault-dialog"
 import { AuthProvider, useAuth } from "@/hooks/use-auth"
 import { useAppViewport } from "@/hooks/use-app-viewport"
 import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-notifications"
@@ -140,15 +137,12 @@ function Workspace() {
   const { active: project } = useProjects()
   const notifications = useRunNotifications(route.session, route.chat)
   const [newFolder, setNewFolder] = useState<string>()
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   useEffect(() => setDrawerOpen(false), [route.chat, route.session, route.file, route.app])
   const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [vaultOpen, setVaultOpen] = useState(false)
-  const [assistanceOpen, setAssistanceOpen] = useState(false)
 
   const previewReturn = useRef<Route | null>(null)
   const closePreview = () => {
@@ -182,15 +176,6 @@ function Workspace() {
       .then(({ session }) => nav.openSession(session.key, folder), (error) => toast.error(error.message))
       .finally(() => setCreating(false))
   }, [newFolder, user, creating, nav, project])
-
-  const consolidate = async () => {
-    try {
-      const r = await api.consolidateMemory()
-      toast.info(r.started ? `Consolidating ${r.pending} conversation${r.pending === 1 ? "" : "s"} into memory…` : (r.reason ?? "Nothing new to consolidate."))
-    } catch (error) {
-      toast.error((error as Error).message)
-    }
-  }
 
   const back = (
     <Button variant="ghost" size="icon-sm" onClick={nav.home} aria-label="Back to chats">
@@ -241,25 +226,8 @@ function Workspace() {
                 {notifications.enabled ? <Bell /> : <BellOff />}
                 {notifications.supported ? `Notifications: ${notifications.enabled ? "on" : "off"}` : notificationsUnavailable()}
               </DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger><Settings /> Model settings</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
-                    <Settings /> Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setAssistanceOpen(true)}>
-                    <Brain /> Cloudflare assistance
-                  </DropdownMenuItem>
-                  {user?.role === "admin" && <DropdownMenuItem onSelect={() => void consolidate()}>
-                    <Brain /> Consolidate memory now
-                  </DropdownMenuItem>}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
               <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
                 <Users /> Profile picture
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setVaultOpen(true)}>
-                <Vault /> Secret vault
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
                 <KeyRound /> Change password
@@ -316,12 +284,9 @@ function Workspace() {
           }}
         />
         <FilePreviewDialog lastEdit={lastEdit} open={previewOpen && !previewPanel} onOpenChange={setPreviewOpen} />
-        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
-        <VaultDialog open={vaultOpen} onOpenChange={setVaultOpen} />
-        <AssistanceDialog open={assistanceOpen} onOpenChange={setAssistanceOpen} />
       </div>
       </NavSlotContext.Provider>
     </NavContext.Provider>

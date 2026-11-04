@@ -1,10 +1,12 @@
-import { Clock, FolderOpen, Gauge, Hammer, LayoutGrid, SquareTerminal } from "lucide-react"
+import { Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, SquareTerminal, Vault } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { AppletsDialog } from "@/components/applets-dialog"
 import { ExplorerDialog } from "@/components/explorer-dialog"
 import { JobsDialog } from "@/components/jobs-dialog"
+import { ModelSettingsDialog } from "@/components/model-settings-dialog"
 import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
 import { ToolsDialog } from "@/components/tools-dialog"
+import { VaultDialog } from "@/components/vault-dialog"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import { usePendingApplets } from "@/hooks/use-pending-applets"
@@ -14,7 +16,7 @@ import { useNav } from "@/lib/nav"
 /** xterm.js is large; load it only when someone opens a terminal. */
 const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
-type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "explorer"
+type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "explorer" | "vault" | "models"
 
 /**
  * The tool icons, each opening its own modal: under every message box, or at the bottom of the
@@ -62,6 +64,8 @@ export function ComposerTools({
         {icon("applets", pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets", dot(pendingApplets > 0, <LayoutGrid />))}
         {icon("monitor", "Resource monitor", <Gauge />)}
         {icon("explorer", "Folders and files", <FolderOpen />)}
+        {icon("vault", "Secret vault", <Vault />)}
+        {icon("models", "Model settings", <Cpu />)}
       </div>
       <ToolsDialog
         sessionKey={sessionKey}
@@ -80,6 +84,8 @@ export function ComposerTools({
       <AppletsDialog open={panel === "applets"} onOpenChange={openChange("applets")} />
       <ResourceMonitorDialog open={panel === "monitor"} onOpenChange={openChange("monitor")} onOpenSession={(s) => nav.openSession(s.key, s.path)} />
       <ExplorerDialog folder={folder} open={panel === "explorer"} onOpenChange={openChange("explorer")} />
+      <VaultDialog open={panel === "vault"} onOpenChange={openChange("vault")} />
+      <ModelSettingsDialog open={panel === "models"} onOpenChange={openChange("models")} />
       {panel === "terminal" && (
         <Suspense>
           <TerminalDialog sessionKey={sessionKey} path={folder} title={`/${folder}`} open onOpenChange={(o) => !o && setPanel(undefined)} />
