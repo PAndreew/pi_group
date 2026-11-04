@@ -80,6 +80,14 @@ export function fileRoutes(): Router {
 		res.json({ ...stat, mime: mimeFor(stat.path) });
 	});
 
+	/** Which of the given paths no longer exist (or cannot be reached), so links to them can show as dead. */
+	router.post("/fs/missing", async (req, res) => {
+		const { paths } = z.object({ paths: z.array(z.string().max(1024)).max(200) }).parse(req.body);
+		const storage = platform().storage;
+		const missing = await Promise.all([...new Set(paths)].map((p) => storage.stat(p).then(() => undefined, () => p)));
+		res.json({ missing: missing.filter(Boolean) });
+	});
+
 	/** Inline content for the in-app viewers. Served sandboxed so user HTML/SVG can never run with the app's origin. */
 	router.get("/fs/raw", async (req, res) => {
 		const file = localFile(req.query.path);

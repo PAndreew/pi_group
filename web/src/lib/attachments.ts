@@ -48,3 +48,34 @@ export function withoutAttachmentList(text: string) {
   const body = text.slice(0, list).trimEnd()
   return others.length ? `${body}\n\nAttached files:\n${others.join("\n")}`.trim() : body
 }
+
+/** A `path` token that names a file (has a folder and an extension), not inline code like `npm i`. */
+const PATH_TOKEN = /`([^`\s][^`\n]*\/[^`\n/]+\.[A-Za-z0-9]{1,10})`/g
+
+/**
+ * The text split around the files it refers to, so they can show as links: `path` tokens
+ * (root-relative, as the chat composers insert them) and the items of an "Attached files:" list
+ * (relative to the session `folder`).
+ */
+export function fileParts(text: string, folder = ""): ({ text: string } | { path: string })[] {
+  const parts: ({ text: string } | { path: string })[] = []
+  let last = 0
+  const push = (start: number, end: number, path: string | undefined) => {
+    if (!path) return
+    if (start > last) parts.push({ text: text.slice(last, start) })
+    parts.push({ path })
+    last = end
+  }
+  for (const match of text.matchAll(PATH_TOKEN)) push(match.index, match.index + match[0].length, fileLinkPath(match[1].trim(), ""))
+  const header = text.indexOf("Attached files:")
+  if (header >= last && header >= 0) {
+    let at = header + "Attached files:".length
+    for (const line of text.slice(at).split("\n")) {
+      const item = /^(\s*- )(.+?)\s*$/.exec(line)
+      if (item) push(at + item[1].length, at + item[1].length + item[2].length, fileLinkPath(item[2], folder))
+      at += line.length + 1
+    }
+  }
+  if (last < text.length) parts.push({ text: text.slice(last) })
+  return parts
+}

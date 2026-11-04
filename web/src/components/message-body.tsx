@@ -1,10 +1,14 @@
+import { FileIcon } from "@react-symbols/icons/utils"
 import { Share } from "lucide-react"
+import { useContext } from "react"
 import { ImageGallery } from "@/components/image-gallery"
 import { Markdown } from "@/components/markdown"
 import { WebLink } from "@/components/web-link"
 import { api } from "@/lib/api"
-import { isVideo, mediaRefs, withoutAttachmentList } from "@/lib/attachments"
+import { fileParts, isVideo, mediaRefs, withoutAttachmentList } from "@/lib/attachments"
 import { withoutRefDetails } from "@/lib/element-refs"
+import { useMissingFiles } from "@/lib/missing-files"
+import { NavContext } from "@/lib/nav"
 import { linkify, parseShared } from "@/lib/shared"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +29,37 @@ export function Linkified({ text }: { text: string }) {
   )
 }
 
+/** Plain text with web addresses and referenced files (uploads) made clickable; files open in the preview. */
+function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
+  const nav = useContext(NavContext)
+  const parts = fileParts(text, folder)
+  const missing = useMissingFiles(nav ? parts.flatMap((part) => ("path" in part ? [part.path] : [])) : [])
+  if (!nav) return <Linkified text={text} />
+  return (
+    <>
+      {parts.map((part, i) =>
+        "path" in part ? (
+          <a
+            key={i}
+            href={`#${new URLSearchParams({ file: part.path })}`}
+            title={missing.has(part.path) ? `/${part.path} was moved or deleted` : `Open /${part.path}`}
+            className={cn("inline-flex max-w-full items-baseline gap-1 align-bottom underline underline-offset-2", missing.has(part.path) && "line-through opacity-60")}
+            onClick={(e) => {
+              e.preventDefault()
+              nav.openFile(part.path)
+            }}
+          >
+            <FileIcon fileName={part.path.split("/").pop() ?? part.path} autoAssign width={16} height={16} className="shrink-0 self-center" aria-hidden="true" />
+            <span className="truncate">{part.path.split("/").pop()}</span>
+          </a>
+        ) : (
+          <Linkified key={i} text={part.text} />
+        ),
+      )}
+    </>
+  )
+}
+
 /**
  * The text of a person's message: plain with clickable links, or, for a message shared from another
  * session or chat, a link to its source and the shared content as markdown. `tinted` is for
@@ -39,7 +74,7 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
     return (
       <>
         <div className="whitespace-pre-wrap break-words">
-          <Linkified text={withoutRefDetails(withoutAttachmentList(text))} />
+          <TextWithLinks text={withoutRefDetails(withoutAttachmentList(text))} folder={folder} />
         </div>
         <ImageGallery images={images} />
       </>

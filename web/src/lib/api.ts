@@ -457,6 +457,8 @@ export const api = {
   saveText: (path: string, content: string, mtime?: number) => request<{ path: string; size: number; mtime: number }>("PUT", "/api/fs/text", { path, content, mtime }),
   stat: (path: string) => request<{ path: string; size: number; mtime: number; mime: string; type: string }>("GET", `/api/fs/stat?${q({ path })}`),
   mkdir: (path: string) => request("POST", "/api/fs/mkdir", { path }),
+  /** Which of `paths` no longer exist, for showing dead file links. */
+  missingFiles: (paths: string[]) => request<{ missing: string[] }>("POST", "/api/fs/missing", { paths }),
   upload: (dir: string, files: File[]) => {
     const form = new FormData()
     for (const f of files) form.append("files", f, f.name)

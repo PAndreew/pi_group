@@ -1,11 +1,13 @@
-import { ArrowLeft, Code, Download, Eye, FileQuestion, Loader2, Pencil, Save, X } from "lucide-react"
-import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { ArrowLeft, Code, Download, Eye, File, FileQuestion, FileX, Loader2, Pencil, Save, Search, X } from "lucide-react"
+import { lazy, Suspense, useContext, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { CodeBlock, languageFor } from "@/components/code-block"
 import { Markdown } from "@/components/markdown"
 import { PreviewErrorBoundary } from "@/components/preview-error-boundary"
 import { Button } from "@/components/ui/button"
-import { api } from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
+import { markMissing } from "@/lib/missing-files"
+import { NavContext } from "@/lib/nav"
 import { formatBytes } from "@/lib/utils"
 
 const PdfViewer = lazy(() => import("./pdf-viewer"))
@@ -149,12 +151,79 @@ function TextEditor({ path, text, mtime, onSaved, onClose }: { path: string; tex
   )
 }
 
+/** Whether `path` is gone (404), checked once per path; other errors are left to the viewers. */
+function useMissing(path: string) {
+  const [missing, setMissing] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setMissing(false)
+    api.stat(path).then(
+      () => alive && markMissing(path, false),
+      (error) => {
+        if (!alive || !(error instanceof ApiError) || error.status !== 404) return
+        setMissing(true)
+        markMissing(path, true)
+      },
+    )
+    return () => { alive = false }
+  }, [path])
+  return missing
+}
+
+/** A moved or deleted file: say so, and offer to look for files with the same name. */
+function NotFound({ path }: { path: string }) {
+  const nav = useContext(NavContext)
+  const name = path.split("/").pop() ?? path
+  const [found, setFound] = useState<string[]>()
+  const [searching, setSearching] = useState(false)
+  const search = async () => {
+    setSearching(true)
+    try {
+      const { entries } = await api.searchPaths(name)
+      setFound(entries.filter((e) => e.type === "file" && e.path !== path).map((e) => e.path))
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSearching(false)
+    }
+  }
+  return (
+    <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
+      <FileX className="size-10" />
+      <p>
+        This file was moved or deleted.
+        <br />
+        <span className="break-all text-xs">/{path}</span>
+      </p>
+      {nav && (
+        <Button variant="outline" onClick={() => void search()} disabled={searching}>
+          {searching ? <Loader2 className="animate-spin" /> : <Search />} Search for {name}
+        </Button>
+      )}
+      {found?.length === 0 && <p>No other file with this name.</p>}
+      {found && found.length > 0 && (
+        <ul className="grid w-full max-w-md gap-1 text-left">
+          {found.map((p) => (
+            <li key={p}>
+              <button type="button" className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-foreground hover:bg-accent" onClick={() => nav?.openFile(p)}>
+                <File className="size-4 shrink-0 text-muted-foreground" />
+                <span className="truncate" title={`/${p}`}>/{p}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function FileViewer({ path, onClose }: { path: string; onClose?: () => void }) {
   const kind = kindOf(path)
   const needsText = kind === "html" || kind === "markdown" || kind === "csv" || kind === "text"
   const [{ text, mtime, error, binary, tooBig }, setLoaded] = useText(path, needsText)
   const [source, setSource] = useState(false)
   const [editing, setEditing] = useState(false)
+  const missing = useMissing(path)
   const name = path.split("/").pop() ?? path
   const url = api.rawUrl(path)
   const rows = useMemo(() => (kind === "csv" && text ? parseCsv(text, path.toLowerCase().endsWith(".tsv") ? "\t" : ",") : []), [kind, text, path])
@@ -166,7 +235,8 @@ export function FileViewer({ path, onClose }: { path: string; onClose?: () => vo
   const canToggle = (kind === "html" || kind === "markdown" || kind === "csv") && text !== undefined
 
   let body: React.ReactNode
-  if (kind === "image") body = <img src={url} alt={name} className="mx-auto max-h-full max-w-full object-contain" />
+  if (missing) body = <NotFound path={path} />
+  else if (kind === "image") body = <img src={url} alt={name} className="mx-auto max-h-full max-w-full object-contain" />
   else if (kind === "video") body = <video src={url} controls playsInline className="mx-auto max-h-full max-w-full" />
   else if (kind === "audio") body = <audio src={url} controls className="mx-auto mt-8 w-full max-w-md" />
   else if (kind === "pdf")

@@ -82,6 +82,8 @@ test("tenant boundaries cover direct URLs, chats, sessions, sharing, files, jobs
     assert.equal((await call("andris", "POST", "/sessions/forward", { text: "leak", to: [{ kind: "session", id: workKey }] })).status, 404);
     assert.equal((await call("andris", "GET", "/fs/list", undefined, "work")).status, 409, "stale tabs must not reinterpret paths in the new tenant");
     assert.equal((await call("andris", "GET", "/fs/list?path=../work")).status, 403);
+    writeFileSync(path.join(familyRoot, "here.txt"), "x");
+    assert.deepEqual((await call("andris", "POST", "/fs/missing", { paths: ["here.txt", "gone.txt", "../work"] })).body.missing, ["gone.txt", "../work"], "dead links are checked inside the current tenant only");
     assert.deepEqual((await call("andris", "GET", "/users/directory")).body.users.map((u: any) => u.username).sort(), ["andris", "nyuszi"]);
     const familySession = await call("andris", "POST", "/sessions", { harness: "pi", path: "" });
     assert.equal(familySession.status, 200);
