@@ -2,6 +2,8 @@ import { AudioLines, LoaderCircle, Square, SendHorizontal, Pause } from "lucide-
 import { Button } from "@/components/ui/button"
 import type { DictationPhase } from "@/hooks/use-silent-dictation"
 
+const ICON = "size-[22px] lg:size-[18px]"
+
 /**
  * The one message box every screen uses: the text area (`children`) above a row with the Agent
  * toggle at the left, send at the right (stop beside it while a run can be stopped), and the
@@ -53,7 +55,8 @@ export function ComposerBox({
         {agent}
         <div className="flex min-w-0 flex-1 items-center justify-evenly">{controls}</div>
         <Button className={`${dictate ? recording ? "bg-transparent text-red-500 hover:bg-red-500/10 hover:text-red-500" : "bg-transparent text-blue-500 hover:bg-blue-500/10 hover:text-blue-500" : "composer-send"} size-10 shrink-0 disabled:opacity-35 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]`} size="icon" onClick={dictate ? onDictate : onStop ?? onSend} disabled={preparing || (!dictate && !onStop && (sending || !canSend))} aria-label={label} title={dictationHint || label} data-dictation-state={dictate ? dictationPhase : undefined}>
-          {dictate ? preparing ? <LoaderCircle className="animate-spin" /> : recording ? <Square className="animate-pulse" /> : <AudioLines /> : onStop ? <Pause className="pause-shimmer" /> : <SendHorizontal />}
+          {/* An explicit size: Button otherwise shrinks unsized icons below the other composer icons. */}
+          {dictate ? preparing ? <LoaderCircle className={`${ICON} animate-spin`} /> : recording ? <Square className={`${ICON} animate-pulse`} /> : <AudioLines className={ICON} /> : onStop ? <Pause className={`${ICON} pause-shimmer`} /> : <SendHorizontal className={ICON} />}
         </Button>
       </div>
       {dictationHint && <p role="status" aria-live="polite" className="px-3 pb-2 text-xs text-muted-foreground">{dictationHint}</p>}

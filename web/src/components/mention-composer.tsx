@@ -1,5 +1,5 @@
 import { File, Folder, Trash2, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
 import { useSilentDictation } from "@/hooks/use-silent-dictation"
@@ -108,6 +108,18 @@ export function MentionComposer({
   const value = folderToken ? rawValue.slice(0, folderToken.index) + folderToken[1] + rawValue.slice(folderToken.index + folderToken[0].length) : rawValue
   const onChange = (next: string) => onRawChange(selectedFolder ? withFolder(next, selectedFolder) : next)
   const input = useRef<HTMLTextAreaElement>(null)
+  // The folder pill sits over the start of the first line; only that line is indented, so text flows under it.
+  const pill = useRef<HTMLDivElement>(null)
+  const [indent, setIndent] = useState(0)
+  useLayoutEffect(() => {
+    const el = pill.current
+    if (!el) return setIndent(0)
+    const measure = () => setIndent(el.offsetWidth + 6)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [selectedFolder])
   const dictation = useSilentDictation((text) => {
     onChange(text)
     requestAnimationFrame(() => input.current?.focus())
@@ -250,9 +262,9 @@ export function MentionComposer({
         </ul>
         </div>
       )}
-      <div className="flex min-w-0 items-start gap-1 px-3">
+      <div className="relative min-w-0 px-3">
       {selectedFolder && (
-        <div className="max-w-[50%] shrink-0 pt-2">
+        <div ref={pill} className="absolute top-2 left-3 z-10 max-w-[50%]">
           <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { onRawChange(value); setToken(undefined); input.current?.focus() }}>
             <Folder className="size-3.5 shrink-0" />
             <span className="truncate">{selectedFolder}</span>
@@ -265,7 +277,8 @@ export function MentionComposer({
         value={value}
         placeholder={selectedFolder ? "" : placeholder}
         rows={1}
-        className="max-h-48 min-h-12 min-w-0 flex-1 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"
+        style={indent ? { textIndent: indent } : undefined}
+        className="max-h-48 min-h-12 w-full min-w-0 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
         onSelect={(e) => setToken(activeToken(value, e.currentTarget.selectionStart))}
         onBlur={() => setTimeout(() => setToken(undefined), 100)}
