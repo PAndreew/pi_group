@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { gunzipSync } from "node:zlib";
 import path from "node:path";
@@ -31,10 +31,13 @@ function fakeHarness() {
 			prompt: async (input: PromptInput) => {
 				assert.equal(state.running, false, "chat prompts must wait for the active turn");
 				prompts.push({ id, cwd, text: input.text });
-				if (input.text.startsWith("Consolidate public project context")) {
-					const stage = input.text.match(/Only edit (.*?)\/master\.md and/)![1];
-					writeFileSync(path.join(stage, "master.md"), "# Project context\nDeploy decisions are recorded here.");
-					writeFileSync(path.join(stage, "snapshot.md"), "# Snapshot\n" + input.text.slice(-500));
+				if (input.text.startsWith("Extract project memory")) {
+					const draft = input.text.match(/Only edit (.+?\.md)\. /)![1];
+					appendFileSync(draft, `Notes: ${input.text.slice(-300)}\n`);
+				}
+				if (input.text.startsWith("Merge project memory")) {
+					const master = input.text.match(/Only edit (.+?master\.md)\. /)![1];
+					writeFileSync(master, "# Project context\nDeploy decisions are recorded here.");
 				}
 				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }] });
 				state.running = true;
@@ -242,7 +245,14 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(status.error, undefined);
 		assert.ok(status.lastRun);
 		assert.match(status.master, /Deploy decisions/);
-		const consolidatedPrompts = prompts.filter(p => p.text.startsWith("Consolidate"));
+		assert.ok(status.sources.length > 0 && status.sources.every((s: any) => s.status === "done"), JSON.stringify(status.sources));
+		const memoryDir = path.join(config.chatFolder, "memory");
+		const manifest = JSON.parse(readFileSync(path.join(memoryDir, "manifest.json"), "utf8"));
+		assert.deepEqual(manifest.unmerged, [], "every snapshot was merged");
+		assert.ok(readdirSync(memoryDir).some(f => f.endsWith(`${soloMeta.key.replace(/[^\w-]/g, "_")}.md`)), "one timestamped snapshot per source");
+		const consolidatedPrompts = prompts.filter(p => p.text.startsWith("Extract"));
+		assert.ok(consolidatedPrompts.filter(p => p.text.includes(`Source: ${soloMeta.key},`)).length >= 3, "a long source is split into parts");
+		assert.equal(new Set(consolidatedPrompts.map(p => p.id)).size, consolidatedPrompts.length, "every part gets a fresh worker");
 		assert.ok(!consolidatedPrompts.some(p => p.text.includes("private-secret-not-for-memory")));
 		assert.ok(consolidatedPrompts.some(p => p.text.includes("early-important-fact")));
 		assert.ok(consolidatedPrompts.some(p => p.text.includes("late-important-fact")));
@@ -266,10 +276,13 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "read public context" });
 		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>")));
 		assert.equal(store.session(privateSession.key)!.consolidatedAt, undefined);
-		const count = prompts.filter(p => p.text.startsWith("Consolidate")).length;
+		const count = prompts.filter(p => p.text.startsWith("Extract")).length;
 		await call("chat-admin", "POST", `${endpoint}/consolidate`, {});
 		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "repeat consolidation");
-		assert.equal(prompts.filter(p => p.text.startsWith("Consolidate")).length, count, JSON.stringify(prompts.filter(p => p.text.startsWith("Consolidate")).map(p => p.text.match(/Source:.*?chunk/s)?.[0])));
+		assert.equal(prompts.filter(p => p.text.startsWith("Extract")).length, count, JSON.stringify(prompts.filter(p => p.text.startsWith("Extract")).map(p => p.text.match(/Source:.*?part/s)?.[0])));
+		assert.equal((await call("chat-admin", "PATCH", endpoint, { concurrency: 2, model: { harness: "pi", provider: "test", id: "cheap", thinkingLevel: "low" } })).status, 200);
+		assert.deepEqual((await call("chat-admin", "GET", endpoint)).body.model, { provider: "test", id: "cheap" });
+		assert.equal((await call("anna", "PATCH", endpoint, { model: null })).status, 403);
 		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 0 })).status, 200);
 
 		// Deleting a chat removes it for the one deleting; it is gone once the last member deletes it.

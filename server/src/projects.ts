@@ -37,6 +37,12 @@ export interface Project {
 	/** Zero disables automatic consolidation; manual runs remain available. */
 	memoryIntervalHours?: number;
 	memoryLastRun?: string;
+	/** Runtime and model for memory workers; absent uses the consolidating person's defaults. */
+	memoryHarness?: string;
+	memoryModel?: { provider: string; id: string };
+	memoryThinking?: string;
+	/** Sources extracted at once (default 3). */
+	memoryConcurrency?: number;
 	/** Explicit project access; never grants access to conversations. Absent on projects from
 	 * before sharing existed: those stay open to the whole tenant until their creator shares them. */
 	memberIds?: string[];

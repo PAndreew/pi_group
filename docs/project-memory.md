@@ -7,8 +7,20 @@ Model settings → Project memory configures the **selected project's** interval
 ## Three layers
 
 - `MEMORY.md`: a master capped at 12,000 characters, containing durable terminology, architecture, confirmed decisions, constraints, conventions and brief current state. Its contents are supplied on the first prompt of each agent runtime, and again after changes. This also works for sessions started in linked repositories.
-- `memory/<UTC timestamp>-<id>.md`: detailed snapshots with source session/chat IDs. Only new or changed sources are processed; long transcripts are chunked rather than tail-truncated. The worker writes staging files, which are validated before publication. Changed sources invalidate the run.
+- `memory/<UTC timestamp>-<source>.md`: one detailed snapshot per source and run, with the source ID and the message range it covers.
 - `memory/archives/<id>.json.gz`: losslessly compressed session metadata and messages. Harness originals are retained as well; archiving is not deletion.
+
+`memory/manifest.json` records how many messages of each source have been extracted and which snapshots still wait to be merged.
+
+## How a run works
+
+1. **Extract (map).** Every new or changed session and chat is extracted on its own, several at once ("Conversations at once", default 3, max 8). Only messages added since the last extraction are read, as a compact transcript: what people and the agent said and which tools were called, with tool output cut to a glimpse. A long transcript is split into parts of about 24,000 characters; each part gets a **fresh** worker session that updates the source's draft notes, so no worker's context fills up.
+2. **Publish per source.** As soon as a source's notes are complete they are published as a timestamped snapshot and the source is marked consolidated. A failure loses only the sources still in flight; they are retried on the next run. Messages appended while a source was being extracted do not invalidate it; they are picked up next time. A source that becomes private, is deleted or moves to another project is not published.
+3. **Merge (reduce).** The new snapshots are folded into `MEMORY.md` in batches of about 40,000 characters, each by a fresh worker reading the snapshot files. Each batch is validated (nonempty, at most 12,000 characters) before it replaces the master. Snapshots that could not be merged stay listed in the manifest and are merged on the next run.
+
+Workers run on the project's **consolidation model** (Model settings → Project memory), or on the consolidating person's defaults when none is set. A small, cheap model is usually enough.
+
+Progress is live: the Project memory panel lists each source (queued, part n/m, done, failed) with a Watch button that opens its worker. A session being extracted shows a "memory n/m" chip in its header; worker sessions are shared read-only with the source's viewers so they can watch them stream. Workers are removed when they finish.
 
 ## Privacy
 
@@ -35,8 +47,8 @@ The session menu's Keep live option is independent of keeping an agent process r
 
 ## API
 
-- `GET /api/memory/:projectId`: master, interval, running status, last successful run, latest error.
-- `PATCH /api/memory/:projectId` with `{ "intervalHours": 0 }`: disable periodic runs (or set positive integer hours).
+- `GET /api/memory/:projectId`: master, interval, consolidation model, concurrency, running status and phase, per-source progress of the current or last run, last successful run, latest error.
+- `PATCH /api/memory/:projectId` with any of `{ "intervalHours": 0, "concurrency": 3, "model": { "harness", "provider", "id", "thinkingLevel" } }`; `"model": null` returns to the consolidating person's defaults. Zero hours disables periodic runs.
 - `POST /api/memory/:projectId/consolidate`: manual run.
 - `GET /api/memory/:projectId/archives`: accessible archived sessions.
 - `PATCH /api/sessions/:key/retention`: `memoryPrivate`, `keepLive`, or `archived: false` to restore.

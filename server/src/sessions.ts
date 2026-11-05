@@ -14,7 +14,7 @@ import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
-import { mountMemory, projectMemory } from "./memory.js";
+import { extractionOf, mountMemory, projectMemory } from "./memory.js";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
@@ -570,6 +570,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			memoryPrivate: Boolean(meta.memoryPrivate),
 			keepLive: Boolean(meta.keepLive),
 			archivedAt: meta.archivedAt,
+			/** Memory extraction in progress for this session, with the worker to watch. */
+			memoryRun: extractionOf(meta.key),
 			shares: meta.shares.map((s) => ({ ...s, username: store.userById(s.userId)?.username ?? "unknown" })),
 			access: accessOf(user, meta),
 			projectId: projectIdOf(meta.cwd, meta.projectId, meta.tenantId ?? "work"),

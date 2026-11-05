@@ -80,11 +80,39 @@ export interface SessionSummary {
   memoryPrivate?: boolean
   keepLive?: boolean
   archivedAt?: string
+  /** Memory extraction running for this session, with the worker to watch. */
+  memoryRun?: { worker?: string; part: number; parts: number }
   owner?: string
   visibility: "private" | "shared"
   shares: { userId: string; username: string; access: Access }[]
   projectId?: string
   access?: EffectiveAccess
+}
+
+export interface MemorySource {
+  id: string
+  title: string
+  status: "queued" | "extracting" | "done" | "failed"
+  part: number
+  parts: number
+  worker?: string
+  error?: string
+}
+
+export interface ProjectMemoryStatus {
+  intervalHours: number
+  /** Runtime and model for memory workers; absent uses the consolidating person's defaults. */
+  harness?: string
+  model?: { provider: string; id: string }
+  thinkingLevel?: string
+  concurrency: number
+  lastRun?: string
+  running: boolean
+  phase?: "extract" | "merge" | "done"
+  /** The current run's sources, or the last run's. */
+  sources: MemorySource[]
+  error?: string
+  master: string
 }
 
 /** A pi AgentMessage; loose on purpose, harnesses may add roles. */
@@ -496,8 +524,9 @@ export const api = {
   projectMoves: () => request<{ moves: MoveRequest[] }>("GET", "/api/projects/moves"),
   answerMove: (id: string, approve: boolean) => request<{ moved: boolean }>("POST", `/api/projects/moves/${enc(id)}`, { approve }),
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
-  projectMemory: (id: string) => request<{ intervalHours: number; lastRun?: string; running: boolean; error?: string; master: string }>("GET", `/api/memory/${enc(id)}`),
-  setMemorySchedule: (id: string, intervalHours: number) => request("PATCH", `/api/memory/${enc(id)}`, { intervalHours }),
+  projectMemory: (id: string) => request<ProjectMemoryStatus>("GET", `/api/memory/${enc(id)}`),
+  /** `model: null` goes back to the consolidating person's defaults. */
+  setMemorySettings: (id: string, body: { intervalHours?: number; concurrency?: number; model?: { harness: string; provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
   consolidateMemory: (id: string) => request<{ started: boolean }>("POST", `/api/memory/${enc(id)}/consolidate`, {}),
   memoryArchives: (id: string) => request<{ sessions: { key: string; title: string; archivedAt: string }[] }>("GET", `/api/memory/${enc(id)}/archives`),
   sessionRetention: (key: string, body: { memoryPrivate?: boolean; keepLive?: boolean; archived?: false }) => request("PATCH", `/api/sessions/${enc(key)}/retention`, body),
