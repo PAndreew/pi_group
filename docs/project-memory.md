@@ -18,7 +18,7 @@ Model settings → Project memory configures the **selected project's** interval
 2. **Publish per source.** As soon as a source's notes are complete they are published as a timestamped snapshot and the source is marked consolidated. A failure loses only the sources still in flight; they are retried on the next run. Messages appended while a source was being extracted do not invalidate it; they are picked up next time. A source that becomes private, is deleted or moves to another project is not published.
 3. **Merge (reduce).** The new snapshots are folded into `MEMORY.md` in batches of about 40,000 characters, each by a fresh worker reading the snapshot files. Each batch is validated (nonempty, at most 12,000 characters) before it replaces the master. Snapshots that could not be merged stay listed in the manifest and are merged on the next run.
 
-Workers run on the project's **consolidation model** (Model settings → Project memory), or on the consolidating person's defaults when none is set. A small, cheap model is usually enough.
+Workers use the project's **consolidation model** (Model settings → Project memory: a provider model, not a runtime), or the consolidating person's defaults when none is set. A small, cheap model is usually enough. Workers run on **pi durable** when it is available, so a worker turn interrupted by a restart resumes; otherwise on the default runtime. Worker conversations stay in the folder's durable SQLite file (pi durable cannot erase conversations); the app hides them.
 
 Progress is live: the Project memory panel lists each source (queued, part n/m, done, failed) with a Watch button that opens its worker. A session being extracted shows a "memory n/m" chip in its header; worker sessions are shared read-only with the source's viewers so they can watch them stream. Workers are removed when they finish.
 
@@ -48,8 +48,9 @@ The session menu's Keep live option is independent of keeping an agent process r
 ## API
 
 - `GET /api/memory/:projectId`: master, interval, consolidation model, concurrency, running status and phase, per-source progress of the current or last run, last successful run, latest error.
-- `PATCH /api/memory/:projectId` with any of `{ "intervalHours": 0, "concurrency": 3, "model": { "harness", "provider", "id", "thinkingLevel" } }`; `"model": null` returns to the consolidating person's defaults. Zero hours disables periodic runs.
+- `PATCH /api/memory/:projectId` with any of `{ "intervalHours": 0, "concurrency": 3, "model": { "provider", "id", "thinkingLevel" } }`; `"model": null` returns to the consolidating person's defaults. Zero hours disables periodic runs.
 - `POST /api/memory/:projectId/consolidate`: manual run.
+- `GET /api/memory-models`: the worker runtime and the provider models it offers.
 - `GET /api/memory/:projectId/archives`: accessible archived sessions.
 - `PATCH /api/sessions/:key/retention`: `memoryPrivate`, `keepLive`, or `archived: false` to restore.
 - `POST /api/sessions` accepts `memoryPrivate` (default false).

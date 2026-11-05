@@ -8,7 +8,7 @@ import { draining } from "./deployment.js";
 import { requireAuth } from "./auth.js";
 import { type ChatDeps, chatMessages, chatOfSession, chatTitle, staleChats, transcript, markChatConsolidated, resetChatConsolidation, memberIds } from "./chats.js";
 import { HttpError, resolveSafe } from "./files.js";
-import type { AgentMessage } from "./harness/types.js";
+import type { AgentMessage, ModelInfo } from "./harness/types.js";
 import { platform } from "./ports/index.js";
 import { canAccessProject, projectIdOf, tenantProjects, type Project } from "./projects.js";
 import { accessOf, type RunOutcome } from "./sessions.js";
@@ -19,6 +19,9 @@ let deploymentMemory = 0;
 export const activeMemory = () => deploymentMemory;
 export interface MemoryDeps extends ChatDeps {
  readMessages: (meta: SessionMeta) => Promise<AgentMessage[]>;
+ listModels: (harness: string) => Promise<ModelInfo[]>;
+ /** The runtime memory workers run on: pi-durable when available (runs resume after a restart), else the user's default. */
+ workerHarness: (user: User) => Promise<string>;
 }
 const DAY = 86_400_000;
 /** Transcript characters per extraction prompt; each part gets a fresh worker, so context never piles up. */
@@ -140,7 +143,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
  /** A fresh worker for one prompt, on the project's memory model; `viewers` may watch it stream. */
  const withWorker = async (p: Project, user: User, name: string, viewers: string[], run: (worker: SessionMeta) => Promise<void>) => {
   const shares = viewers.filter(id => id !== user.id).map(userId => ({ userId, access: "read" as const }));
-  let worker = await deps.createSession(user, { harness: p.memoryHarness ?? await deps.harnessFor(user), cwd: p.cwd, name, model: p.memoryModel, thinkingLevel: p.memoryThinking, projectId: p.id, ...(shares.length ? { visibility: "shared" as const, shares } : {}) });
+  let worker = await deps.createSession(user, { harness: await deps.workerHarness(user), cwd: p.cwd, name, model: p.memoryModel, thinkingLevel: p.memoryThinking, projectId: p.id, ...(shares.length ? { visibility: "shared" as const, shares } : {}) });
   worker = store.upsertSession({ ...worker, memory: true, projectId: p.id });
   try { await run(worker); }
   finally {
@@ -279,10 +282,15 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
   }
  };
  router.use("/memory", requireAuth);
+ /** Provider models memory workers can use (from the worker runtime, not a choice of runtime). */
+ router.get("/memory-models", requireAuth, async (req, res) => {
+  const harness = await deps.workerHarness(req.user!);
+  res.json({ harness, models: await deps.listModels(harness) });
+ });
  router.get("/memory/:projectId", (req, res) => {
   const p = find(String(req.params.projectId), req.user!);
   const run = progress.get(p.id);
-  res.json({ intervalHours: p.memoryIntervalHours ?? 0, harness: p.memoryHarness, model: p.memoryModel, thinkingLevel: p.memoryThinking, concurrency: p.memoryConcurrency ?? 3, lastRun: p.memoryLastRun, running: running.has(p.id), phase: run?.phase, sources: run?.sources ?? [], error: errors.get(p.id), master: read(path.join(p.cwd, "MEMORY.md")) });
+  res.json({ intervalHours: p.memoryIntervalHours ?? 0, model: p.memoryModel, thinkingLevel: p.memoryThinking, concurrency: p.memoryConcurrency ?? 3, lastRun: p.memoryLastRun, running: running.has(p.id), phase: run?.phase, sources: run?.sources ?? [], error: errors.get(p.id), master: read(path.join(p.cwd, "MEMORY.md")) });
  });
  router.patch("/memory/:projectId", (req, res) => {
   const p = find(String(req.params.projectId), req.user!); manage(p, req.user!);
@@ -290,12 +298,12 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
    intervalHours: z.number().int().min(0).max(8760).optional(),
    concurrency: z.number().int().min(1).max(8).optional(),
    /** null goes back to the consolidating person's defaults. */
-   model: z.object({ harness: z.string(), provider: z.string(), id: z.string(), thinkingLevel: z.string().optional() }).nullable().optional(),
+   model: z.object({ provider: z.string(), id: z.string(), thinkingLevel: z.string().optional() }).nullable().optional(),
   }).strict().parse(req.body);
   if (body.intervalHours !== undefined) p.memoryIntervalHours = body.intervalHours;
   if (body.concurrency !== undefined) p.memoryConcurrency = body.concurrency;
-  if (body.model === null) { delete p.memoryHarness; delete p.memoryModel; delete p.memoryThinking; }
-  else if (body.model) { p.memoryHarness = body.model.harness; p.memoryModel = { provider: body.model.provider, id: body.model.id }; p.memoryThinking = body.model.thinkingLevel; }
+  if (body.model === null) { delete p.memoryModel; delete p.memoryThinking; }
+  else if (body.model) { p.memoryModel = { provider: body.model.provider, id: body.model.id }; p.memoryThinking = body.model.thinkingLevel; }
   saveNow(); res.json({ ok: true });
  });
  router.post("/memory/:projectId/consolidate", (req, res) => {

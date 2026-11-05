@@ -101,8 +101,7 @@ export interface MemorySource {
 
 export interface ProjectMemoryStatus {
   intervalHours: number
-  /** Runtime and model for memory workers; absent uses the consolidating person's defaults. */
-  harness?: string
+  /** Model for memory workers; absent uses the consolidating person's defaults. */
   model?: { provider: string; id: string }
   thinkingLevel?: string
   concurrency: number
@@ -526,7 +525,9 @@ export const api = {
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
   projectMemory: (id: string) => request<ProjectMemoryStatus>("GET", `/api/memory/${enc(id)}`),
   /** `model: null` goes back to the consolidating person's defaults. */
-  setMemorySettings: (id: string, body: { intervalHours?: number; concurrency?: number; model?: { harness: string; provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
+  setMemorySettings: (id: string, body: { intervalHours?: number; concurrency?: number; model?: { provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
+  /** Provider models memory workers can use, from the runtime they run on (pi-durable when available). */
+  memoryModels: () => request<{ harness: string; models: ModelInfo[] }>("GET", "/api/memory-models"),
   consolidateMemory: (id: string) => request<{ started: boolean }>("POST", `/api/memory/${enc(id)}/consolidate`, {}),
   memoryArchives: (id: string) => request<{ sessions: { key: string; title: string; archivedAt: string }[] }>("GET", `/api/memory/${enc(id)}/archives`),
   sessionRetention: (key: string, body: { memoryPrivate?: boolean; keepLive?: boolean; archived?: false }) => request("PATCH", `/api/sessions/${enc(key)}/retention`, body),

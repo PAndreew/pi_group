@@ -977,6 +977,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		editSession,
 		deleteFromSession,
 		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
+		listModels: (harness: string) => adapterOf(harness).listModels(),
+		workerHarness: async (user: User) => (byId.has("pi-durable") && (await byId.get("pi-durable")!.available()).ok ? "pi-durable" : harnessFor(user)),
 	};
 	chats = mountChats(router, chatDeps);
 	mountMemory(router, chatDeps);

@@ -61,6 +61,7 @@ function fakeHarness() {
 		liveSessions: () => [...sessions.values()],
 		open: async (id: string) => sessions.get(id),
 		listSessions: async () => [],
+		listModels: async () => [{ provider: "test", id: "cheap", name: "Cheap" }],
 		readSession: async (id: string) => ({ messages: sessions.get(id)?.state.messages ?? [] }),
 		editMessage: async (id: string, _cwd: string, index: number, content: unknown) => {
 			sessions.get(id).state.messages[index] = { ...sessions.get(id).state.messages[index], content };
@@ -280,8 +281,9 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		await call("chat-admin", "POST", `${endpoint}/consolidate`, {});
 		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "repeat consolidation");
 		assert.equal(prompts.filter(p => p.text.startsWith("Extract")).length, count, JSON.stringify(prompts.filter(p => p.text.startsWith("Extract")).map(p => p.text.match(/Source:.*?part/s)?.[0])));
-		assert.equal((await call("chat-admin", "PATCH", endpoint, { concurrency: 2, model: { harness: "pi", provider: "test", id: "cheap", thinkingLevel: "low" } })).status, 200);
+		assert.equal((await call("chat-admin", "PATCH", endpoint, { concurrency: 2, model: { provider: "test", id: "cheap", thinkingLevel: "low" } })).status, 200);
 		assert.deepEqual((await call("chat-admin", "GET", endpoint)).body.model, { provider: "test", id: "cheap" });
+		assert.equal((await call("chat-admin", "GET", "/memory-models")).body.harness, "pi", "workers fall back to the default runtime without pi-durable");
 		assert.equal((await call("anna", "PATCH", endpoint, { model: null })).status, 403);
 		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 0 })).status, 200);
 

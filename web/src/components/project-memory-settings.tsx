@@ -1,16 +1,17 @@
 import { Check, CircleDashed, Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { ModelPicker, ThinkingPicker } from "@/components/model-picker"
+import { ThinkingPicker } from "@/components/model-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, type Harness, type MemorySource, type ModelInfo, type ProjectMemoryStatus } from "@/lib/api"
+import { api, type MemorySource, type ModelInfo, type ProjectMemoryStatus } from "@/lib/api"
 import { useNav } from "@/lib/nav"
 import { useProjects } from "@/lib/projects"
 
 const DEFAULTS = "defaults"
+const key = (m?: { provider: string; id: string }) => (m ? `${m.provider}/${m.id}` : DEFAULTS)
 
 /** Where one source of the current (or last) run is: queued, extracting part n of m, done or failed. */
 function SourceRow({ source }: { source: MemorySource }) {
@@ -33,9 +34,8 @@ export function ProjectMemorySettings() {
   const [status, setStatus] = useState<ProjectMemoryStatus>()
   const [hours, setHours] = useState(0)
   const [concurrency, setConcurrency] = useState(3)
-  const [harnesses, setHarnesses] = useState<Harness[]>([])
-  const [harness, setHarness] = useState(DEFAULTS)
   const [models, setModels] = useState<ModelInfo[]>([])
+  const [runtime, setRuntime] = useState<string>()
   const [model, setModel] = useState<{ provider: string; id: string }>()
   const [thinking, setThinking] = useState<string>()
   const [archives, setArchives] = useState<Awaited<ReturnType<typeof api.memoryArchives>>["sessions"]>([])
@@ -51,26 +51,25 @@ export function ProjectMemorySettings() {
     void api.projectMemory(active).then(s => {
       if (!alive) return
       setStatus(s); setHours(s.intervalHours); setConcurrency(s.concurrency)
-      setHarness(s.harness ?? DEFAULTS); setModel(s.model); setThinking(s.thinkingLevel)
+      setModel(s.model); setThinking(s.thinkingLevel)
     }, e => toast.error(e.message))
     void api.memoryArchives(active).then(a => { if (alive) setArchives(a.sessions) }, e => toast.error(e.message))
-    void api.harnesses().then(({ harnesses }) => { if (alive) setHarnesses(harnesses) }, () => {})
+    void api.memoryModels().then(({ harness, models }) => { if (alive) { setModels(models); setRuntime(harness) } }, e => toast.error(e.message))
     const timer = setInterval(() => { if (alive) void reload().catch(e => toast.error(e.message)) }, 3000)
     return () => { alive = false; clearInterval(timer) }
   }, [active])
-  useEffect(() => {
-    if (harness === DEFAULTS) return setModels([])
-    let alive = true
-    void api.models(harness).then(({ models }) => { if (alive) setModels(models) }, e => toast.error(e.message))
-    return () => { alive = false }
-  }, [harness])
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); await reload() } catch (e) { toast.error((e as Error).message) } }
   if (!active) return <p>Select a project first.</p>
   const levels = models.find(m => m.provider === model?.provider && m.id === model?.id)?.thinkingLevels ?? ["off"]
   const save = () => act(async () => {
-    await api.setMemorySettings(active, { intervalHours: hours, concurrency, model: harness === DEFAULTS || !model ? null : { harness, ...model, thinkingLevel: thinking } })
+    await api.setMemorySettings(active, { intervalHours: hours, concurrency, model: model ? { ...model, thinkingLevel: thinking } : null })
     toast.success("Memory settings saved")
   })
+  const pick = (next: ModelInfo) => {
+    setModel({ provider: next.provider, id: next.id })
+    const supported = next.thinkingLevels ?? ["off"]
+    if (!supported.includes(thinking ?? "")) setThinking(supported.includes("low") ? "low" : supported[0])
+  }
   const done = status?.sources.filter(s => s.status === "done").length ?? 0
   return <div className="grid gap-3">
     <p className="text-sm">Memory for <strong>{projects.find(p => p.id === active)?.name}</strong>. Each new or changed conversation is extracted on its own, in parallel, into a timestamped snapshot; the snapshots are then merged into the master. Public sessions contribute; explicitly private sessions only read it. One-on-one sessions inactive for 24 hours are archived after consolidation unless marked Keep live.</p>
@@ -84,21 +83,19 @@ export function ProjectMemorySettings() {
     </div>
     <div className="grid min-w-0 gap-2">
       <Label>Consolidation model</Label>
-      <Select value={harness} onValueChange={(next) => { setHarness(next); setModel(undefined) }}>
-        <SelectTrigger className="w-full" aria-label="Consolidation runtime"><SelectValue /></SelectTrigger>
+      <Select value={key(model)} onValueChange={(next) => { if (next === DEFAULTS) return setModel(undefined); const picked = models.find(m => key(m) === next); if (picked) pick(picked) }}>
+        <SelectTrigger className="w-full" aria-label="Consolidation model"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value={DEFAULTS}>Same as the consolidating person's defaults</SelectItem>
-          {harnesses.map(h => <SelectItem key={h.id} value={h.id} disabled={!h.ok}>{h.label}{!h.ok ? " (unavailable)" : ""}</SelectItem>)}
+          {model && !models.some(m => key(m) === key(model)) && <SelectItem value={key(model)}>{key(model)} (not available now)</SelectItem>}
+          {models.map(m => <SelectItem key={key(m)} value={key(m)}>{m.provider} · {m.name}</SelectItem>)}
         </SelectContent>
       </Select>
-      {harness !== DEFAULTS && <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <ModelPicker models={models} value={model} onChange={(next) => { setModel(next); const supported = models.find(m => m.provider === next.provider && m.id === next.id)?.thinkingLevels ?? ["off"]; if (!supported.includes(thinking ?? "")) setThinking(supported.includes("low") ? "low" : supported[0]) }} showProvider />
-        <ThinkingPicker value={thinking} onChange={setThinking} levels={levels} disabled={levels.length < 2} />
-      </div>}
-      <p className="text-xs text-muted-foreground">A smaller, cheaper model is usually enough: it only reads one part of one conversation at a time.</p>
+      {model && <ThinkingPicker value={thinking} onChange={setThinking} levels={levels} disabled={levels.length < 2} />}
+      <p className="text-xs text-muted-foreground">A smaller, cheaper model is usually enough: it only reads one part of one conversation at a time. Workers run on {runtime === "pi-durable" ? "pi durable, so an interrupted run resumes after a restart" : runtime ?? "the default runtime"}.</p>
     </div>
     <div className="flex gap-2">
-      <Button variant="outline" onClick={() => void save()} disabled={harness !== DEFAULTS && !model}>Save settings</Button>
+      <Button variant="outline" onClick={() => void save()}>Save settings</Button>
       <Button disabled={status?.running} onClick={() => void act(() => api.consolidateMemory(active))}>{status?.running ? (status.phase === "merge" ? "Merging…" : "Extracting…") : "Consolidate now"}</Button>
     </div>
     <p className="text-xs text-muted-foreground">Settings and runs are managed by the project creator or an admin. Last successful run: {status?.lastRun ? new Date(status.lastRun).toLocaleString() : "Never"}</p>

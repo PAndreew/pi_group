@@ -37,8 +37,7 @@ export interface Project {
 	/** Zero disables automatic consolidation; manual runs remain available. */
 	memoryIntervalHours?: number;
 	memoryLastRun?: string;
-	/** Runtime and model for memory workers; absent uses the consolidating person's defaults. */
-	memoryHarness?: string;
+	/** Model for memory workers (which run on pi-durable when available); absent uses the consolidating person's defaults. */
 	memoryModel?: { provider: string; id: string };
 	memoryThinking?: string;
 	/** Sources extracted at once (default 3). */
