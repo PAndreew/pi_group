@@ -9,7 +9,8 @@ import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
 import { pushToUser } from "./push.js";
 import { accessOf } from "./sessions.js";
-import { saveNow, store, type User } from "./store.js";
+import { CONTEXT_DEFAULTS, type ContextPolicy } from "../extensions/lib/context-policy.mjs";
+import { saveNow, store, type SessionMeta, type User } from "./store.js";
 import { tenantId } from "./tenant-context.js";
 import { isTenantMember, tenantAccess, tenantOf } from "./tenants.js";
 import { projectSecretKeys } from "./vault.js";
@@ -42,6 +43,10 @@ export interface Project {
 	memoryThinking?: string;
 	/** Sources extracted at once (default 3). */
 	memoryConcurrency?: number;
+	/** Hours after an agent turn ends before its reasoning and tool output leave the model's context (default 12, 0 = never). */
+	contextTrimHours?: number;
+	/** Hours of conversation the agent sees when it starts working again (default 168, 0 = all); the rest via session_history. */
+	contextWindowHours?: number;
 	/** Explicit project access; never grants access to conversations. Absent on projects from
 	 * before sharing existed: those stay open to the whole tenant until their creator shares them. */
 	memberIds?: string[];
@@ -95,6 +100,16 @@ export function projectIdOf(cwd: string, explicit?: string, tenant = tenantId())
 	}
 	return best?.id ?? generalProject(tenant).id;
 }
+
+/** Context trimming of a session's project; defaults while the session has no metadata yet (it is being created). */
+export function contextPolicyOf(meta?: SessionMeta): ContextPolicy {
+	if (!meta) return CONTEXT_DEFAULTS;
+	const tenant = meta.tenantId ?? "work";
+	const project = tenantProjects(tenant).find((p) => p.id === projectIdOf(meta.cwd, meta.projectId, tenant));
+	return project ? projectContextPolicy(project) : CONTEXT_DEFAULTS;
+}
+
+export const projectContextPolicy = (p: Project): ContextPolicy => ({ trimHours: p.contextTrimHours ?? CONTEXT_DEFAULTS.trimHours, windowHours: p.contextWindowHours ?? CONTEXT_DEFAULTS.windowHours });
 
 /** Membership alone, without the tenant check. */
 export function isProjectMember(userId: string, project: Project) {

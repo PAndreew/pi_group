@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { applyContextPolicy, CONTEXT_DEFAULTS, type ContextPolicy, epochTracker, historyPage, HISTORY_TOOL } from "../../extensions/lib/context-policy.mjs";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
 import { LiveSessionBase } from "./live-base.js";
@@ -21,6 +22,7 @@ interface Modules {
 	tools: Any;
 	ctx: Any;
 	providers: Any;
+	typebox: Any;
 }
 
 const PREAMBLE = [
@@ -288,6 +290,13 @@ export class PiDurableAdapter implements HarnessAdapter {
 	private harnesses = new Map<string, Promise<Any>>();
 	private sessions = new Map<string, DurableLiveSession>();
 	private starting = new Map<string, Promise<DurableLiveSession>>();
+	/** Context trimming per conversation, frozen per epoch (see extensions/lib/context-policy.mjs). */
+	private cutoffs: ReturnType<typeof epochTracker>;
+
+	/** `contextPolicy` maps a session key to its project's context trimming. */
+	constructor(contextPolicy: (key: string) => ContextPolicy = () => CONTEXT_DEFAULTS) {
+		this.cutoffs = epochTracker(contextPolicy);
+	}
 
 	async init() {
 		if (!config.enableDurable) {
@@ -302,9 +311,11 @@ export class PiDurableAdapter implements HarnessAdapter {
 				tools: await import("@earendil-works/pi-durable/tools" as string),
 				ctx: await import("@earendil-works/chord/context" as string),
 				providers: await import("@earendil-works/pi-ai/providers/all" as string),
+				typebox: await import("typebox" as string),
 			};
 			this.loadError = undefined;
-			const { durable, tools, providers } = this.m;
+			const { durable, tools, providers, typebox } = this.m;
+			const { Type } = typebox;
 			this.models = providers.builtinModels({ credentials: new PiAuthFileStore() });
 			if (process.env.PI_GROUP_DEMO_MODEL === "1") await this.installDemoModel();
 			this.registry = durable.createRegistry();
@@ -315,6 +326,30 @@ export class PiDurableAdapter implements HarnessAdapter {
 					sections: [
 						durable.section("preamble", () => PREAMBLE, { tag: false }),
 						durable.section("cwd", (input: Any) => input.agent?.cwd),
+					],
+					hooks: [
+						durable.hook(durable.GenerationTask, {
+							// The stored conversation keeps everything; only this request's copy is trimmed.
+							beforeRequest: async ({ messages }: Any, api: Any) => ({ messages: applyContextPolicy(messages, await this.cutoffs(`${this.id}:${api.conversationId}`)) }),
+						}),
+					],
+					tools: [
+						durable.defineTool({
+							name: HISTORY_TOOL.name,
+							label: HISTORY_TOOL.label,
+							description: HISTORY_TOOL.description,
+							parameters: Type.Object({
+								query: Type.Optional(Type.String({ maxLength: 200, description: "Case-insensitive text to search for." })),
+								from: Type.Optional(Type.Integer({ minimum: 1, description: "Message number to start reading at." })),
+								date: Type.Optional(Type.String({ maxLength: 40, description: "Start reading at the first message at or after this time, e.g. 2026-10-02 or 2026-10-02T14:00Z." })),
+							}),
+							replay: "safe",
+							execute: async (args: Any, api: Any, context: Any) => {
+								const agent = await api.agent(context);
+								const stored = await this.readSession(String(api.conversationId), agent.cwd);
+								return { output: [{ type: "text", text: historyPage(stored?.messages ?? [], args) }] };
+							},
+						}),
 					],
 				}),
 			);

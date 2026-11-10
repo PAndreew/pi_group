@@ -21,7 +21,8 @@ import { pushRoutes } from "./push.js";
 import { expireInteractions } from "./interactions.js";
 import { sessionRoutes } from "./sessions.js";
 import { attachTerminal } from "./terminal.js";
-import { loadStore, saveNow } from "./store.js";
+import { contextPolicyOf } from "./projects.js";
+import { loadStore, saveNow, store } from "./store.js";
 import { tenantRoutes } from "./tenants.js";
 import { usageRoutes } from "./usage.js";
 import { vaultRoutes } from "./vault.js";
@@ -30,7 +31,7 @@ loadStore();
 expireInteractions();
 ensureAdmin();
 
-const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter()];
+const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter((key) => contextPolicyOf(store.session(key)))];
 
 const app = express();
 app.disable("x-powered-by");

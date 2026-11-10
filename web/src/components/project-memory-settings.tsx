@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, type MemorySource, type ModelInfo, type ProjectMemoryStatus } from "@/lib/api"
+import { api, type ContextPolicy, type MemorySource, type ModelInfo, type ProjectMemoryStatus } from "@/lib/api"
 import { useNav } from "@/lib/nav"
 import { useProjects } from "@/lib/projects"
 
@@ -34,6 +34,7 @@ export function ProjectMemorySettings() {
   const [status, setStatus] = useState<ProjectMemoryStatus>()
   const [hours, setHours] = useState(0)
   const [concurrency, setConcurrency] = useState(3)
+  const [context, setContext] = useState<ContextPolicy>({ trimHours: 12, windowHours: 168 })
   const [models, setModels] = useState<ModelInfo[]>([])
   const [runtime, setRuntime] = useState<string>()
   const [model, setModel] = useState<{ provider: string; id: string }>()
@@ -50,7 +51,7 @@ export function ProjectMemorySettings() {
     let alive = true
     void api.projectMemory(active).then(s => {
       if (!alive) return
-      setStatus(s); setHours(s.intervalHours); setConcurrency(s.concurrency)
+      setStatus(s); setHours(s.intervalHours); setConcurrency(s.concurrency); setContext(s.context)
       setModel(s.model); setThinking(s.thinkingLevel)
     }, e => toast.error(e.message))
     void api.memoryArchives(active).then(a => { if (alive) setArchives(a.sessions) }, e => toast.error(e.message))
@@ -62,7 +63,7 @@ export function ProjectMemorySettings() {
   if (!active) return <p>Select a project first.</p>
   const levels = models.find(m => m.provider === model?.provider && m.id === model?.id)?.thinkingLevels ?? ["off"]
   const save = () => act(async () => {
-    await api.setMemorySettings(active, { intervalHours: hours, concurrency, model: model ? { ...model, thinkingLevel: thinking } : null })
+    await api.setMemorySettings(active, { intervalHours: hours, concurrency, context, model: model ? { ...model, thinkingLevel: thinking } : null })
     toast.success("Memory settings saved")
   })
   const pick = (next: ModelInfo) => {
@@ -93,6 +94,18 @@ export function ProjectMemorySettings() {
       </Select>
       {model && <ThinkingPicker value={thinking} onChange={setThinking} levels={levels} disabled={levels.length < 2} />}
       <p className="text-xs text-muted-foreground">A smaller, cheaper model is usually enough: it only reads one part of one conversation at a time. Workers run on {runtime === "pi-durable" ? "pi durable, so an interrupted run resumes after a restart" : runtime ?? "the default runtime"}.</p>
+    </div>
+    <div className="grid gap-2">
+      <Label>Agent context</Label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="grid gap-1 text-sm">Trim turns after N hours (0 = never)
+          <Input type="number" min={0} max={8760} value={context.trimHours} onChange={e => setContext({ ...context, trimHours: Number(e.target.value) })} />
+        </label>
+        <label className="grid gap-1 text-sm">Show last N hours (0 = all)
+          <Input type="number" min={0} max={87600} value={context.windowHours} onChange={e => setContext({ ...context, windowHours: Number(e.target.value) })} />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">Saves tokens in long conversations. Once a turn is older than the trim time, agents no longer see its reasoning, and each tool call and result shrinks to one line. When an agent picks up a conversation, it sees only the last N hours. It can read everything else with its session_history tool. The full conversation stays stored and visible here.</p>
     </div>
     <div className="flex gap-2">
       <Button variant="outline" onClick={() => void save()}>Save settings</Button>

@@ -99,12 +99,19 @@ export interface MemorySource {
   error?: string
 }
 
+export interface ContextPolicy {
+  trimHours: number
+  windowHours: number
+}
+
 export interface ProjectMemoryStatus {
   intervalHours: number
   /** Model for memory workers; absent uses the consolidating person's defaults. */
   model?: { provider: string; id: string }
   thinkingLevel?: string
   concurrency: number
+  /** What agents see of long conversations: old turns trimmed after `trimHours`, older than `windowHours` left out (0 = off). */
+  context: ContextPolicy
   lastRun?: string
   running: boolean
   phase?: "extract" | "merge" | "done"
@@ -525,7 +532,7 @@ export const api = {
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
   projectMemory: (id: string) => request<ProjectMemoryStatus>("GET", `/api/memory/${enc(id)}`),
   /** `model: null` goes back to the consolidating person's defaults. */
-  setMemorySettings: (id: string, body: { intervalHours?: number; concurrency?: number; model?: { provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
+  setMemorySettings: (id: string, body: { intervalHours?: number; concurrency?: number; context?: ContextPolicy; model?: { provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
   /** Provider models memory workers can use, from the runtime they run on (pi-durable when available). */
   memoryModels: () => request<{ harness: string; models: ModelInfo[] }>("GET", "/api/memory-models"),
   consolidateMemory: (id: string) => request<{ started: boolean }>("POST", `/api/memory/${enc(id)}/consolidate`, {}),

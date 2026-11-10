@@ -240,6 +240,14 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal((await call("anna", "POST", `${endpoint}/consolidate`, {})).status, 403);
 		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 24 })).status, 200);
 		assert.equal((await call("chat-admin", "GET", endpoint)).body.intervalHours, 24);
+		// Context trimming is a project setting; the session's pi extension reads it over its bridge.
+		assert.deepEqual((await call("chat-admin", "GET", endpoint)).body.context, { trimHours: 12, windowHours: 168 });
+		assert.equal((await call("anna", "PATCH", endpoint, { context: { trimHours: 6, windowHours: 0 } })).status, 403);
+		assert.equal((await call("chat-admin", "PATCH", endpoint, { context: { trimHours: 6, windowHours: 0 } })).status, 200);
+		const { interactionEnvironment } = await import("./interactions.js");
+		const contextBridge = (token: string) => fetch(`${base}/context-bridge/${encodeURIComponent(soloMeta.key)}`, { headers: { Authorization: `Bearer ${token}` } });
+		assert.equal((await contextBridge("wrong")).status, 403);
+		assert.deepEqual(await (await contextBridge(interactionEnvironment(soloMeta.key).BEEZY_INTERACTION_TOKEN)).json(), { trimHours: 6, windowHours: 0 });
 		assert.equal((await call("chat-admin", "POST", `${endpoint}/consolidate`, {})).body.started, true);
 		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "consolidation");
 		const status = (await call("chat-admin", "GET", endpoint)).body;

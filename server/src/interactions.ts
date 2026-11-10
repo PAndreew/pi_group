@@ -41,6 +41,7 @@ export function interactionEnvironment(key: string) {
     BEEZY_APPLETS_URL: `${base}/applet-bridge/${encodeURIComponent(key)}`,
     BEEZY_BROWSER_URL: `${base}/browser-bridge/${encodeURIComponent(key)}`,
     BEEZY_ASSISTANCE_URL: `${base}/assistance-bridge/${encodeURIComponent(key)}`,
+    BEEZY_CONTEXT_URL: `${base}/context-bridge/${encodeURIComponent(key)}`,
     BEEZY_INTERACTION_TOKEN: tokenFor(key),
     ...(config.vaultUrl && config.vaultToken ? { BEEZY_VAULT_URL: `${base}/vault-bridge/${encodeURIComponent(key)}` } : {}),
   };

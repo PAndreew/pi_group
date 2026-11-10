@@ -10,7 +10,8 @@ import { type ChatDeps, chatMessages, chatOfSession, chatTitle, staleChats, tran
 import { HttpError, resolveSafe } from "./files.js";
 import type { AgentMessage, ModelInfo } from "./harness/types.js";
 import { platform } from "./ports/index.js";
-import { canAccessProject, projectIdOf, tenantProjects, type Project } from "./projects.js";
+import { canAccessProject, contextPolicyOf, projectContextPolicy, projectIdOf, tenantProjects, type Project } from "./projects.js";
+import { bridgeCredentialValid } from "./interactions.js";
 import { accessOf, type RunOutcome } from "./sessions.js";
 import { saveNow, type SessionMeta, type User, store } from "./store.js";
 import { inTenant, tenantId } from "./tenant-context.js";
@@ -281,6 +282,15 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
    running.delete(p.id); deploymentMemory--;
   }
  };
+ /** The project's context trimming, for the session's pi extension when an epoch starts. */
+ router.get("/context-bridge/:key", (req, res) => {
+  const key = String(req.params.key);
+  if (!bridgeCredentialValid(key, req.headers.authorization)) throw new HttpError(403, "Invalid context credential");
+  const meta = store.session(key);
+  if (meta?.deleted) throw new HttpError(404, "Session not found");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(contextPolicyOf(meta));
+ });
  router.use("/memory", requireAuth);
  /** Provider models memory workers can use (from the worker runtime, not a choice of runtime). */
  router.get("/memory-models", requireAuth, async (req, res) => {
@@ -290,18 +300,20 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
  router.get("/memory/:projectId", (req, res) => {
   const p = find(String(req.params.projectId), req.user!);
   const run = progress.get(p.id);
-  res.json({ intervalHours: p.memoryIntervalHours ?? 0, model: p.memoryModel, thinkingLevel: p.memoryThinking, concurrency: p.memoryConcurrency ?? 3, lastRun: p.memoryLastRun, running: running.has(p.id), phase: run?.phase, sources: run?.sources ?? [], error: errors.get(p.id), master: read(path.join(p.cwd, "MEMORY.md")) });
+  res.json({ intervalHours: p.memoryIntervalHours ?? 0, model: p.memoryModel, thinkingLevel: p.memoryThinking, concurrency: p.memoryConcurrency ?? 3, context: projectContextPolicy(p), lastRun: p.memoryLastRun, running: running.has(p.id), phase: run?.phase, sources: run?.sources ?? [], error: errors.get(p.id), master: read(path.join(p.cwd, "MEMORY.md")) });
  });
  router.patch("/memory/:projectId", (req, res) => {
   const p = find(String(req.params.projectId), req.user!); manage(p, req.user!);
   const body = z.object({
    intervalHours: z.number().int().min(0).max(8760).optional(),
    concurrency: z.number().int().min(1).max(8).optional(),
+   context: z.object({ trimHours: z.number().int().min(0).max(8760), windowHours: z.number().int().min(0).max(87600) }).strict().optional(),
    /** null goes back to the consolidating person's defaults. */
    model: z.object({ provider: z.string(), id: z.string(), thinkingLevel: z.string().optional() }).nullable().optional(),
   }).strict().parse(req.body);
   if (body.intervalHours !== undefined) p.memoryIntervalHours = body.intervalHours;
   if (body.concurrency !== undefined) p.memoryConcurrency = body.concurrency;
+  if (body.context) { p.contextTrimHours = body.context.trimHours; p.contextWindowHours = body.context.windowHours; }
   if (body.model === null) { delete p.memoryModel; delete p.memoryThinking; }
   else if (body.model) { p.memoryModel = { provider: body.model.provider, id: body.model.id }; p.memoryThinking = body.model.thinkingLevel; }
   saveNow(); res.json({ ok: true });

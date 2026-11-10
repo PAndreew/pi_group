@@ -22,6 +22,23 @@ Workers use the project's **consolidation model** (Model settings → Project me
 
 Progress is live: the Project memory panel lists each source (queued, part n/m, done, failed) with a Watch button that opens its worker. A session being extracted shows a "memory n/m" chip in its header; worker sessions are shared read-only with the source's viewers so they can watch them stream. Workers are removed when they finish.
 
+## Context trimming
+
+Long conversations, especially between people and agents, otherwise send their entire history on every model request. Each project has two settings under Model settings → Project memory → Agent context. Both apply to pi and pi durable sessions.
+
+- **Trim turns after N hours** (default 12, 0 = never). A turn runs from a user message to the next one. Once a turn ended more than N hours ago, the model no longer sees its reasoning. Each tool call keeps its name, with arguments clipped to about 120 characters, and each result shrinks to its first line plus a note of what was cut (`… [trimmed: 48 lines, 3120 chars, 1 image]`). What people and the agent said stays.
+- **Show last N hours** (default 168, 0 = all). Turns that ended before that are left out. A note on the first message the agent does see says how many messages are hidden and from when, and points to the `session_history` tool.
+
+`session_history` searches the complete stored conversation (`query`) or reads it from a message number (`from`) or a time (`date`), 12,000 characters per page, with tool output up to 1,500 characters per result.
+
+Only the copy sent with each request changes. The session file, durable SQLite, UI, memory extraction and archives keep everything. The turn in progress is never touched.
+
+**Prompt cache.** The cutoffs are fixed when an agent starts working: on the first request of a runtime, or after an hour without requests (by then the provider's prompt cache has expired anyway). They do not move during active work, so the start of the prompt stays identical and cached. Settings changes take effect at the next such point.
+
+**Project memory copies.** `MEMORY.md` is put in front of the first prompt of every runtime and is stored with that message. Only the newest copy is sent. If it falls in the hidden window, it moves into the note.
+
+Implementation: `server/extensions/lib/context-policy.mjs` is shared by the pi extension `server/extensions/context-policy.mjs` (pi's `context` event; it reads the project settings over `/api/context-bridge/:key`) and pi durable's `beforeRequest` generation hook in `server/src/harness/pi-durable.ts`. The pi extension loads before the Cloudflare assistance extension, so injection checks see the trimmed results.
+
 ## Privacy
 
 Session sharing controls who can open the conversation. **Private session** is a separate explicit memory opt-out, available at creation or through the session menu. Default sessions contribute to common project memory even when the conversation itself is not shared. Private sessions never contribute; they can read common project memory. There is no private-memory consolidation.
@@ -47,8 +64,8 @@ The session menu's Keep live option is independent of keeping an agent process r
 
 ## API
 
-- `GET /api/memory/:projectId`: master, interval, consolidation model, concurrency, running status and phase, per-source progress of the current or last run, last successful run, latest error.
-- `PATCH /api/memory/:projectId` with any of `{ "intervalHours": 0, "concurrency": 3, "model": { "provider", "id", "thinkingLevel" } }`; `"model": null` returns to the consolidating person's defaults. Zero hours disables periodic runs.
+- `GET /api/memory/:projectId`: master, interval, consolidation model, concurrency, context trimming, running status and phase, per-source progress of the current or last run, last successful run, latest error.
+- `PATCH /api/memory/:projectId` with any of `{ "intervalHours": 0, "concurrency": 3, "context": { "trimHours": 12, "windowHours": 168 }, "model": { "provider", "id", "thinkingLevel" } }`; `"model": null` returns to the consolidating person's defaults. Zero hours disables periodic runs.
 - `POST /api/memory/:projectId/consolidate`: manual run.
 - `GET /api/memory-models`: the worker runtime and the provider models it offers.
 - `GET /api/memory/:projectId/archives`: accessible archived sessions.
