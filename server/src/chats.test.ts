@@ -31,13 +31,11 @@ function fakeHarness() {
 			prompt: async (input: PromptInput) => {
 				assert.equal(state.running, false, "chat prompts must wait for the active turn");
 				prompts.push({ id, cwd, text: input.text });
-				if (input.text.startsWith("Extract project memory")) {
-					const draft = input.text.match(/Only edit (.+?\.md)\. /)![1];
-					appendFileSync(draft, `Notes: ${input.text.slice(-300)}\n`);
-				}
-				if (input.text.startsWith("Merge project memory")) {
-					const master = input.text.match(/Only edit (.+?master\.md)\. /)![1];
-					writeFileSync(master, "# Project context\nDeploy decisions are recorded here.");
+				if (input.text.startsWith("Update project memory")) {
+					const dir = input.text.match(/Markdown files directly in (.+?); /)![1];
+					const sources = [...input.text.matchAll(/<conversation source="([^"]+)"/g)].map(m => m[1]);
+					const file = path.join(dir, "deploy.md");
+					appendFileSync(file, existsSync(file) ? `\nAlso from ${sources.join(", ")}` : `---\ntitle: Deploy\ndescription: Deploy decisions\n---\nDeploy decisions are recorded here, from ${sources.join(", ")}.`);
 				}
 				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }] });
 				state.running = true;
@@ -253,15 +251,13 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		const status = (await call("chat-admin", "GET", endpoint)).body;
 		assert.equal(status.error, undefined);
 		assert.ok(status.lastRun);
-		assert.match(status.master, /Deploy decisions/);
+		assert.deepEqual(status.topics.map((t: any) => [t.slug, t.title, t.description]), [["deploy", "Deploy", "Deploy decisions"]]);
+		assert.match(readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8"), /`deploy` — Deploy: Deploy decisions/, "MEMORY.md is the generated index");
 		assert.ok(status.sources.length > 0 && status.sources.every((s: any) => s.status === "done"), JSON.stringify(status.sources));
-		const memoryDir = path.join(config.chatFolder, "memory");
-		const manifest = JSON.parse(readFileSync(path.join(memoryDir, "manifest.json"), "utf8"));
-		assert.deepEqual(manifest.unmerged, [], "every snapshot was merged");
-		assert.ok(readdirSync(memoryDir).some(f => f.endsWith(`${soloMeta.key.replace(/[^\w-]/g, "_")}.md`)), "one timestamped snapshot per source");
-		const consolidatedPrompts = prompts.filter(p => p.text.startsWith("Extract"));
-		assert.ok(consolidatedPrompts.filter(p => p.text.includes(`Source: ${soloMeta.key},`)).length >= 3, "a long source is split into parts");
-		assert.equal(new Set(consolidatedPrompts.map(p => p.id)).size, consolidatedPrompts.length, "every part gets a fresh worker");
+		const consolidatedPrompts = prompts.filter(p => p.text.startsWith("Update project memory"));
+		assert.ok(consolidatedPrompts.filter(p => p.text.includes(`<conversation source="${soloMeta.key}"`)).length >= 2, "a long source is spread over batches");
+		assert.equal(new Set(consolidatedPrompts.map(p => p.id)).size, consolidatedPrompts.length, "every batch gets a fresh worker");
+		assert.ok(!consolidatedPrompts.some(p => p.text.includes("<project-memory>")), "injected memory is not consolidated again");
 		assert.ok(!consolidatedPrompts.some(p => p.text.includes("private-secret-not-for-memory")));
 		assert.ok(consolidatedPrompts.some(p => p.text.includes("early-important-fact")));
 		assert.ok(consolidatedPrompts.some(p => p.text.includes("late-important-fact")));
@@ -283,13 +279,28 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(store.session(soloMeta.key)!.archivedAt, undefined);
 		assert.equal(store.session(soloMeta.key)!.keepLive, true);
 		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "read public context" });
-		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>")));
+		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>") && p.text.includes("`deploy` — Deploy")), "sessions get the topic index");
+		// The pi extension reads topics over the session's bridge, with the owner's access.
+		const memoryBridge = (token: string, body: object) => fetch(`${base}/memory-bridge/${encodeURIComponent(privateSession.key)}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+		assert.equal((await memoryBridge("wrong", {})).status, 403);
+		assert.match((await (await memoryBridge(interactionEnvironment(privateSession.key).BEEZY_INTERACTION_TOKEN, { topics: ["deploy"] })).json()).text, /Deploy decisions are recorded here/);
+		// People edit topics: create, update, delete; at most ten; the index follows.
+		assert.equal((await call("anna", "PUT", `${endpoint}/topics/Bad%20Name`, { title: "x", description: "y", body: "z" })).status, 400);
+		assert.equal((await call("anna", "PUT", `${endpoint}/topics/marketing`, { title: "Marketing", description: "Launch plans", body: "Launch in spring." })).status, 200);
+		assert.equal((await call("anna", "GET", `${endpoint}/topics/marketing`)).body.body, "Launch in spring.");
+		assert.match(readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8"), /`marketing` — Marketing: Launch plans/);
+		for (let i = 0; i < 8; i++) assert.equal((await call("anna", "PUT", `${endpoint}/topics/t${i}`, { title: "T", description: "d", body: "b" })).status, 200);
+		assert.equal((await call("anna", "PUT", `${endpoint}/topics/eleventh`, { title: "T", description: "d", body: "b" })).status, 409);
+		for (let i = 0; i < 8; i++) await call("anna", "DELETE", `${endpoint}/topics/t${i}`);
+		assert.equal((await call("anna", "DELETE", `${endpoint}/topics/marketing`)).status, 200);
+		assert.deepEqual((await call("anna", "GET", endpoint)).body.topics.map((t: any) => t.slug), ["deploy"]);
 		assert.equal(store.session(privateSession.key)!.consolidatedAt, undefined);
-		const count = prompts.filter(p => p.text.startsWith("Extract")).length;
+		const consolidations = () => prompts.filter(p => p.text.startsWith("Update project memory"));
+		const count = consolidations().length;
 		await call("chat-admin", "POST", `${endpoint}/consolidate`, {});
 		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "repeat consolidation");
-		assert.equal(prompts.filter(p => p.text.startsWith("Extract")).length, count, JSON.stringify(prompts.filter(p => p.text.startsWith("Extract")).map(p => p.text.match(/Source:.*?part/s)?.[0])));
-		assert.equal((await call("chat-admin", "PATCH", endpoint, { concurrency: 2, model: { provider: "test", id: "cheap", thinkingLevel: "low" } })).status, 200);
+		assert.equal(consolidations().length, count, JSON.stringify(consolidations().slice(count).map(p => [...p.text.matchAll(/<conversation source="([^"]+)"/g)].map(m => m[1]))));
+		assert.equal((await call("chat-admin", "PATCH", endpoint, { model: { provider: "test", id: "cheap", thinkingLevel: "low" } })).status, 200);
 		assert.deepEqual((await call("chat-admin", "GET", endpoint)).body.model, { provider: "test", id: "cheap" });
 		assert.equal((await call("chat-admin", "GET", "/memory-models")).body.harness, "pi", "workers fall back to the default runtime without pi-durable");
 		assert.equal((await call("anna", "PATCH", endpoint, { model: null })).status, 403);

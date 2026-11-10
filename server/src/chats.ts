@@ -143,6 +143,12 @@ export function setChatProject(chatId: string, projectId: string) {
 	database().prepare("UPDATE chats SET project_id = ? WHERE id = ?").run(projectId, chatId);
 }
 
+/** Chats a person is a member of. */
+export function chatsOf(userId: string) {
+	if (!db && !platform().sqlExists("chats")) return [];
+	return (database().prepare("SELECT c.* FROM chats c JOIN members m ON m.chat_id = c.id AND m.user_id = ?").all(userId) as Row[]).map(toChat);
+}
+
 export function memberIds(chatId: string) {
 	return (database().prepare("SELECT user_id FROM members WHERE chat_id = ? ORDER BY rowid").all(chatId) as Row[]).map((r) => String(r.user_id));
 }
@@ -199,8 +205,8 @@ export function ensureChatFolder() {
 				"# Chat folder",
 				"",
 				`This folder belongs to the ${tenantOf()?.name ?? "Work"} tenant. Do not mix its conversation context or memory with other tenants.`,
-				"Public project context is in `MEMORY.md` (compact master context) and timestamped snapshots in `memory/`.",
-				"Private sessions must never contribute to public memory. Consult snapshots only when more detail is needed.",
+				"Public project memory is kept as topics in `memory/topics/`; `MEMORY.md` is a generated index of them. Read topics with the project_memory tool, only those relevant to the task.",
+				"Private sessions must never contribute to public memory.",
 				"",
 			].join("\n"),
 		);

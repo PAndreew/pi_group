@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Loader2, LogOut, Monitor, Moon, Menu, Sun, Users } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Link2, Loader2, LogOut, Monitor, Moon, Menu, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -8,6 +8,7 @@ import { ChatView } from "@/components/chat-view"
 import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
+import { LinksDialog } from "@/components/links-dialog"
 import { NewSessionDialog } from "@/components/new-session-dialog"
 import { ChatSearchBox } from "@/components/chat-search-box"
 import { FilePreviewDialog, FilePreviewPanel, useLastEdit } from "@/components/file-preview-panel"
@@ -143,6 +144,7 @@ function Workspace() {
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [linksOpen, setLinksOpen] = useState(false)
 
   const previewReturn = useRef<Route | null>(null)
   const closePreview = () => {
@@ -197,7 +199,10 @@ function Workspace() {
       <NavSlotContext.Provider value={null}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
-          <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><Menu /></Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><Menu /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="Project links" title="Project links" onClick={() => setLinksOpen(true)}><Link2 /></Button>
+          </div>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
           <ChatSearchBox onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />
@@ -287,6 +292,7 @@ function Workspace() {
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+        <LinksDialog open={linksOpen} onOpenChange={setLinksOpen} />
       </div>
       </NavSlotContext.Provider>
     </NavContext.Provider>

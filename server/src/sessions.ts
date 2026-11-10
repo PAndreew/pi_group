@@ -15,6 +15,7 @@ import { mountJobs } from "./jobs.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
 import { extractionOf, mountMemory, projectMemory } from "./memory.js";
+import { mountLinks } from "./links.js";
 import { wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
@@ -991,6 +992,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	});
 	mountApplets(router, chatDeps);
 	mountProjects(router, chatDeps);
+	mountLinks(router, chatDeps.readMessages);
 
 	// Observe every live runtime, including runs resumed at startup that nobody has opened yet.
 	platform().scheduler.every(5_000, () => {

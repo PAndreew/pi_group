@@ -13,6 +13,7 @@ type Message = { role: string; timestamp?: number | string; [key: string]: unkno
 export const CONTEXT_DEFAULTS: ContextPolicy;
 export const EPOCH_IDLE_MS: number;
 export function wrapProjectMemory(memory: string): string;
+export function stripProjectMemory(text: string): string;
 export function cutoffsOf(policy: ContextPolicy, now: number): ContextCutoffs;
 export function epochTracker(load: (key: string) => Promise<ContextPolicy> | ContextPolicy): (key: string, now?: number) => Promise<ContextCutoffs>;
 export function applyContextPolicy<M extends Message>(messages: readonly M[], cutoffs: ContextCutoffs): M[];

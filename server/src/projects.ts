@@ -41,8 +41,6 @@ export interface Project {
 	/** Model for memory workers (which run on pi-durable when available); absent uses the consolidating person's defaults. */
 	memoryModel?: { provider: string; id: string };
 	memoryThinking?: string;
-	/** Sources extracted at once (default 3). */
-	memoryConcurrency?: number;
 	/** Hours after an agent turn ends before its reasoning and tool output leave the model's context (default 12, 0 = never). */
 	contextTrimHours?: number;
 	/** Hours of conversation the agent sees when it starts working again (default 168, 0 = all); the rest via session_history. */

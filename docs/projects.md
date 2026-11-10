@@ -9,6 +9,7 @@ A project is the unit that sessions and chats are grouped by, inside a tenant. T
 - **Linked folders:** you can link existing folders, such as a git repo, when creating the project or later from its "⋯" menu. Home offers linked folders first as starting points.
 - **Membership:** an item with no explicit project belongs to the project whose own or linked folder contains its working folder most specifically, or to General if none does. Linking a folder therefore picks up the sessions already working in it. Items started inside a project, or moved into one, record that project explicitly.
 - **Deleting a project** deletes no files and no conversations. A project with [vault secrets](vault.md) can only be deleted once they are moved or deleted. Its folder stays on disk, and its items go back to the project that contains their folder, or to General. Only the project's creator can rename it, change its links, share it, or delete it.
+- **Links:** the link icon next to the menu opens a searchable list of everything the project points at: its own and linked folders, its conversations, and the files and web pages mentioned in them. People and agents mention files in what they write, and agents also by writing or editing them. Folders open in the explorer and are listed as single entries, not with their contents. Links that appear only in tool output, for example a connected drive's file listing, are left out. Only conversations you can open count.
 
 ## Explicit sharing (first implementation slice)
 
@@ -42,6 +43,7 @@ Swipe a row left to show **Move** next to **Delete**. For a chat with other peop
 | `POST /api/projects` `{name, links?}` | New project with a new folder of its own |
 | `PATCH /api/projects/:id` `{name?, links?}` | Rename, or replace the linked folders |
 | `DELETE /api/projects/:id` | Delete; items fall back as described above |
+| `GET /api/projects/:id/links` | Files and web pages mentioned in the caller's accessible conversations of the project, newest first |
 | `POST /api/projects/move` `{kind, id, to}` | Move now, or ask the others (`{moved: false, request}`) |
 | `GET /api/projects/moves` | Moves waiting for the caller, and the caller's own pending moves |
 | `POST /api/projects/moves/:id` `{approve}` | Approve or decline |

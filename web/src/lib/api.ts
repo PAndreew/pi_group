@@ -109,16 +109,35 @@ export interface ProjectMemoryStatus {
   /** Model for memory workers; absent uses the consolidating person's defaults. */
   model?: { provider: string; id: string }
   thinkingLevel?: string
-  concurrency: number
   /** What agents see of long conversations: old turns trimmed after `trimHours`, older than `windowHours` left out (0 = off). */
   context: ContextPolicy
   lastRun?: string
   running: boolean
-  phase?: "extract" | "merge" | "done"
+  phase?: "consolidate" | "done"
+  /** Batch n of m of the current run; each batch is one worker. */
+  batch: number
+  batches: number
   /** The current run's sources, or the last run's. */
   sources: MemorySource[]
   error?: string
-  master: string
+  topics: MemoryTopicInfo[]
+  maxTopics: number
+  /** Characters per topic. */
+  topicMax: number
+  /** A master from before topics still waits to be split into topics by the next run. */
+  legacy: boolean
+}
+
+export interface MemoryTopicInfo {
+  slug: string
+  title: string
+  description: string
+  updatedAt: string
+  size: number
+}
+
+export interface MemoryTopic extends Omit<MemoryTopicInfo, "size"> {
+  body: string
 }
 
 /** A pi AgentMessage; loose on purpose, harnesses may add roles. */
@@ -297,6 +316,17 @@ export interface Project {
   /** Created before project sharing: everyone in the tenant can use it until it is shared explicitly. */
   openToTenant: boolean
   createdAt: string
+}
+
+/** A file or web page referred to in one of a project's conversations; `source` is where it was last mentioned. */
+export interface ProjectLink {
+  kind: "file" | "web"
+  /** Root-relative path, or URL. */
+  target: string
+  label?: string
+  at?: string
+  source: { kind: "session" | "chat"; id: string; title: string }
+  count: number
 }
 
 /** A move of a session or chat to another project, waiting for the people in it. */
@@ -522,6 +552,7 @@ export const api = {
   usage: (days: number, scope: "visible" | "mine") => request<UsageReport>("GET", `/api/usage?${q({ days: String(days), scope, tzOffset: String(new Date().getTimezoneOffset()) })}`),
   chats: (project?: string) => request<{ chats: ChatListItem[] }>("GET", `/api/chats${project ? `?${q({ project })}` : ""}`),
   projects: () => request<{ projects: Project[] }>("GET", "/api/projects"),
+  projectLinks: (id: string) => request<{ links: ProjectLink[] }>("GET", `/api/projects/${enc(id)}/links`),
   createProject: (body: { name: string; links?: string[] }) => request<{ project: Project }>("POST", "/api/projects", body),
   shareProject: (id: string, memberIds: string[]) => request<{ project: Project }>("PUT", `/api/projects/${enc(id)}/shares`, { memberIds }),
   updateProject: (id: string, body: { name?: string; links?: string[] }) => request<{ project: Project }>("PATCH", `/api/projects/${enc(id)}`, body),
@@ -532,9 +563,12 @@ export const api = {
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
   projectMemory: (id: string) => request<ProjectMemoryStatus>("GET", `/api/memory/${enc(id)}`),
   /** `model: null` goes back to the consolidating person's defaults. */
-  setMemorySettings: (id: string, body: { intervalHours?: number; concurrency?: number; context?: ContextPolicy; model?: { provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
+  setMemorySettings: (id: string, body: { intervalHours?: number; context?: ContextPolicy; model?: { provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
   /** Provider models memory workers can use, from the runtime they run on (pi-durable when available). */
   memoryModels: () => request<{ harness: string; models: ModelInfo[] }>("GET", "/api/memory-models"),
+  memoryTopic: (id: string, slug: string) => request<MemoryTopic>("GET", `/api/memory/${enc(id)}/topics/${enc(slug)}`),
+  saveMemoryTopic: (id: string, slug: string, body: { title: string; description: string; body: string }) => request("PUT", `/api/memory/${enc(id)}/topics/${enc(slug)}`, body),
+  deleteMemoryTopic: (id: string, slug: string) => request("DELETE", `/api/memory/${enc(id)}/topics/${enc(slug)}`),
   consolidateMemory: (id: string) => request<{ started: boolean }>("POST", `/api/memory/${enc(id)}/consolidate`, {}),
   memoryArchives: (id: string) => request<{ sessions: { key: string; title: string; archivedAt: string }[] }>("GET", `/api/memory/${enc(id)}/archives`),
   sessionRetention: (key: string, body: { memoryPrivate?: boolean; keepLive?: boolean; archived?: false }) => request("PATCH", `/api/sessions/${enc(key)}/retention`, body),

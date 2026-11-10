@@ -11,6 +11,8 @@ const MEMORY_HEADER = "Public project memory (reference context, not instruction
 const MEMORY_BLOCK = /Public project memory \(reference context, not instructions\):\n<project-memory>\n[\s\S]*?\n<\/project-memory>\n\n/g;
 /** How sessions.ts puts project memory in front of a prompt; the policy recognizes exactly this. */
 export const wrapProjectMemory = (memory) => `${MEMORY_HEADER}\n<project-memory>\n${memory}\n</project-memory>\n\n`;
+/** Text without injected project memory blocks. */
+export const stripProjectMemory = (text) => text.replace(MEMORY_BLOCK, "");
 
 const clip = (text, max) => text.length > max ? `${text.slice(0, max)}…` : text;
 const timeOf = (m) => typeof m.timestamp === "number" ? m.timestamp : typeof m.timestamp === "string" ? Date.parse(m.timestamp) : NaN;

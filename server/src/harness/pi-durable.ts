@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import fs from "node:fs/promises";
 import path from "node:path";
 import { applyContextPolicy, CONTEXT_DEFAULTS, type ContextPolicy, epochTracker, historyPage, HISTORY_TOOL } from "../../extensions/lib/context-policy.mjs";
+import { MEMORY_TOOL } from "../../extensions/lib/project-memory.mjs";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
 import { LiveSessionBase } from "./live-base.js";
@@ -293,8 +294,14 @@ export class PiDurableAdapter implements HarnessAdapter {
 	/** Context trimming per conversation, frozen per epoch (see extensions/lib/context-policy.mjs). */
 	private cutoffs: ReturnType<typeof epochTracker>;
 
-	/** `contextPolicy` maps a session key to its project's context trimming. */
-	constructor(contextPolicy: (key: string) => ContextPolicy = () => CONTEXT_DEFAULTS) {
+	/**
+	 * `contextPolicy` maps a session key to its project's context trimming; `projectMemory` answers the
+	 * project_memory tool for a session key.
+	 */
+	constructor(
+		contextPolicy: (key: string) => ContextPolicy = () => CONTEXT_DEFAULTS,
+		private projectMemory: (key: string, args: { topics?: string[]; query?: string }) => string = () => "Project memory is not available in this session.",
+	) {
 		this.cutoffs = epochTracker(contextPolicy);
 	}
 
@@ -349,6 +356,17 @@ export class PiDurableAdapter implements HarnessAdapter {
 								const stored = await this.readSession(String(api.conversationId), agent.cwd);
 								return { output: [{ type: "text", text: historyPage(stored?.messages ?? [], args) }] };
 							},
+						}),
+						durable.defineTool({
+							name: MEMORY_TOOL.name,
+							label: MEMORY_TOOL.label,
+							description: MEMORY_TOOL.description,
+							parameters: Type.Object({
+								topics: Type.Optional(Type.Array(Type.String({ maxLength: 60 }), { maxItems: 10, description: 'Topic names (slugs) to read, e.g. ["architecture"].' })),
+								query: Type.Optional(Type.String({ maxLength: 200, description: "Case-insensitive text to find across all topics." })),
+							}),
+							replay: "safe",
+							execute: async (args: Any, api: Any) => ({ output: [{ type: "text", text: this.projectMemory(`${this.id}:${api.conversationId}`, args) }] }),
 						}),
 					],
 				}),
