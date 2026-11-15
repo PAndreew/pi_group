@@ -12,6 +12,7 @@ import { mcpReport, piResources } from "./inventory.js";
 import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
 import { mountInteractions } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
+import { mountWatches } from "./watches.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
 import { extractionOf, mountMemory, projectMemory } from "./memory.js";
@@ -989,6 +990,14 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		isRunning,
 		isQuiet: (key) => hub.quiet(key),
 		canWrite: (user, meta) => canWrite(accessOf(user, meta)),
+	});
+	mountWatches(router, {
+		...chatDeps,
+		isRunning,
+		isQuiet: (key) => hub.quiet(key),
+		canRead: (user, meta) => Boolean(accessOf(user, meta)),
+		canWrite: (user, meta) => canWrite(accessOf(user, meta)),
+		involved,
 	});
 	mountApplets(router, chatDeps);
 	mountProjects(router, chatDeps);

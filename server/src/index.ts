@@ -22,6 +22,7 @@ import { expireInteractions } from "./interactions.js";
 import { sessionRoutes } from "./sessions.js";
 import { attachTerminal } from "./terminal.js";
 import { projectMemoryTool } from "./memory.js";
+import { watchTool } from "./watches.js";
 import { contextPolicyOf } from "./projects.js";
 import { loadStore, saveNow, store } from "./store.js";
 import { tenantRoutes } from "./tenants.js";
@@ -32,7 +33,7 @@ loadStore();
 expireInteractions();
 ensureAdmin();
 
-const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter((key) => contextPolicyOf(store.session(key)), (key, args) => projectMemoryTool(store.session(key), args))];
+const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter((key) => contextPolicyOf(store.session(key)), (key, args) => projectMemoryTool(store.session(key), args), watchTool)];
 
 const app = express();
 app.disable("x-powered-by");

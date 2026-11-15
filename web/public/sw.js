@@ -36,6 +36,11 @@ self.addEventListener("push", (event) => {
     if (windows.some((c) => c.focused && c.visibilityState === "visible")) return
     await self.registration.showNotification(notice.title, { body: notice.text, tag: `job:${notice.title}`, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: "/" } })
   })())
+  if (notice?.type === "watch") return event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+    if (windows.some((c) => c.focused && c.visibilityState === "visible")) return
+    await self.registration.showNotification(notice.title, { body: notice.text, tag: `watch:${notice.id}`, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: sessionUrl(notice) } })
+  })())
   if (notice?.type !== "run") return
   event.waitUntil(
     (async () => {

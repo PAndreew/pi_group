@@ -14,6 +14,16 @@ interface RunNotice {
   text: string
 }
 
+/** A process watch fired, or its host cannot be reached. */
+interface WatchNotice {
+  type: "watch"
+  id: string
+  key: string
+  path: string
+  title: string
+  text: string
+}
+
 const STORAGE_KEY = "pi-group:notify"
 
 const standalone = () => window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true
@@ -62,7 +72,7 @@ export async function unsubscribePush() {
   await subscription.unsubscribe().catch(() => {})
 }
 
-const sessionHash = (n: RunNotice) => `#${new URLSearchParams({ ...(n.path ? { f: n.path } : {}), s: n.key })}`
+const sessionHash = (n: Pick<RunNotice, "path" | "key">) => `#${new URLSearchParams({ ...(n.path ? { f: n.path } : {}), s: n.key })}`
 
 /** Same title, body and tag as the service worker's push notification, so the two collapse into one. */
 async function showSystemNotification(n: RunNotice) {
@@ -71,6 +81,19 @@ async function showSystemNotification(n: RunNotice) {
   const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined)
   if (registration) return registration.showNotification(title, options)
   const notification = new Notification(title, options)
+  notification.onclick = () => {
+    window.focus()
+    window.location.hash = sessionHash(n)
+    notification.close()
+  }
+}
+
+/** Same title, body and tag as the service worker's push for this watch, so the two collapse into one. */
+async function showWatchNotification(n: WatchNotice) {
+  const options: NotificationOptions = { body: n.text, tag: `watch:${n.id}`, icon: "/icon-192.png", badge: "/badge-96.png", data: { url: `/?tenant=${encodeURIComponent(activeTenant())}${sessionHash(n)}` } }
+  const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined)
+  if (registration) return registration.showNotification(n.title, options)
+  const notification = new Notification(n.title, options)
   notification.onclick = () => {
     window.focus()
     window.location.hash = sessionHash(n)
@@ -122,6 +145,13 @@ export function useRunNotifications(currentSession: string | undefined, currentC
             const text = m.status === "error" ? "The run failed." : m.status === "aborted" ? "Stopped." : messageText(m.message.content)
             if (inFront) toast(`${who}: ${text.slice(0, 120)}`, { action: { label: "Open", onClick: () => (window.location.hash = `c=${encodeURIComponent(event.chatId)}`) } })
             else if (enabledRef.current && Notification.permission === "granted") void showChatNotification(event.chatId, who, text.slice(0, 300))
+            return
+          }
+          if (event.type === "watch") {
+            const watch = event as unknown as WatchNotice
+            if (document.visibilityState === "visible" && document.hasFocus()) {
+              toast(watch.title, { description: watch.text.slice(0, 200), action: current.current === watch.key ? undefined : { label: "Open", onClick: () => (window.location.hash = sessionHash(watch)) } })
+            } else if (enabledRef.current && Notification.permission === "granted") void showWatchNotification(watch)
             return
           }
           const notice = event as unknown as RunNotice

@@ -12,6 +12,7 @@ Run Beezy on your computer or Raspberry Pi, then use it from a browser or phone.
 - Choose a working folder, browse files, and preview the agent’s output.
 - A [shared browser](docs/browser.md) per session: see your app live together and pick elements to ask about.
 - Pick your model, reply to messages, and steer or stop an agent.
+- [Process watches](docs/process-watches.md): the agent starts a long job (on this machine or over SSH), stops, and is woken with the result when it ends, without spending tokens on polling.
 - Separate accounts for your group; an installable mobile web app.
 
 ## Install

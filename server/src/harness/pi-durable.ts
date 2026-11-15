@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { applyContextPolicy, CONTEXT_DEFAULTS, type ContextPolicy, epochTracker, historyPage, HISTORY_TOOL } from "../../extensions/lib/context-policy.mjs";
 import { MEMORY_TOOL } from "../../extensions/lib/project-memory.mjs";
+import { WATCH_TOOL, watchInput } from "../../extensions/lib/process-watch.mjs";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
 import { LiveSessionBase } from "./live-base.js";
@@ -301,6 +302,7 @@ export class PiDurableAdapter implements HarnessAdapter {
 	constructor(
 		contextPolicy: (key: string) => ContextPolicy = () => CONTEXT_DEFAULTS,
 		private projectMemory: (key: string, args: { topics?: string[]; query?: string }) => string = () => "Project memory is not available in this session.",
+		private processWatch: (key: string, args: Record<string, unknown>) => Promise<string> = async () => "Process watches are not available in this session.",
 	) {
 		this.cutoffs = epochTracker(contextPolicy);
 	}
@@ -367,6 +369,30 @@ export class PiDurableAdapter implements HarnessAdapter {
 							}),
 							replay: "safe",
 							execute: async (args: Any, api: Any) => ({ output: [{ type: "text", text: this.projectMemory(`${this.id}:${api.conversationId}`, args) }] }),
+						}),
+						durable.defineTool({
+							name: WATCH_TOOL.name,
+							label: WATCH_TOOL.label,
+							description: WATCH_TOOL.description,
+							parameters: Type.Object({
+								action: Type.Union([Type.Literal("arm"), Type.Literal("list"), Type.Literal("cancel"), Type.Literal("extend")]),
+								host: Type.Optional(Type.String({ maxLength: 200, description: 'arm: SSH destination (alias or user@host), or "local".' })),
+								port: Type.Optional(Type.Integer({ minimum: 1, maximum: 65535, description: "arm: SSH port, if not 22 and not set in ~/.ssh/config." })),
+								kind: Type.Optional(Type.Union([Type.Literal("run"), Type.Literal("pid"), Type.Literal("log"), Type.Literal("file")], { description: "arm: what to watch." })),
+								label: Type.Optional(Type.String({ maxLength: 120, description: "arm: short name people see in the notification." })),
+								command: Type.Optional(Type.String({ maxLength: 4000, description: "run: the shell command to start." })),
+								cwd: Type.Optional(Type.String({ maxLength: 1000, description: "run: absolute folder to start it in (default: home)." })),
+								pid: Type.Optional(Type.Integer({ minimum: 1, description: "pid: the process id." })),
+								path: Type.Optional(Type.String({ maxLength: 1000, description: "log/file: absolute path on the host; pid with quietMinutes: the process's log." })),
+								pattern: Type.Optional(Type.String({ maxLength: 500, description: "log: extended regex for success." })),
+								failPattern: Type.Optional(Type.String({ maxLength: 500, description: "log: extended regex for failure (optional)." })),
+								quietMinutes: Type.Optional(Type.Number({ minimum: 1, maximum: 1440, description: "run/log/pid: also fire when the log has not grown for this many minutes (a hang). For pid, `path` names the log." })),
+								deadlineHours: Type.Optional(Type.Number({ minimum: 0.05, maximum: 168, description: "arm/extend: hours until the deadline (default 24)." })),
+								id: Type.Optional(Type.String({ maxLength: 100, description: "cancel/extend: the watch id." })),
+							}),
+							// Arming starts a process on another machine: never repeat it when a run is replayed.
+							replay: "unsafe",
+							execute: async (args: Any, api: Any) => ({ output: [{ type: "text", text: await this.processWatch(`${this.id}:${api.conversationId}`, watchInput(args)) }] }),
 						}),
 					],
 				}),

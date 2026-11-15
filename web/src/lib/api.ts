@@ -362,6 +362,26 @@ export interface JobSessionRef {
 }
 
 /** A scheduled job: runs its steps in order on its schedule, once a person approved it. */
+/** A process watch the agent armed; the server polls it and wakes the session when it fires. */
+export interface ProcessWatch {
+  id: string
+  label: string
+  host: string
+  kind: "run" | "pid" | "log" | "file"
+  target?: string
+  pattern?: string
+  failPattern?: string
+  quietMinutes?: number
+  targetPid?: number
+  log?: string
+  status: "armed" | "fired" | "delivered" | "cancelled"
+  createdAt: string
+  deadlineAt: string
+  lastContactAt?: string
+  lastError?: string
+  event?: { at: string; outcome: string; summary: string }
+}
+
 export interface Job {
   id: string
   name: string
@@ -495,6 +515,8 @@ const q = (params: Record<string, string>) => new URLSearchParams(params).toStri
 const enc = encodeURIComponent
 
 export const api = {
+  watches: (key: string) => request<{ watches: ProcessWatch[] }>("GET", `/api/sessions/${enc(key)}/watches`),
+  cancelWatch: (key: string, id: string) => request<{ watch: ProcessWatch }>("DELETE", `/api/sessions/${enc(key)}/watches/${enc(id)}`),
   interactions: (key: string) => request<{ interactions: Interaction[] }>("GET", `/api/sessions/${enc(key)}/interactions`),
   answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
   assistanceStatus: () => request<AssistanceStatus>("GET", "/api/assistance/status"),

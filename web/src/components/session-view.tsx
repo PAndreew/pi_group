@@ -24,6 +24,7 @@ import { AttachmentPreview } from "@/components/attachment-preview"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
+import { WatchPills } from "@/components/watch-pills"
 import { SkillDropup } from "@/components/skill-dropup"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Markdown } from "@/components/markdown"
@@ -617,6 +618,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
           <div className="mx-auto max-w-3xl space-y-2">
             {editing && <EditPreview text={editing.text} onCancel={cancelEdit} />}
             {reply && <ReplyPreview reply={reply} onCancel={() => setReply(undefined)} />}
+            <WatchPills key={sessionKey} sessionKey={sessionKey} canWrite={canWrite} />
             {queue.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {queue.map((q, i) => (

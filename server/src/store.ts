@@ -4,6 +4,7 @@ import type { AssistanceSettings, SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 import type { Interaction } from "./interactions.js";
 import type { Job } from "./jobs.js";
+import type { Watch } from "./watches.js";
 import type { MoveRequest, Project } from "./projects.js";
 import { platform } from "./ports/index.js";
 import { tenantId, type Tenant } from "./tenant-context.js";
@@ -107,13 +108,14 @@ interface Data {
 	pushSubscriptions: PushSubscriptionRecord[];
 	interactions: Interaction[];
 	jobs: Job[];
+	watches: Watch[];
 	applets: Applet[];
 	appletRuns: AppletRun[];
 	projects: Project[];
 	moveRequests: MoveRequest[];
 }
 
-let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [], applets: [], appletRuns: [], projects: [], moveRequests: [] };
+let data: Data = { tenants: [], users: [], logins: [], sessions: {}, durableFolders: [], pushSubscriptions: [], interactions: [], jobs: [], watches: [], applets: [], appletRuns: [], projects: [], moveRequests: [] };
 let saveTimer: NodeJS.Timeout | undefined;
 
 export function loadStore() {
