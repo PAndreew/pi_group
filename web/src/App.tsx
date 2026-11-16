@@ -5,6 +5,7 @@ import { AppletView } from "@/components/applet-view"
 import { ChatList } from "@/components/chat-list"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { ChatView } from "@/components/chat-view"
+import { ExplorerDialog, type ExplorerState } from "@/components/explorer-dialog"
 import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
@@ -146,22 +147,34 @@ function Workspace() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [linksOpen, setLinksOpen] = useState(false)
 
-  const previewReturn = useRef<Route | null>(null)
+  const [explorer, setExplorer] = useState<ExplorerState>({ open: false, folder: "", query: "" })
+  /** Where closing the file preview goes back to, and whether the explorer it was opened from reopens. */
+  const previewReturn = useRef<{ route: Route; explorer: boolean } | null>(null)
   const closePreview = () => {
-    setRoute(previewReturn.current ?? { chat: undefined, session: undefined, file: undefined, app: undefined })
+    const back = previewReturn.current
     previewReturn.current = null
+    setRoute(back?.route ?? { chat: undefined, session: undefined, file: undefined, app: undefined })
+    if (back?.explorer) setExplorer((e) => ({ ...e, open: true }))
+  }
+  const go = (next: Partial<Route>) => {
+    previewReturn.current = null
+    setRoute({ chat: undefined, session: undefined, file: undefined, app: undefined, ...next })
+  }
+  const openFile = (path: string, fromExplorer = false) => {
+    // From one file to another the way back stays the same; only reopening the explorer may change.
+    const back = route.file && previewReturn.current ? previewReturn.current.route : { ...route, file: undefined }
+    previewReturn.current = { route: back, explorer: fromExplorer || Boolean(route.file && previewReturn.current?.explorer) }
+    setRoute({ file: path, chat: undefined, session: undefined, app: undefined })
   }
 
   const nav: Nav = useMemo(
     () => ({
-      home: () => setRoute({ chat: undefined, session: undefined, file: undefined, app: undefined }),
-      openChat: (id) => setRoute({ chat: id, session: undefined, file: undefined, app: undefined }),
-      openSession: (key, folder) => setRoute({ session: key, chat: undefined, file: undefined, app: undefined, ...(folder !== undefined ? { folder } : {}) }),
-      openFile: (path) => {
-        if (!route.file) previewReturn.current = { ...route, file: undefined }
-        setRoute({ file: path, chat: undefined, session: undefined, app: undefined })
-      },
-      openApplet: (slug) => setRoute({ app: slug, chat: undefined, session: undefined, file: undefined }),
+      home: () => go({}),
+      openChat: (id) => go({ chat: id }),
+      openSession: (key, folder) => go({ session: key, ...(folder !== undefined ? { folder } : {}) }),
+      openFile: (path) => openFile(path),
+      openExplorer: (folder) => setExplorer({ open: true, folder, query: "" }),
+      openApplet: (slug) => go({ app: slug }),
       newSession: (folder) => setNewFolder(folder),
     }),
     [setRoute, route],
@@ -293,6 +306,14 @@ function Workspace() {
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
         <LinksDialog open={linksOpen} onOpenChange={setLinksOpen} />
+        <ExplorerDialog
+          state={explorer}
+          onChange={setExplorer}
+          onFile={(path) => {
+            setExplorer((e) => ({ ...e, open: false }))
+            openFile(path, true)
+          }}
+        />
       </div>
       </NavSlotContext.Provider>
     </NavContext.Provider>

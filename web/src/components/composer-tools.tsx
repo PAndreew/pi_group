@@ -1,7 +1,6 @@
 import { Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, SquareTerminal, Vault } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { AppletsDialog } from "@/components/applets-dialog"
-import { ExplorerDialog } from "@/components/explorer-dialog"
 import { JobsDialog } from "@/components/jobs-dialog"
 import { ModelSettingsDialog } from "@/components/model-settings-dialog"
 import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
@@ -16,7 +15,7 @@ import { useNav } from "@/lib/nav"
 /** xterm.js is large; load it only when someone opens a terminal. */
 const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
-type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "explorer" | "vault" | "models"
+type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "vault" | "models"
 
 /**
  * The tool icons, each opening its own modal: under every message box, or at the bottom of the
@@ -41,8 +40,8 @@ export function ComposerTools({
   const pendingJobs = usePendingJobs()
   const pendingApplets = usePendingApplets()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
-  const icon = (name: Panel, label: string, node: React.ReactNode) => (
-    <Button key={name} variant="ghost" size="icon" className="h-auto min-h-10 w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left font-normal [&_svg]:size-4" data-active={panel === name} onClick={() => setPanel(name)} aria-label={label} title={label}>
+  const icon = (name: Panel | "explorer", label: string, node: React.ReactNode) => (
+    <Button key={name} variant="ghost" size="icon" className="h-auto min-h-10 w-full shrink-0 justify-start gap-3 whitespace-normal px-3 py-2 text-left font-normal [&_svg]:size-4" data-active={panel === name} onClick={() => (name === "explorer" ? nav.openExplorer(folder) : setPanel(name))} aria-label={label} title={label}>
       {node}<span>{label}</span>
     </Button>
   )
@@ -83,7 +82,6 @@ export function ComposerTools({
       <JobsDialog open={panel === "jobs"} onOpenChange={openChange("jobs")} />
       <AppletsDialog open={panel === "applets"} onOpenChange={openChange("applets")} />
       <ResourceMonitorDialog open={panel === "monitor"} onOpenChange={openChange("monitor")} onOpenSession={(s) => nav.openSession(s.key, s.path)} />
-      <ExplorerDialog folder={folder} open={panel === "explorer"} onOpenChange={openChange("explorer")} />
       <VaultDialog open={panel === "vault"} onOpenChange={openChange("vault")} />
       <ModelSettingsDialog open={panel === "models"} onOpenChange={openChange("models")} />
       {panel === "terminal" && (

@@ -11,6 +11,7 @@ import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
 import { MessageBody } from "@/components/message-body"
+import { MessageTime } from "@/components/message-time"
 import { MoveDialog, type MoveTarget } from "@/components/project-move"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
@@ -32,7 +33,6 @@ import { subscribeUserEvents } from "@/lib/user-stream"
 import { useProjects } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
 function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode; actions?: React.ReactNode }) {
   const text = messageText(m.message.content)
@@ -58,7 +58,6 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
           </button>
           <button type="button" onClick={() => setDetails({ failed: true, index: null })} className={failed.length ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300"} title="Open failed step details">{m.status === "working" ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}</button>
           {m.status === "working" && <span className="running-shimmer">Running…</span>}
-          <span>{time(m.createdAt)}{m.editedAt && " · edited"}</span>
           {onWatch && (
             <button type="button" className="ml-auto flex items-center gap-1 hover:text-foreground" onClick={onWatch}>
               {m.status === "working" ? "watch" : "session"} <ExternalLink className="size-3" />
@@ -76,6 +75,7 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
           <Markdown text={text} className="text-sm" base={folder} />
         )}
         {children}
+        {m.status !== "working" && <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />}
       </div>
       {actions}
       <StepsDialog steps={shownSteps} open={details !== null} index={details?.index ?? null} onIndex={(index) => setDetails((value) => value && { ...value, index })} onClose={() => setDetails(null)} />
@@ -95,7 +95,7 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
             <div className="min-w-0">
               <div className="rounded-2xl rounded-tr-sm bg-blue-50 px-3 py-2 text-sm text-black">
                 <MessageBody text={body} folder={folder} />
-                <div className="mt-0.5 text-right text-[10px] opacity-70">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
+                <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />
               </div>
             </div>
           )}
@@ -110,7 +110,7 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
           <div className="min-w-0">
             <div className="rounded-2xl rounded-tl-sm bg-muted px-3 py-2 text-sm">
               <MessageBody text={body} folder={folder} />
-              <div className="mt-0.5 text-[10px] text-muted-foreground">{time(m.createdAt)}{m.editedAt && " · edited"}</div>
+              <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} className="text-muted-foreground opacity-100" />
             </div>
           </div>
         )}

@@ -1,7 +1,6 @@
 import { FileIcon } from "@react-symbols/icons/utils"
 import { Folder, Globe, Link2, Loader2, Search } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
-import { ExplorerDialog } from "@/components/explorer-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { api, type ProjectLink } from "@/lib/api"
@@ -41,7 +40,6 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const [query, setQuery] = useState("")
   const [links, setLinks] = useState<ProjectLink[]>()
   const [error, setError] = useState<string>()
-  const [explore, setExplore] = useState<string>()
 
   useEffect(() => {
     if (!open || !project) return
@@ -80,7 +78,7 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           {loading && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
           {empty && <p className="py-6 text-center text-sm text-muted-foreground">{needle ? "Nothing matches." : "No links yet."}</p>}
           <Section title="Folders" count={shownFolders.length}>
-            {shownFolders.map(f => <Row key={f} icon={<Folder />} title={base(f)} detail={f === project?.folder ? `${f} · project folder` : f} onClick={go(() => setExplore(f))} />)}
+            {shownFolders.map(f => <Row key={f} icon={<Folder />} title={base(f)} detail={f === project?.folder ? `${f} · project folder` : f} onClick={go(() => nav.openExplorer(f))} />)}
           </Section>
           <Section title="Files" count={files.length}>
             {files.map(l => <Row key={l.target} icon={<FileIcon fileName={base(l.target)} autoAssign width={16} height={16} aria-hidden="true" />} title={l.label && l.label !== base(l.target) ? `${l.label} — ${base(l.target)}` : base(l.target)} detail={`${l.target} · ${from(l)}`} onClick={go(() => nav.openFile(l.target))} />)}
@@ -91,6 +89,5 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         </div>
       </DialogContent>
     </Dialog>
-    <ExplorerDialog folder={explore ?? ""} open={explore !== undefined} onOpenChange={o => !o && setExplore(undefined)} />
   </>
 }

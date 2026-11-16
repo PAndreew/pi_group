@@ -21,6 +21,7 @@ import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerBox } from "@/components/composer-box"
 import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { AttachmentPreview } from "@/components/attachment-preview"
+import { MessageTime } from "@/components/message-time"
 import { ComposerTools } from "@/components/composer-tools"
 import { PathDropup } from "@/components/path-dropup"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
@@ -81,6 +82,7 @@ function UserBubble({ message, folder }: { message: AgentMessage; folder?: strin
             <div className="rounded-2xl rounded-br-sm bg-blue-50 px-3.5 py-2 text-sm text-black">
               <MessageBody text={body} folder={folder} />
               <ImageGallery images={images} />
+              <MessageTime at={message.timestamp} />
             </div>
           </div>
         )}
@@ -212,6 +214,7 @@ function AgentBubble({
         ))}
         {interactions}
         {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
+        {!run.running && <MessageTime at={run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp} />}
       </div>}
       </div>
     </div>

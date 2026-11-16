@@ -17,6 +17,7 @@ import {
   Pin,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   Upload,
   Users,
@@ -26,13 +27,14 @@ import { toast } from "sonner"
 import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { api, type FsEntry, type SessionSummary } from "@/lib/api"
 import { cn, formatBytes, timeAgo } from "@/lib/utils"
 
 const CODE_EXT = ["py", "js", "ts", "tsx", "jsx", "json", "sh", "rs", "go", "c", "cpp", "h", "java", "rb", "php", "css", "html", "yml", "yaml", "toml", "sql"]
 const IMG_EXT = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]
 
-function FileIcon({ entry }: { entry: FsEntry }) {
+function FileIcon({ entry }: { entry: Pick<FsEntry, "name" | "type"> }) {
   if (entry.type === "dir") return <Folder className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
   const ext = entry.name.split(".").pop()?.toLowerCase() ?? ""
   if (IMG_EXT.includes(ext)) return <FileImage className="size-4 shrink-0 text-muted-foreground" />
@@ -143,6 +145,8 @@ export function Sidebar({
   selectedSession,
   selectedFile,
   onFolder,
+  query = "",
+  onQuery,
   onSession,
   onFile,
   onNewSession,
@@ -155,6 +159,9 @@ export function Sidebar({
   selectedSession?: string
   selectedFile?: string
   onFolder: (path: string) => void
+  /** Filters this folder by name and finds matching files and folders anywhere. */
+  query?: string
+  onQuery?: (query: string) => void
   onSession: (key: string) => void
   onFile: (path: string) => void
   onNewSession: () => void
@@ -174,6 +181,7 @@ export function Sidebar({
   const [deleting, setDeleting] = useState<SessionSummary>()
   const [refresh, setRefresh] = useState(0)
   const input = useRef<HTMLInputElement>(null)
+  const [found, setFound] = useState<{ path: string; type: "dir" | "file" }[]>()
 
   const load = useCallback(() => {
     api
@@ -202,6 +210,18 @@ export function Sidebar({
     const timer = setInterval(load, 15_000)
     return () => clearInterval(timer)
   }, [load, version])
+
+  const needle = query.trim().toLowerCase()
+  useEffect(() => {
+    setFound(undefined)
+    if (!needle) return
+    let alive = true
+    const timer = setTimeout(() => api.searchPaths(needle).then(({ entries }) => alive && setFound(entries), () => alive && setFound([])), 200)
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [needle])
 
   const upload = async (files: File[]) => {
     if (!files.length) return
@@ -235,13 +255,20 @@ export function Sidebar({
       return next
     })
 
-  const visible = entries?.filter((e) => hidden || !e.name.startsWith("."))
+  const visible = entries?.filter((e) => (hidden || !e.name.startsWith(".")) && (!needle || e.name.toLowerCase().includes(needle)))
+  const elsewhere = found?.filter((f) => !visible?.some((e) => e.path === f.path))
   const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : ""
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-3 pt-3 pb-2">
         <Breadcrumb rootName={rootName} folder={folder} onFolder={onFolder} />
+        {onQuery && (
+          <div className="relative mt-2">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="h-8 pl-8 text-sm" type="search" placeholder="Search files and folders" value={query} onChange={(e) => onQuery(e.target.value)} aria-label="Search files and folders" />
+          </div>
+        )}
       </div>
       <div
         className={cn("flex min-h-0 flex-1 flex-col", dragging && "bg-accent/50")}
@@ -344,7 +371,24 @@ export function Sidebar({
               </div>
             )
           })}
-          {visible?.length === 0 && <p className="px-2 py-6 text-center text-sm text-muted-foreground">Empty folder. Drop files here to upload.</p>}
+          {visible?.length === 0 && !needle && <p className="px-2 py-6 text-center text-sm text-muted-foreground">Empty folder. Drop files here to upload.</p>}
+          {needle && (
+            <div className="mt-2 border-t pt-2">
+              <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">Everywhere</div>
+              {!elsewhere && <Loader2 className="mx-auto my-2 size-4 animate-spin text-muted-foreground" />}
+              {elsewhere?.length === 0 && <p className="px-2 py-2 text-sm text-muted-foreground">{visible?.length ? "Nothing else matches." : "Nothing matches."}</p>}
+              {elsewhere?.map((f) => {
+                const name = f.path.split("/").pop() ?? f.path
+                return (
+                  <button key={f.path} type="button" onClick={() => (f.type === "dir" ? onFolder(f.path) : onFile(f.path))} className="flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pr-2 pl-7 text-left text-sm hover:bg-accent" title={f.path}>
+                    <FileIcon entry={{ name, type: f.type }} />
+                    <span className="min-w-0 flex-1 truncate">{name}</span>
+                    <span className="max-w-[45%] shrink truncate text-[11px] text-muted-foreground">{f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : "/"}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
       <DeleteSessionDialog
