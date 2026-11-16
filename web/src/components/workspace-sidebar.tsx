@@ -15,10 +15,10 @@ export function WorkspaceSidebar({ folder, sessionKey, lastEdit, onLastEdit, cla
 }) {
   return (
     <aside className={cn("flex min-h-0 flex-col overflow-y-auto border-r font-normal [&_.font-medium]:font-normal", className)} aria-label="Menu">
-      <div className="shrink-0 p-2">
+      <div className="p-2">
         <ComposerTools sessionKey={sessionKey} folder={folder} placement="sidebar" />
       </div>
-      <div className="flex shrink-0 flex-col items-start gap-2 border-t p-3">
+      <div className="flex flex-col items-start gap-2 border-t p-3">
         <span className="text-xs font-medium text-muted-foreground">Tenant</span>
         <TenantPicker />
         <span className="mt-2 text-xs font-medium text-muted-foreground">Running sessions</span>
