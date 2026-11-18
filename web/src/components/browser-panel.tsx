@@ -46,6 +46,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState("")
   const [scale, setScale] = useState(1)
+  const [phoneMode, setPhoneMode] = useState(false)
   const [asking, setAsking] = useState(false)
   const [askPicks, setAskPicks] = useState<ElementRef[]>([])
   const ws = useRef<WebSocket>(undefined)
@@ -68,11 +69,6 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   pageRef.current = page
 
   const send = (message: object) => ws.current?.readyState === WebSocket.OPEN && ws.current.send(JSON.stringify(message))
-  /** The page at the panel's size, so it is shown 1:1. */
-  const fitPanel = () => {
-    const host = area.current
-    if (host) send({ type: "viewport", width: clamp(host.clientWidth, 320, 1920), height: clamp(host.clientHeight, 320, 1600) })
-  }
 
   useEffect(() => {
     setStatus({ state: "connecting" })
@@ -94,8 +90,6 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
       }
       const message = JSON.parse(event.data)
       if (message.type === "state") {
-        // Whoever opens a fresh browser sizes it to their panel.
-        if (message.canInput && message.url === "about:blank" && !pageRef.current.url) fitPanel()
         setPage((p) => ({ url: message.url, title: message.title, viewport: message.viewport, canInput: message.canInput ?? p.canInput }))
         setAddress((a) => (document.activeElement?.id === "browser-address" ? a : message.url === "about:blank" ? "" : message.url))
       } else if (message.type === "hover") {
@@ -112,6 +106,35 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     socket.onclose = (event) => setStatus({ state: "closed", reason: event.reason || (event.code === 1006 ? "Connection lost" : `Closed (${event.code})`) })
     return () => socket.close()
   }, [sessionKey, attempt])
+
+  // Resize Chromium itself so responsive pages reflow, not just the canvas.
+  useEffect(() => {
+    const host = area.current
+    const socket = ws.current
+    if (!host || !socket || !page.canInput || status.state !== "open") return
+    let timer: number | undefined
+    const resize = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        if (!host.clientWidth || !host.clientHeight || socket.readyState !== WebSocket.OPEN) return
+        const size = phoneMode ? PHONE : {
+          width: clamp(host.clientWidth, 320, 1920),
+          height: clamp(host.clientHeight, 320, 1600),
+        }
+        const current = pageRef.current.viewport
+        if (size.width !== current.width || size.height !== current.height) {
+          socket.send(JSON.stringify({ type: "viewport", ...size }))
+        }
+      }, 150)
+    }
+    resize()
+    const observer = new ResizeObserver(resize)
+    if (!phoneMode) observer.observe(host)
+    return () => {
+      observer.disconnect()
+      window.clearTimeout(timer)
+    }
+  }, [page.canInput, status.state, phoneMode, sessionKey])
 
   // Fit the page into the panel, keeping its aspect ratio.
   useEffect(() => {
@@ -265,7 +288,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     surface.current?.focus()
   }
 
-  const phone = page.viewport.width < 600
+  const phone = phoneMode
   const blank = status.state === "open" && (!page.url || page.url === "about:blank")
 
   return (
@@ -276,7 +299,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           variant="ghost"
           size="icon-sm"
           disabled={!page.canInput}
-          onClick={() => (phone ? fitPanel() : send({ type: "viewport", ...PHONE }))}
+          onClick={() => setPhoneMode((mode) => !mode)}
           aria-label={phone ? "Fit to panel" : "Phone size"}
           title={phone ? "Fit to panel" : "Phone size"}
         >

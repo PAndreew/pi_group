@@ -29,10 +29,19 @@ test("DuckDuckGo blocks and challenges surface an actionable message", () => {
 	assert.equal(searchResponseError("https://example.com/html/?q=raft", 403), undefined);
 });
 
-test("anything that is not an address is searched on Bing", () => {
-	assert.equal(normalizeUrl("raft consensus"), "https://www.bing.com/search?q=raft+consensus");
-	assert.equal(normalizeUrl("kubernetes"), "https://www.bing.com/search?q=kubernetes");
-	assert.equal(normalizeUrl("what is node.js used for"), "https://www.bing.com/search?q=what+is+node.js+used+for");
+test("the Hacker News shortcut opens the actual site", () => {
+	assert.equal(normalizeUrl("hackernews"), "https://news.ycombinator.com/");
+	assert.equal(normalizeUrl(" Hacker News "), "https://news.ycombinator.com/");
+});
+
+test("other keywords use English Bing search", () => {
+	for (const query of ["raft consensus", "kubernetes", "what is node.js used for"]) {
+		const url = new URL(normalizeUrl(query));
+		assert.equal(url.origin + url.pathname, "https://www.bing.com/search");
+		assert.equal(url.searchParams.get("q"), query);
+		assert.equal(url.searchParams.get("setlang"), "en");
+		assert.equal(url.searchParams.get("cc"), "US");
+	}
 	assert.throws(() => normalizeUrl("file:///etc/passwd"), /http and https/);
 	assert.throws(() => normalizeUrl("chrome://settings"), /http and https/);
 });

@@ -397,7 +397,7 @@ const clientMessage = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("text"), text: z.string().max(10_000) }),
 ]);
 
-export const searchUrl = (query: string) => `https://www.bing.com/search?${new URLSearchParams({ q: query })}`;
+export const searchUrl = (query: string) => `https://www.bing.com/search?${new URLSearchParams({ q: query, setlang: "en", cc: "US" })}`;
 
 export function searchResponseError(url: string, status?: number): string | undefined {
 	if (![202, 403, 429].includes(status ?? 0)) return;
@@ -411,6 +411,7 @@ export function searchResponseError(url: string, status?: number): string | unde
 export function normalizeUrl(input: string) {
 	const text = input.trim();
 	if (text === "about:blank") return text;
+	if (/^hacker\s*news$/i.test(text)) return "https://news.ycombinator.com/";
 	const address = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^(localhost|\[::1\])(?=[:/?#]|$)/i.test(text) || /^[^\s/]+:\d+(?=[/?#]|$)/.test(text) || /^[^\s/?#]+\.[a-z][a-z0-9-]*\.?(?=[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+(?=[:/?#]|$)/.test(text);
 	if (!address) return searchUrl(text);
 	const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : /^(localhost|127\.|\[::1\]|0\.0\.0\.0|\d+\.\d+\.\d+\.\d+)/.test(text) || /^[^/]+:\d+/.test(text) ? `http://${text}` : `https://${text}`;
