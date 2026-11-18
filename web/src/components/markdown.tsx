@@ -91,7 +91,7 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
                 {...props}
                 href={`#${new URLSearchParams({ file })}`}
                 title={`Open /${file}`}
-                className="inline-flex items-baseline gap-1"
+                className="inline-flex max-w-full items-baseline gap-1 wrap-anywhere"
                 onClick={(e) => {
                   e.preventDefault()
                   nav!.openFile(file)

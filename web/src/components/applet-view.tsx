@@ -123,7 +123,7 @@ function PathField({ field, value, folder, disabled, onChange }: { field: Extrac
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-1 gap-2">
       {paths.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {paths.map((p) => (
@@ -233,7 +233,7 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
   }
 
   return (
-    <form className="grid gap-4" onSubmit={(e) => e.preventDefault()}>
+    <form className="grid grid-cols-1 gap-4" onSubmit={(e) => e.preventDefault()}>
       {spec.fields.map((field, i) =>
         field.type === "markdown" ? (
           <Markdown key={i} text={field.text} className="text-sm text-muted-foreground" />
@@ -246,7 +246,7 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
             </span>
           </label>
         ) : (
-          <div key={field.id} className="grid gap-1.5">
+          <div key={field.id} className="grid grid-cols-1 gap-1.5">
             <Label id={`applet-field-${field.id}-label`} htmlFor={`applet-field-${field.id}`}>
               {field.label}
               {field.optional && <span className="font-normal text-muted-foreground">(optional)</span>}
@@ -283,7 +283,7 @@ function RunItem({ run, folder, onOpenSession }: { run: AppletRun; folder: strin
   }[run.status]
   const shown = Object.entries(run.values).filter(([, v]) => !blank(v) && v !== false)
   return (
-    <li className="grid gap-2 rounded-lg border p-3">
+    <li className="grid grid-cols-1 gap-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {icon}
         <span className="font-medium">{run.action}</span>
@@ -295,7 +295,7 @@ function RunItem({ run, folder, onOpenSession }: { run: AppletRun; folder: strin
           </Button>
         )}
       </div>
-      {shown.length > 0 && <p className="text-xs break-words text-muted-foreground">{shown.map(([k, v]) => `${k}: ${showValue(v)}`).join(" · ")}</p>}
+      {shown.length > 0 && <p className="text-xs wrap-anywhere text-muted-foreground">{shown.map(([k, v]) => `${k}: ${showValue(v)}`).join(" · ")}</p>}
       {run.output && <Markdown text={run.output} base={run.session?.folder ?? folder} className={cn("max-h-96 overflow-y-auto text-sm", run.status === "error" && "text-destructive")} />}
     </li>
   )
@@ -381,7 +381,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-2xl gap-6 p-4 sm:p-6">
+        <div className="mx-auto grid max-w-2xl grid-cols-1 gap-6 p-4 sm:p-6">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!applet && !error && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
           {applet && (
@@ -430,9 +430,9 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
                 <AppletForm key={`${applet.id}-${applet.approvedAt}`} spec={applet.spec} folder={applet.folder} onRun={applet.approved ? run : undefined} />
               </section>
               {runs.length > 0 && (
-                <section className="grid gap-2">
+                <section className="grid grid-cols-1 gap-2">
                   <h3 className="text-sm font-medium">Your runs</h3>
-                  <ul className="grid gap-2">
+                  <ul className="grid grid-cols-1 gap-2">
                     {runs.map((r) => (
                       <RunItem key={r.id} run={r} folder={applet.folder} onOpenSession={nav.openSession} />
                     ))}
