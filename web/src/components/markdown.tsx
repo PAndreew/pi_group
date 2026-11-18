@@ -1,9 +1,10 @@
 import { FileIcon } from "@react-symbols/icons/utils"
 import type { Element, ElementContent } from "hast"
-import { memo, useContext, useEffect, useState } from "react"
+import { memo, useContext, useEffect, useState, type ComponentProps } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
+import { CopyCode, InPre } from "@/components/copy-code"
 import { ImageGallery } from "@/components/image-gallery"
 import { WebLink } from "@/components/web-link"
 import { Chart, LinkPreviewCard } from "@/components/rich-blocks"
@@ -39,6 +40,11 @@ function fence(node?: Element) {
   return code && language ? { language, source: textOf(code) } : undefined
 }
 
+/** Inline values get a copy button; code in fenced blocks stays plain. */
+function Code({ node: _node, ...props }: ComponentProps<"code"> & { node?: Element }) {
+  return useContext(InPre) ? <code {...props} /> : <CopyCode {...props} />
+}
+
 function ChartBlock({ source }: { source: string }) {
   const spec = parseChart(source)
   if (typeof spec === "string") return <pre title={spec}><code>{source}</code></pre>
@@ -63,8 +69,9 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
               const urls = previewUrls(block.source)
               if (urls.length) return <div className="grid gap-2">{urls.map((url) => <LinkPreviewCard key={url} url={url} />)}</div>
             }
-            return <pre {...props}>{children}</pre>
+            return <pre {...props}><InPre.Provider value={true}>{children}</InPre.Provider></pre>
           },
+          code: Code,
           // A paragraph of only images becomes a gallery that opens full screen.
           p: ({ node, children, ...props }) => {
             const parts = node?.children.filter((child) => !blank(child)) ?? []
