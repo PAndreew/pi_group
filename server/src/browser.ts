@@ -395,10 +395,15 @@ const clientMessage = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("text"), text: z.string().max(10_000) }),
 ]);
 
-/** http(s) only; a bare host gets http:// when it is local and https:// otherwise. */
+/** DuckDuckGo's script-free results page: light on the server's browser. */
+export const searchUrl = (query: string) => `https://html.duckduckgo.com/html/?${new URLSearchParams({ q: query })}`;
+
+/** http(s) only; a bare host gets http:// when it is local and https:// otherwise. Anything that is not an address is searched. */
 export function normalizeUrl(input: string) {
 	const text = input.trim();
 	if (text === "about:blank") return text;
+	const address = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^(localhost|\[::1\])(?=[:/?#]|$)/i.test(text) || /^[^\s/]+:\d+(?=[/?#]|$)/.test(text) || /^[^\s/?#]+\.[a-z][a-z0-9-]*\.?(?=[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+(?=[:/?#]|$)/.test(text);
+	if (!address) return searchUrl(text);
 	const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : /^(localhost|127\.|\[::1\]|0\.0\.0\.0|\d+\.\d+\.\d+\.\d+)/.test(text) || /^[^/]+:\d+/.test(text) ? `http://${text}` : `https://${text}`;
 	const url = new URL(withScheme);
 	if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Only http and https pages can be opened.");

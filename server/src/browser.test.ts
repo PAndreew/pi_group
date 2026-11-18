@@ -15,6 +15,15 @@ test("only http(s) pages open, and bare hosts get a scheme", () => {
 	assert.equal(normalizeUrl("example.com"), "https://example.com/");
 	assert.equal(normalizeUrl(" https://example.com/a?b=1 "), "https://example.com/a?b=1");
 	assert.equal(normalizeUrl("about:blank"), "about:blank");
+	assert.equal(normalizeUrl("localhost"), "http://localhost/");
+	assert.equal(normalizeUrl("pi.local:8080"), "http://pi.local:8080/");
+	assert.equal(normalizeUrl("en.wikipedia.org/wiki/Raft"), "https://en.wikipedia.org/wiki/Raft");
+});
+
+test("anything that is not an address is searched on DuckDuckGo", () => {
+	assert.equal(normalizeUrl("raft consensus"), "https://html.duckduckgo.com/html/?q=raft+consensus");
+	assert.equal(normalizeUrl("kubernetes"), "https://html.duckduckgo.com/html/?q=kubernetes");
+	assert.equal(normalizeUrl("what is node.js used for"), "https://html.duckduckgo.com/html/?q=what+is+node.js+used+for");
 	assert.throws(() => normalizeUrl("file:///etc/passwd"), /http and https/);
 	assert.throws(() => normalizeUrl("chrome://settings"), /http and https/);
 });

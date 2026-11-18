@@ -1,6 +1,7 @@
-import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Loader2, Monitor, Power, RotateCw, Smartphone, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Loader2, Monitor, Power, RotateCw, Search, Smartphone, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { BrowserAsk, type BrowserAnswer } from "@/components/browser-ask"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
@@ -23,7 +24,17 @@ const BUTTONS = ["left", "middle", "right"] as const
  * access drive it, and anyone can pick elements (click one, or drag around several) to reference them
  * in their message.
  */
-export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKey: string; picks: number; onPick: (ref: ElementRef) => void; onClose: () => void }) {
+/** Asking about the page from the floating button: send, and the answer to show. */
+export type BrowserAskProps = {
+  onSend: (text: string, picks: ElementRef[], page: { url: string; title: string }) => Promise<void>
+  /** Why sending is not possible right now (e.g. the agent is running). */
+  disabled?: string
+  answer?: BrowserAnswer
+  onCloseAnswer: () => void
+  folder?: string
+}
+
+export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sessionKey: string; picks: number; onPick: (ref: ElementRef) => void; onClose: () => void; ask?: BrowserAskProps }) {
   const [status, setStatus] = useState<Status>({ state: "connecting" })
   const [attempt, setAttempt] = useState(0)
   const [page, setPage] = useState({ url: "", title: "", viewport: DESKTOP, canInput: false })
@@ -35,6 +46,9 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState("")
   const [scale, setScale] = useState(1)
+  const [asking, setAsking] = useState(false)
+  const [askPicks, setAskPicks] = useState<ElementRef[]>([])
+  const [ddgIcon, setDdgIcon] = useState(true)
   const ws = useRef<WebSocket>(undefined)
   const canvas = useRef<HTMLCanvasElement>(null)
   const area = useRef<HTMLDivElement>(null)
@@ -48,8 +62,9 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
   const pickingRef = useRef(picking)
   pickingRef.current = picking
   const wheelSum = useRef(0)
+  // While the ask box is open, picks go into it instead of the message box.
   const onPickRef = useRef(onPick)
-  onPickRef.current = onPick
+  onPickRef.current = asking ? (ref: ElementRef) => setAskPicks((list) => [...list, ref]) : onPick
   const pageRef = useRef(page)
   pageRef.current = page
 
@@ -149,6 +164,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (!picking) setAsking(false)
     surface.current?.focus()
     e.currentTarget.setPointerCapture(e.pointerId)
     const at = toPage(e)
@@ -255,7 +271,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center gap-1 border-b p-1.5">
+      <div className="flex items-center gap-1 px-1.5 pt-1.5">
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "back" })} aria-label="Back" title="Back">
           <ArrowLeft />
         </Button>
@@ -265,9 +281,17 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label="Reload" title="Reload">
           <RotateCw />
         </Button>
-        <form onSubmit={navigate} className="min-w-0 flex-1">
-          <Input id="browser-address" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="localhost:5173 or any URL" className="h-8 text-sm" title={page.title} />
+        <form onSubmit={navigate} className="relative min-w-0 flex-1">
+          {ddgIcon ? (
+            <img src="https://duckduckgo.com/favicon.ico" alt="" aria-hidden="true" onError={() => setDdgIcon(false)} className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+          ) : (
+            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          )}
+          <Input id="browser-address" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search DuckDuckGo or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
         </form>
+      </div>
+      <div className="flex items-center gap-1 border-b px-1.5 pb-1">
+        <span className="min-w-0 flex-1 truncate px-1.5 text-xs text-muted-foreground" title={page.title || page.url}>{page.title || (page.url === "about:blank" ? "" : page.url)}</span>
         <Button
           variant="ghost"
           size="icon-sm"
@@ -365,8 +389,24 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose }: { sessionKe
             )}
           </div>
         )}
+        {ask && status.state === "open" && (
+          <BrowserAsk
+            open={asking}
+            onOpenChange={setAsking}
+            picks={askPicks}
+            onRemovePick={(id) => setAskPicks((list) => list.filter((r) => r.id !== id))}
+            onSend={async (text) => {
+              await ask.onSend(text, askPicks, { url: page.url, title: page.title })
+              setAskPicks([])
+            }}
+            disabled={ask.disabled}
+            answer={ask.answer}
+            onCloseAnswer={ask.onCloseAnswer}
+            folder={ask.folder}
+          />
+        )}
         {picks > 0 && (
-          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground shadow lg:hidden">
+          <span className="absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground shadow lg:hidden">
             {picks} picked, added to your message
           </span>
         )}

@@ -33,7 +33,7 @@ import { ForwardDialog } from "@/components/forward-dialog"
 import { ImageGallery } from "@/components/image-gallery"
 import { EditPreview, MessageActions } from "@/components/message-actions"
 import { imageRefs, uploadDir } from "@/lib/attachments"
-import { BrowserPanel } from "@/components/browser-panel"
+import { BrowserPanel, type BrowserAskProps } from "@/components/browser-panel"
 import { type ElementRef, refImageFile, refLabel, refsPrompt } from "@/lib/element-refs"
 import { MessageBody } from "@/components/message-body"
 import { MemoryRunChip } from "@/components/memory-run-chip"
@@ -454,44 +454,74 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
     }
   }
 
+  /** Send a prompt with its files and picks (as text, plus their screenshots as attachments); returns the prompt text sent. */
+  const submit = async (summary: SessionSummary, body: string, files: File[], refs: ElementRef[], reply?: ReplyTarget) => {
+    const shots = refs.map(refImageFile)
+    const attached = [...files, ...shots.filter((f): f is File => Boolean(f))]
+    const picked = refs.length ? refsPrompt(refs, shots.map((f) => f?.name)) : ""
+    const message = [replyPrompt(body, reply), picked].filter(Boolean).join("\n\n")
+    let prompt = message
+    let images: { data: string; mimeType: string }[] | undefined
+    if (attached.length) {
+      // In a project, uploads land in the project's folder even when the session works elsewhere.
+      const dir = uploadDir(uploadFolder(summary.projectId) ?? summary.path)
+      const uploaded = await api.upload(dir, attached)
+      const rel = uploaded.files.map((f) => relativePath(summary.path, f.path))
+      prompt = `${message || "See the attached files."}\n\nAttached files (relative to the working directory):\n${rel.map((p) => `- ${p}`).join("\n")}`
+      const model = models.find((m) => m.provider === state?.model?.provider && m.id === state?.model?.id)
+      if (!model || model.input?.includes("image")) {
+        const imgs = attached.filter((f) => f.type.startsWith("image/") && f.size <= MAX_INLINE_IMAGE)
+        if (imgs.length) images = await Promise.all(imgs.map(async (f) => ({ data: await readBase64(f), mimeType: f.type })))
+      }
+    }
+    await api.prompt(sessionKey, { text: prompt, images, mode: running ? mode : undefined })
+    stick.current = true
+    if (!summary.live) refresh()
+    return prompt
+  }
+
   const send = async () => {
     if (editing) return saveEdit(editing)
     const body = text.trim()
     if ((!body && files.length === 0 && refs.length === 0) || !summary) return
     setSending(true)
     try {
-      // Picked elements go along as text, and their screenshots as attachments.
-      const shots = refs.map(refImageFile)
-      const attached = [...files, ...shots.filter((f): f is File => Boolean(f))]
-      const picked = refs.length ? refsPrompt(refs, shots.map((f) => f?.name)) : ""
-      const message = [replyPrompt(body, reply), picked].filter(Boolean).join("\n\n")
-      let prompt = message
-      let images: { data: string; mimeType: string }[] | undefined
-      if (attached.length) {
-        // In a project, uploads land in the project's folder even when the session works elsewhere.
-        const dir = uploadDir(uploadFolder(summary.projectId) ?? summary.path)
-        const uploaded = await api.upload(dir, attached)
-        const rel = uploaded.files.map((f) => relativePath(summary.path, f.path))
-        prompt = `${message || "See the attached files."}\n\nAttached files (relative to the working directory):\n${rel.map((p) => `- ${p}`).join("\n")}`
-        const model = models.find((m) => m.provider === state?.model?.provider && m.id === state?.model?.id)
-        if (!model || model.input?.includes("image")) {
-          const imgs = attached.filter((f) => f.type.startsWith("image/") && f.size <= MAX_INLINE_IMAGE)
-          if (imgs.length) images = await Promise.all(imgs.map(async (f) => ({ data: await readBase64(f), mimeType: f.type })))
-        }
-      }
-      await api.prompt(sessionKey, { text: prompt, images, mode: running ? mode : undefined })
+      await submit(summary, body, files, refs, reply)
       setText("")
       setFiles([])
       setRefs([])
       setReply(undefined)
-      stick.current = true
-      if (!summary.live) refresh()
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
       setSending(false)
     }
   }
+
+  /** A question asked from the browser's floating button, and its run once it shows up. */
+  const [asked, setAsked] = useState<string>()
+  const askedRun = asked === undefined ? undefined : runs.findLast((run) => run.user && messageText(run.user.content) === asked)
+  const browserAsk: BrowserAskProps | undefined = canWrite && summary ? {
+    onSend: async (body, picks, page) => {
+      setSending(true)
+      try {
+        // With nothing picked, the agent still learns which page the question is about.
+        const context = picks.length || !page.url || page.url === "about:blank" ? "" : `(Asked about the page open in the shared browser: ${page.url}${page.title ? ` (${page.title})` : ""})`
+        setAsked(await submit(summary, [body, context].filter(Boolean).join("\n\n"), [], picks))
+      } catch (error) {
+        toast.error((error as Error).message)
+        throw error
+      } finally {
+        setSending(false)
+      }
+    },
+    disabled: running ? "Wait until the agent has finished" : sending ? "Sending…" : undefined,
+    answer: asked === undefined ? undefined : askedRun
+      ? { text: askedRun.answer, running: askedRun.running, at: askedRun.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp }
+      : { running: true },
+    onCloseAnswer: () => setAsked(undefined),
+    folder: summary.path,
+  } : undefined
 
   const addRef = (ref: ElementRef) => {
     if (!canWrite) return void toast.info("You have view-only access, so picks cannot be sent.")
@@ -723,7 +753,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       {browserShown && (
         // Beside the chat on wide screens; over it on phones.
         <div className="fixed inset-0 z-40 lg:static lg:z-auto lg:w-[55%] lg:max-w-[calc(100%-22rem)] lg:shrink-0 lg:border-l">
-          <BrowserPanel sessionKey={sessionKey} picks={refs.length} onPick={addRef} onClose={() => setBrowserShown(false)} />
+          <BrowserPanel sessionKey={sessionKey} picks={refs.length} onPick={addRef} onClose={() => setBrowserShown(false)} ask={browserAsk} />
         </div>
       )}
 
