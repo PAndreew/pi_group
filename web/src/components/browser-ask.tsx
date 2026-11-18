@@ -65,7 +65,7 @@ export function BrowserAsk({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-2 px-3">
+    <div className="pointer-events-none absolute inset-x-0 bottom-8 z-10 flex flex-col items-center gap-2 px-3">
       {answer && (
         <div className="pointer-events-auto flex max-h-[40vh] min-h-0 w-full max-w-xl flex-col rounded-2xl border bg-background shadow-lg">
           <div className="flex items-center gap-2 px-3.5 pt-2 text-xs">
