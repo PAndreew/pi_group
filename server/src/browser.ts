@@ -397,8 +397,7 @@ const clientMessage = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("text"), text: z.string().max(10_000) }),
 ]);
 
-/** DuckDuckGo's script-free results page: light on the server's browser. */
-export const searchUrl = (query: string) => `https://html.duckduckgo.com/html/?${new URLSearchParams({ q: query })}`;
+export const searchUrl = (query: string) => `https://www.bing.com/search?${new URLSearchParams({ q: query })}`;
 
 export function searchResponseError(url: string, status?: number): string | undefined {
 	if (![202, 403, 429].includes(status ?? 0)) return;

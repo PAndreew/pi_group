@@ -48,7 +48,6 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const [scale, setScale] = useState(1)
   const [asking, setAsking] = useState(false)
   const [askPicks, setAskPicks] = useState<ElementRef[]>([])
-  const [ddgIcon, setDdgIcon] = useState(true)
   const ws = useRef<WebSocket>(undefined)
   const canvas = useRef<HTMLCanvasElement>(null)
   const area = useRef<HTMLDivElement>(null)
@@ -406,12 +405,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           <ArrowRight />
         </Button>
         <form onSubmit={navigate} className="relative min-w-0 flex-1">
-          {ddgIcon ? (
-            <img src="https://duckduckgo.com/favicon.ico" alt="" aria-hidden="true" onError={() => setDdgIcon(false)} className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-          ) : (
-            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          )}
-          <Input id="browser-address" aria-label="URL or search keyword" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search DuckDuckGo or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input id="browser-address" aria-label="URL or search keyword" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search Bing or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
         </form>
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label="Refresh" title="Refresh">
           <RotateCw />

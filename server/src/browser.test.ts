@@ -21,7 +21,7 @@ test("only http(s) pages open, and bare hosts get a scheme", () => {
 });
 
 test("DuckDuckGo blocks and challenges surface an actionable message", () => {
-	const url = normalizeUrl("raft consensus");
+	const url = "https://html.duckduckgo.com/html/?q=raft+consensus";
 	for (const status of [202, 403, 429]) {
 		assert.match(searchResponseError(url, status) ?? "", /DuckDuckGo blocked or challenged/);
 	}
@@ -29,10 +29,10 @@ test("DuckDuckGo blocks and challenges surface an actionable message", () => {
 	assert.equal(searchResponseError("https://example.com/html/?q=raft", 403), undefined);
 });
 
-test("anything that is not an address is searched on DuckDuckGo", () => {
-	assert.equal(normalizeUrl("raft consensus"), "https://html.duckduckgo.com/html/?q=raft+consensus");
-	assert.equal(normalizeUrl("kubernetes"), "https://html.duckduckgo.com/html/?q=kubernetes");
-	assert.equal(normalizeUrl("what is node.js used for"), "https://html.duckduckgo.com/html/?q=what+is+node.js+used+for");
+test("anything that is not an address is searched on Bing", () => {
+	assert.equal(normalizeUrl("raft consensus"), "https://www.bing.com/search?q=raft+consensus");
+	assert.equal(normalizeUrl("kubernetes"), "https://www.bing.com/search?q=kubernetes");
+	assert.equal(normalizeUrl("what is node.js used for"), "https://www.bing.com/search?q=what+is+node.js+used+for");
 	assert.throws(() => normalizeUrl("file:///etc/passwd"), /http and https/);
 	assert.throws(() => normalizeUrl("chrome://settings"), /http and https/);
 });
