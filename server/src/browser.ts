@@ -345,7 +345,9 @@ class SessionBrowser {
 
 	async goto(input: string) {
 		const url = normalizeUrl(input);
-		await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+		const response = await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+		const error = searchResponseError(url, response?.status());
+		if (error) throw new Error(error);
 		await this.page.waitForLoadState("load", { timeout: 5000 }).catch(() => {});
 	}
 
@@ -397,6 +399,14 @@ const clientMessage = z.discriminatedUnion("type", [
 
 /** DuckDuckGo's script-free results page: light on the server's browser. */
 export const searchUrl = (query: string) => `https://html.duckduckgo.com/html/?${new URLSearchParams({ q: query })}`;
+
+export function searchResponseError(url: string, status?: number): string | undefined {
+	if (![202, 403, 429].includes(status ?? 0)) return;
+	const target = new URL(url);
+	if (target.origin === "https://html.duckduckgo.com" && target.pathname === "/html/" && target.searchParams.has("q")) {
+		return `DuckDuckGo blocked or challenged this browser’s search (HTTP ${status}). Open a site directly or try another search engine.`;
+	}
+}
 
 /** http(s) only; a bare host gets http:// when it is local and https:// otherwise. Anything that is not an address is searched. */
 export function normalizeUrl(input: string) {

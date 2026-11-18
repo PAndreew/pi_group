@@ -7,7 +7,7 @@ import { test } from "node:test";
 const dir = mkdtempSync(path.join(os.tmpdir(), "pi-group-browser-"));
 process.env.DATA_DIR = path.join(dir, "data");
 process.env.FS_ROOT = dir;
-const { normalizeUrl, PICK } = await import("./browser.js");
+const { normalizeUrl, searchResponseError, PICK } = await import("./browser.js");
 
 test("only http(s) pages open, and bare hosts get a scheme", () => {
 	assert.equal(normalizeUrl("localhost:5173/settings"), "http://localhost:5173/settings");
@@ -18,6 +18,15 @@ test("only http(s) pages open, and bare hosts get a scheme", () => {
 	assert.equal(normalizeUrl("localhost"), "http://localhost/");
 	assert.equal(normalizeUrl("pi.local:8080"), "http://pi.local:8080/");
 	assert.equal(normalizeUrl("en.wikipedia.org/wiki/Raft"), "https://en.wikipedia.org/wiki/Raft");
+});
+
+test("DuckDuckGo blocks and challenges surface an actionable message", () => {
+	const url = normalizeUrl("raft consensus");
+	for (const status of [202, 403, 429]) {
+		assert.match(searchResponseError(url, status) ?? "", /DuckDuckGo blocked or challenged/);
+	}
+	assert.equal(searchResponseError(url, 200), undefined);
+	assert.equal(searchResponseError("https://example.com/html/?q=raft", 403), undefined);
 });
 
 test("anything that is not an address is searched on DuckDuckGo", () => {

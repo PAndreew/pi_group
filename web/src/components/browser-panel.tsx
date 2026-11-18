@@ -271,27 +271,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center gap-1 px-1.5 pt-1.5">
-        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "back" })} aria-label="Back" title="Back">
-          <ArrowLeft />
-        </Button>
-        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "forward" })} aria-label="Forward" title="Forward">
-          <ArrowRight />
-        </Button>
-        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label="Reload" title="Reload">
-          <RotateCw />
-        </Button>
-        <form onSubmit={navigate} className="relative min-w-0 flex-1">
-          {ddgIcon ? (
-            <img src="https://duckduckgo.com/favicon.ico" alt="" aria-hidden="true" onError={() => setDdgIcon(false)} className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-          ) : (
-            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          )}
-          <Input id="browser-address" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search DuckDuckGo or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
-        </form>
-      </div>
-      <div className="flex items-center gap-1 border-b px-1.5 pb-1">
-        <span className="min-w-0 flex-1 truncate px-1.5 text-xs text-muted-foreground" title={page.title || page.url}>{page.title || (page.url === "about:blank" ? "" : page.url)}</span>
+      <nav aria-label="Browser tools" className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 border-b p-1.5">
+        <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -320,6 +301,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         >
           {pending ? <Loader2 className="animate-spin" /> : <Crosshair />}
         </Button>
+        </div>
+        <span className="truncate px-1 text-center text-xs text-muted-foreground" title={page.url && page.url !== "about:blank" ? page.url : undefined}>
+          {page.url && page.url !== "about:blank" ? page.url : "Please open a site or search for a keyword"}
+        </span>
+        <div className="flex items-center gap-1">
         {page.canInput && (
           <Button variant="ghost" size="icon-sm" onClick={() => send({ type: "close" })} aria-label="Close the browser for everyone" title="Close the browser for everyone">
             <Power />
@@ -328,7 +314,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Hide browser" title="Hide browser">
           <X />
         </Button>
-      </div>
+        </div>
+      </nav>
       {typing && page.canInput && (
         <form
           className="flex gap-1 border-b p-1.5 sm:hidden"
@@ -384,7 +371,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             )}
             {blank && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-neutral-500">
-                {page.canInput ? "Enter a URL above, or ask @pi to start your app and open it here." : "Nothing open yet."}
+                Please open a site or search for a keyword
               </div>
             )}
           </div>
@@ -411,6 +398,25 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           </span>
         )}
       </div>
+      <footer className="sticky bottom-0 flex shrink-0 items-center gap-1 border-t bg-background px-2 py-2">
+        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "back" })} aria-label="Back" title="Back">
+          <ArrowLeft />
+        </Button>
+        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "forward" })} aria-label="Forward" title="Forward">
+          <ArrowRight />
+        </Button>
+        <form onSubmit={navigate} className="relative min-w-0 flex-1">
+          {ddgIcon ? (
+            <img src="https://duckduckgo.com/favicon.ico" alt="" aria-hidden="true" onError={() => setDdgIcon(false)} className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+          ) : (
+            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          )}
+          <Input id="browser-address" aria-label="URL or search keyword" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search DuckDuckGo or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
+        </form>
+        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label="Refresh" title="Refresh">
+          <RotateCw />
+        </Button>
+      </footer>
     </div>
   )
 }
