@@ -1,4 +1,3 @@
-import { gatewayEnabled, gatewayProviders, keyStatus, saveGatewayKey, deleteGatewayKey } from "./model-gateway.js";
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response, Router } from "express";
 import express from "express";
@@ -117,20 +116,6 @@ const failures = new Map<string, { count: number; until: number }>();
 
 export function authRoutes(): Router {
 	const router = express.Router();
-	router.get("/auth/model-keys", requireAuth, async (req, res) => {
-		const enabled = gatewayEnabled();
-		res.json({ enabled, providers: enabled ? await Promise.all(gatewayProviders.map(async provider => ({ provider, ...await keyStatus(tenantId(), req.user!.id, provider) }))) : [] });
-	});
-	router.put("/auth/model-keys/:provider", requireAuth, async (req, res) => {
-		const provider = z.enum(gatewayProviders).parse(req.params.provider);
-		const { apiKey } = z.object({ apiKey: z.string().regex(/^[!-~]{8,4096}$/) }).parse(req.body);
-		await saveGatewayKey(tenantId(), req.user!.id, provider, apiKey);
-		res.json({ configured: true });
-	});
-	router.delete("/auth/model-keys/:provider", requireAuth, async (req, res) => {
-		await deleteGatewayKey(tenantId(), req.user!.id, z.enum(gatewayProviders).parse(req.params.provider));
-		res.json({ configured: false });
-	});
 
 
 	router.post("/auth/login", (req, res) => {

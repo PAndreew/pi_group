@@ -1,4 +1,3 @@
-import { PersonalModelSettings } from "@/components/personal-model-settings"
 import { Brain, Cloud, Cpu } from "lucide-react"
 import { CloudflareSettings } from "@/components/cloudflare-settings"
 import { DefaultsSettings } from "@/components/defaults-settings"
@@ -17,12 +16,10 @@ export function ModelSettingsDialog({ open, onOpenChange }: { open: boolean; onO
         <Tabs defaultValue="defaults" className="min-w-0">
           <TabsList className="w-full">
             <TabsTrigger value="defaults"><Cpu /> Defaults</TabsTrigger>
-            <TabsTrigger value="personal">Personal keys</TabsTrigger>
             <TabsTrigger value="cloudflare"><Cloud /> Cloudflare</TabsTrigger>
             <TabsTrigger value="memory"><Brain /> Project memory</TabsTrigger>
           </TabsList>
           <TabsContent value="defaults" className="pt-2"><DefaultsSettings onClose={() => onOpenChange(false)} /></TabsContent>
-          <TabsContent value="personal" className="pt-2"><PersonalModelSettings /></TabsContent>
           <TabsContent value="cloudflare" className="pt-2"><CloudflareSettings /></TabsContent>
           <TabsContent value="memory" className="pt-2"><ProjectMemorySettings /></TabsContent>
         </Tabs>

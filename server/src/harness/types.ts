@@ -1,4 +1,3 @@
-import type { GatewayRun } from "../model-gateway.js";
 /**
  * Harness abstraction. A harness is an agent runtime (pi over RPC, pi-durable, later ACP agents, ...).
  * Every adapter normalizes to pi-style messages (user / assistant / toolResult / ...), which are close
@@ -77,8 +76,8 @@ export interface PromptInput {
 }
 
 export interface LiveSession {
-	promptWithGateway?(input: PromptInput, run: GatewayRun): Promise<void>;
-	isGatewayActive?(): boolean;
+	readonly authProfile?: string;
+	availableModels?(): Promise<ModelInfo[]>;
 	readonly id: string;
 	readonly cwd: string;
 	readonly state: SessionState;
@@ -146,6 +145,7 @@ export interface UsageRecord {
 }
 
 export interface CreateOptions {
+	authProfile?: string;
 	model?: { provider: string; id: string };
 	thinkingLevel?: string;
 	name?: string;
@@ -159,7 +159,7 @@ export interface HarnessAdapter {
 	readonly durable: boolean;
 	init(): Promise<void>;
 	available(): Promise<{ ok: boolean; reason?: string }>;
-	listModels(): Promise<ModelInfo[]>;
+	listModels(profile?: string): Promise<ModelInfo[]>;
 	listSessions(cwd: string): Promise<SessionListing[]>;
 	/** Messages of a session that is not live, without starting anything. */
 	/** A stored session: its messages, name, and the model and thinking level it last used. */
@@ -167,7 +167,7 @@ export interface HarnessAdapter {
 	live(id: string): LiveSession | undefined;
 	liveSessions(): LiveSession[];
 	/** Attach to a session, starting its runtime if needed. */
-	open(id: string, cwd: string): Promise<LiveSession>;
+	open(id: string, cwd: string, profile?: string | null): Promise<LiveSession>;
 	create(cwd: string, options: CreateOptions): Promise<LiveSession>;
 	/** Replace the content of the `index`th message of `readSession` in a session that is not live. Absent when the harness cannot rewrite history. */
 	editMessage?(id: string, cwd: string, index: number, content: unknown): Promise<void>;

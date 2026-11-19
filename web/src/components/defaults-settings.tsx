@@ -103,7 +103,7 @@ export function DefaultsSettings({ onClose }: { onClose: () => void }) {
       </div>
       <div className="grid gap-2">
         <Label className="flex items-center gap-2"><input type="checkbox" checked={useModelPerMessage} onChange={e => setUseModelPerMessage(e.target.checked)} /> Prefer my model when I send a message</Label>
-        <p className="text-xs text-muted-foreground">Applies to matching runtimes. These selections use the server’s credentials. To override them in Pi RPC, configure a model under Personal keys.</p>
+        <p className="text-xs text-muted-foreground">Applies to matching runtimes. Pi RPC uses the native Pi profile assigned by your administrator, if any. Assigned profiles use your preferred model for every turn. The fallback is used only when your preferred model is unavailable before the run.</p>
         {useModelPerMessage && <>
           <Label>Fallback model (optional)</Label>
           <ModelPicker models={models} value={fallbackModel} onChange={setFallbackModel} showProvider />

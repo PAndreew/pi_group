@@ -1,6 +1,6 @@
 # Model gateway
 
-The standalone gateway forwards model requests, including streaming tool calls, to fixed provider endpoints. It preserves the provider's response format rather than translating between formats. Beezy uses this gateway for personal model turns in the Pi RPC runtime. In the Beezy server environment, set `BEEZY_GATEWAY_URL=http://127.0.0.1:8791` and `BEEZY_GATEWAY_TOKEN_FILE` to the absolute path of the gateway's `admin.token`, then restart Beezy and reopen any live Pi sessions. Under **Model settings → Personal keys**, save a provider key and choose a preferred model by its exact provider ID. A fallback is optional and is used only if the preferred key is missing; a rejected request never changes payer. Remove the preferred personal model to return to the shared runtime settings.
+The standalone gateway forwards model requests, including streaming tool calls, to fixed provider endpoints. It preserves the provider's response format rather than translating between formats. Beezy no longer routes agent turns through this gateway. Use [native Pi profiles](pi-profiles.md) for per-user provider logins, including Codex OAuth.
 
 ## Run locally
 
@@ -11,7 +11,6 @@ Requires Node.js 22.19+. From the repository root:
 node gateway/index.mjs
 curl --fail http://127.0.0.1:8791/health
 node --test gateway/server.test.mjs
-BEEZY_TEST_PI="$PWD/.runtime/node_modules/.bin/pi" node --test gateway/pi-rpc.test.mjs
 ```
 
 The gateway only listens on loopback. `GATEWAY_PORT` and `GATEWAY_DATA_DIR` override the port and data directory. Keys are stored with AES-256-GCM; back up the database and its master key separately. Set `GATEWAY_MASTER_KEY` to supply a 32-byte hex or base64 key rather than generating a master key file.
