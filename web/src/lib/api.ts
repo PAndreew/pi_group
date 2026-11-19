@@ -2,11 +2,16 @@ export type Role = "admin" | "member"
 export type Access = "read" | "write"
 export type EffectiveAccess = "admin" | "owner" | Access
 
+export type PersonalModel = { provider: string; model: string }
 export interface SessionDefaults {
+  personalModel?: PersonalModel
+  personalFallback?: PersonalModel
   harness: string
   model: { provider: string; id: string }
   thinkingLevel: string
   autoTitle?: boolean
+  useModelPerMessage?: boolean
+  fallbackModel?: { provider: string; id: string }
 }
 
 export interface AssistanceSettings {
@@ -521,6 +526,9 @@ export const api = {
   answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
   assistanceStatus: () => request<AssistanceStatus>("GET", "/api/assistance/status"),
   saveAssistance: (settings: AssistanceSettings) => request<{ user: User }>("PUT", "/api/auth/assistance", settings),
+  modelKeys: () => request<{ enabled: boolean; providers: { provider: string; configured: boolean }[] }>("GET", "/api/auth/model-keys"),
+  saveModelKey: (provider: string, apiKey: string) => request("PUT", `/api/auth/model-keys/${enc(provider)}`, { apiKey }),
+  deleteModelKey: (provider: string) => request("DELETE", `/api/auth/model-keys/${enc(provider)}`),
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User; tenantId?: string }>("GET", "/api/auth/me"),
   tenants: () => request<{ active: string; tenants: { id: string; name: string; canShare: boolean }[] }>("GET", "/api/tenants"),

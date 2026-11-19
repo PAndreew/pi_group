@@ -1,3 +1,4 @@
+import { gatewayEnabled, gatewayUrl, revokeGatewayRun, type GatewayRun } from "../model-gateway.js";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -81,10 +82,14 @@ class RpcProcess {
 	constructor(args: string[], cwd: string, sessionKey?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
 		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs"), ...extension("cloudflare-assistance.mjs")];
+		if (sessionKey && gatewayEnabled()) args.push(...extension("model-gateway.mjs"));
 		const { command, argv, shell } = piCommand(args);
+		const env: NodeJS.ProcessEnv = { ...agentEnvironment(), PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) };
+		delete env.BEEZY_GATEWAY_TOKEN_FILE;
+		if (gatewayEnabled()) env.BEEZY_GATEWAY_URL = gatewayUrl();
 		this.child = platform().sandbox.spawn(command, argv, {
 			cwd,
-			env: { ...agentEnvironment(), PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) },
+			env,
 			shell,
 		});
 		this.child.onStdout((chunk) => this.read(this.decoder.write(chunk)));
@@ -193,6 +198,8 @@ const toModelInfo = (m: any): ModelInfo => ({
 
 class PiLiveSession extends LiveSessionBase {
 	sessionFile?: string;
+	private gatewayRun?: GatewayRun;
+	private gatewayCleanup?: Promise<void>;
 
 	constructor(
 		id: string,
@@ -202,6 +209,7 @@ class PiLiveSession extends LiveSessionBase {
 		super(id, cwd);
 		rpc.onRecord = (record) => this.handle(record);
 		rpc.onExit = (code) => {
+			if (this.gatewayRun) void revokeGatewayRun(this.gatewayRun.runId).catch(() => {});
 			if (code && code !== 0) this.notice("error", `pi exited with code ${code}. ${this.rpc.stderrTail.trim().slice(-400)}`);
 			this.markClosed();
 		};
@@ -234,6 +242,7 @@ class PiLiveSession extends LiveSessionBase {
 				this.emitStatus();
 				break;
 			case "agent_settled":
+				this.clearGateway();
 				this.state.running = false;
 				this.state.runningTools = [];
 				this.state.partial = null;
@@ -353,7 +362,44 @@ class PiLiveSession extends LiveSessionBase {
 		if (!commands?.some((c: Any) => c.name === "beezy-assistance-ready")) throw new Error("Cloudflare runtime extension is unavailable. Reopen the session with a compatible pi version.");
 	}
 
+	isGatewayActive() { return Boolean(this.gatewayRun); }
+
+	private clearGateway() {
+		const run = this.gatewayRun;
+		if (!run) return;
+		this.gatewayRun = undefined;
+		this.gatewayCleanup = (async () => {
+			const revoke = revokeGatewayRun(run.runId).catch(() => {});
+			try {
+				await this.rpc.send({ type: "prompt", message: "/beezy-gateway-clear" });
+				this.applyState(await this.rpc.send({ type: "get_state" }));
+				this.emitStatus();
+			} finally { await revoke; }
+		})();
+		void this.gatewayCleanup.catch(() => {});
+	}
+
+	async promptWithGateway(input: PromptInput, run: GatewayRun) {
+		await this.gatewayCleanup;
+		if (this.state.running || this.gatewayRun) throw new Error("Wait for the current agent run to finish");
+		this.gatewayRun = run;
+		try {
+			const { commands } = await this.rpc.send({ type: "get_commands" });
+			if (!commands?.some((command: Any) => command.name === "beezy-gateway-run")) throw new Error("Restart the session to load the gateway extension");
+			const payload = Buffer.from(JSON.stringify(run)).toString("base64url");
+			await this.rpc.send({ type: "prompt", message: `/beezy-gateway-run ${payload}` });
+			await this.rpc.send({ type: "set_model", provider: "beezy-personal", modelId: run.model });
+			this.state.model = { provider: run.provider, id: run.model };
+			this.emitStatus();
+			await this.prompt(input);
+		} catch (error) {
+			this.clearGateway();
+			throw error;
+		}
+	}
+
 	async prompt(input: PromptInput) {
+		await this.gatewayCleanup;
 		this.touch();
 		const images = input.images?.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType }));
 		if (this.state.running) {
@@ -369,6 +415,8 @@ class PiLiveSession extends LiveSessionBase {
 	}
 
 	async setModel(provider: string, modelId: string) {
+		await this.gatewayCleanup;
+		if (this.gatewayRun || provider === "beezy-personal") throw new Error("Model is pinned during a personal run");
 		const model = await this.rpc.send({ type: "set_model", provider, modelId });
 		this.state.model = { provider: model.provider, id: model.id };
 		this.emitStatus();

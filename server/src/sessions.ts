@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { generateSessionTitle } from "./session-title.js";
 import { creationOptions } from "./preferences.js";
+import { gatewayRun, revokeGatewayRun } from "./model-gateway.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
 import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
@@ -350,6 +351,19 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const live = await ensureLive(meta, adapterOf(meta.harness));
+		const defaults = user.sessionDefaults;
+		if (/^\s*\/beezy-gateway-/i.test(body.text)) throw new HttpError(400, "Reserved agent command");
+		const personal = defaults?.personalModel;
+		if (live.isGatewayActive?.() || (personal && live.state.running)) throw new HttpError(409, "Wait for the current run to finish before sending a personal model turn");
+		if (personal && !live.promptWithGateway) throw new HttpError(400, "Personal models require the Pi RPC runtime");
+		let selectedModel: { provider: string; id: string } | undefined;
+		if (!personal && defaults?.useModelPerMessage && defaults.harness === meta.harness && body.mode !== "steer") {
+			if (live.state.running) throw new HttpError(409, "Wait for the current run to finish before sending with your preferred model.");
+			const available = await adapterOf(meta.harness).listModels();
+			const model = [defaults.model, defaults.fallbackModel].find(candidate => candidate && available.some(entry => entry.provider === candidate.provider && entry.id === candidate.id));
+			if (!model) throw new HttpError(400, "Neither your preferred model nor your fallback is available on this runtime.");
+			selectedModel = model;
+		}
 		const run = prepareAssistance(meta, user, live.state.running);
 		if (run.settings.injectionChecks || run.settings.contextExtraction || run.settings.toolSelection) {
 			if (!live.verifyAssistance) throw new HttpError(400, "This runtime does not support Cloudflare assistance");
@@ -366,7 +380,12 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
 		saveNow();
 		try {
-			await live.prompt(input);
+			if (selectedModel && (live.state.model?.provider !== selectedModel.provider || live.state.model?.id !== selectedModel.id)) await live.setModel(selectedModel.provider, selectedModel.id);
+			if (personal) {
+				const run = await gatewayRun(tenantId(), user.id, personal, defaults?.personalFallback);
+				try { await live.promptWithGateway!(input, run); }
+				catch (error) { void revokeGatewayRun(run.runId).catch(() => {}); throw error; }
+			} else await live.prompt(input);
 			if (injectMemory) loadedMemory.set(live, memory);
 		} catch (error) {
 			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
@@ -374,7 +393,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			throw error;
 		}
 		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
-		if (autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
+		if (!personal && autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 

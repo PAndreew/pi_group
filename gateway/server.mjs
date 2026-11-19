@@ -28,10 +28,10 @@ export function createGateway({ store, adminToken, fetchUpstream = fetch, now = 
   const runs = new Map();
   function revoke(id) { runs.get(id)?.controller?.abort(); runs.delete(id); }
   const server = createServer(async (req, res) => {
-    const token = /^Bearer ([\w.-]+)$/i.exec(req.headers.authorization ?? '')?.[1] ?? (req.url === '/v1/messages' ? req.headers['x-api-key'] : '') ?? '';
+    const route = req.url === '/v1/messages?beta=true' ? '/v1/messages' : req.url;
+    const token = /^Bearer ([\w.-]+)$/i.exec(req.headers.authorization ?? '')?.[1] ?? (route === '/v1/messages' ? req.headers['x-api-key'] : '') ?? '';
     const hash = digest(token);
     const id = hash.toString('hex');
-    const route = req.url;
     try {
       if (route === '/health' && req.method === 'GET') return json(res, 200, { ok: true });
       if (route?.startsWith('/admin/')) {

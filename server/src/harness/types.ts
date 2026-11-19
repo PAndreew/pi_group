@@ -1,3 +1,4 @@
+import type { GatewayRun } from "../model-gateway.js";
 /**
  * Harness abstraction. A harness is an agent runtime (pi over RPC, pi-durable, later ACP agents, ...).
  * Every adapter normalizes to pi-style messages (user / assistant / toolResult / ...), which are close
@@ -76,6 +77,8 @@ export interface PromptInput {
 }
 
 export interface LiveSession {
+	promptWithGateway?(input: PromptInput, run: GatewayRun): Promise<void>;
+	isGatewayActive?(): boolean;
 	readonly id: string;
 	readonly cwd: string;
 	readonly state: SessionState;

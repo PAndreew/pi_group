@@ -1,3 +1,4 @@
+import { gatewayProviders } from "./model-gateway.js";
 import { z } from "zod";
 
 export const assistanceSettingsSchema = z.object({
@@ -10,8 +11,14 @@ export const assistanceSettingsSchema = z.object({
 export type AssistanceSettings = z.infer<typeof assistanceSettingsSchema>;
 export const assistanceDefaults = assistanceSettingsSchema.parse({});
 
+const gatewayModel = z.object({ provider: z.enum(gatewayProviders), model: z.string().regex(/^[A-Za-z0-9_./:-]{1,200}$/) });
+
 export const sessionDefaultsSchema = z.object({
+	personalModel: gatewayModel.optional(),
+	personalFallback: gatewayModel.optional(),
 	autoTitle: z.boolean().optional(),
+	useModelPerMessage: z.boolean().optional(),
+	fallbackModel: z.object({ provider: z.string().min(1).max(120), id: z.string().min(1).max(200) }).optional(),
 	harness: z.string().min(1).max(80),
 	model: z.object({ provider: z.string().min(1).max(120), id: z.string().min(1).max(200) }),
 	thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]),
