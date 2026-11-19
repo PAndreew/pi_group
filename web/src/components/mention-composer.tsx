@@ -327,7 +327,7 @@ export function MentionComposer({
 export function PiAvatar({ small }: { small?: boolean }) {
   return (
     <span className={cn("inline-flex shrink-0 items-center justify-center rounded-full p-[3px]", small ? "size-[26px]" : "size-[34px]")}>
-      <img src="/beezy-logo.svg" alt="Beezy" title="Beezy" className="size-full object-contain" />
+      <img src={`${import.meta.env.BASE_URL}beezy-logo.svg`} alt="Beezy" title="Beezy" className="size-full object-contain" />
     </span>
   )
 }

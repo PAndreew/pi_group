@@ -1,6 +1,6 @@
 # Interactive GitHub Pages demo
 
-The demo is a static, simulated workspace using Beezy's shared styles and button components. It includes fictional accounts, sessions, expandable tool results, scripted chat replies, an interactive browser preview, and illustrative model/host usage. State lives only in React memory and resets on reload. It does not execute commands, connect to models, authenticate accounts, or open a real shared browser.
+The demo runs Beezy's real frontend against an in-memory API, event stream, and browser transport. It opens to a prefilled session; use **Open detailed steps** to inspect `npm test` and its scripted output. It includes fictional accounts, sessions, expandable tool results, scripted chat replies, an interactive browser preview, and illustrative model/host usage. State lives only in React memory and resets on reload. It does not execute commands, connect to models, authenticate accounts, or open a real shared browser.
 
 ## Run locally
 
@@ -17,4 +17,4 @@ Normal builds omit `VITE_DEMO` and continue to start the real app, including its
 
 ## Publish
 
-Build as above and publish only the contents of `web/dist` (with a `.nojekyll` file) to the `gh-pages` branch. Pages serves the branch root; changes to `main` require a fresh build and publish.
+Build as above and publish only the contents of `web/dist` (with a `.nojekyll` file) to the `gh-pages` branch. Pages serves the branch root at https://pandreew.github.io/pi_group/. Changes to `main` require a fresh build and publish.

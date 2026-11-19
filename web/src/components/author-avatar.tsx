@@ -15,6 +15,6 @@ export function AuthorAvatar({ id, name }: { id: string; name: string }) {
   useEffect(() => setFailed(false), [id])
   const hash = Array.from(id).reduce((value, character) => (value * 31 + character.codePointAt(0)!) >>> 0, 0)
   const initials = name.trim().split(/[\s._-]+/).slice(0, 2).map((part) => Array.from(part)[0] ?? "").join("").toUpperCase()
-  if (!failed) return <img key={`${id}:${version}`} src={`/api/users/${encodeURIComponent(id)}/avatar?v=${version}`} alt={`${name} avatar`} title={name} className="size-8 shrink-0 rounded-full object-cover" onError={() => setFailed(true)} />
+  if (!failed && import.meta.env.VITE_DEMO !== "true") return <img key={`${id}:${version}`} src={`/api/users/${encodeURIComponent(id)}/avatar?v=${version}`} alt={`${name} avatar`} title={name} className="size-8 shrink-0 rounded-full object-cover" onError={() => setFailed(true)} />
   return <span role="img" aria-label={`${name} avatar`} title={name} className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-black/10 text-xs font-bold shadow-sm", colors[hash % colors.length])}>{initials || "?"}</span>
 }
