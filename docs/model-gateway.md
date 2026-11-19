@@ -1,6 +1,6 @@
 # Model gateway
 
-The standalone gateway forwards OpenAI Chat Completions requests, including streaming tool calls. It is not yet wired into Beezy chat, Pi, or Settings. It does not implement automatic fallback; the trusted caller must choose an account and model before issuing the token.
+The standalone gateway forwards model requests, including streaming tool calls, to fixed provider endpoints. It preserves the provider's response format rather than translating between formats. It is not yet wired into Beezy chat, Pi, or Settings. It does not implement automatic fallback; the trusted caller must choose an account and model before issuing the token.
 
 ## Run locally
 
@@ -21,13 +21,21 @@ Admin routes require the admin bearer token. Only a trusted backend should call 
 
 | Method and path | Purpose |
 | --- | --- |
-| `PUT /admin/credentials/:account` | Store or rotate `{ "apiKey": "…" }`; returns configuration status only. |
-| `GET /admin/credentials/:account` | Check whether a key is configured, without decrypting it. |
-| `DELETE /admin/credentials/:account` | Delete a key and revoke that account's runs. |
-| `POST /admin/runs` | Issue `{ token, runId, expiresAt }` from `{ account, model, ttlSeconds?, requests?, maxOutputTokens? }`. |
+| `PUT /admin/credentials/:account/:provider` | Store or rotate `{ "apiKey": "…" }`; returns configuration status only. |
+| `GET /admin/credentials/:account/:provider` | Check whether a key is configured, without decrypting it. |
+| `DELETE /admin/credentials/:account/:provider` | Delete a key and revoke that account's runs for the provider. |
+| `POST /admin/runs` | Issue `{ token, runId, expiresAt }` from `{ account, provider?, model, ttlSeconds?, requests?, maxOutputTokens? }`. |
 | `DELETE /admin/runs/:runId` | Revoke the run and cancel any active request. |
 | `POST /v1/chat/completions` | Use the run token as the bearer credential; the model must match the pinned model. |
 
-Run tokens are memory-only and have a request count, an output-token limit per request, and a maximum 15-minute lifetime. These are not dollar spending caps. The API key is decrypted just before forwarding to the fixed OpenAI endpoint. Provider errors do not trigger a fallback or switch accounts.
+Run tokens are memory-only and have a request count, an output-token limit per request, and a maximum 15-minute lifetime. These are not dollar spending caps. `/admin/credentials/:account` and an omitted `provider` still select OpenAI. Run tokens are scoped to an account, provider, and model. The API key is decrypted just before forwarding to that provider's fixed endpoint. Provider errors do not trigger a fallback or switch accounts.
+
+| Provider ID | Request path and format |
+| --- | --- |
+| `openai` | `/v1/chat/completions` · OpenAI |
+| `openrouter` | `/v1/chat/completions` · OpenAI-compatible; use `vendor/model` IDs |
+| `gemini` | `/v1/chat/completions` · Google's OpenAI compatibility API, not native Gemini |
+| `zhipu` | `/v1/chat/completions` · Zhipu BigModel China endpoint |
+| `anthropic` | `/v1/messages` · native Anthropic Messages; accepts the run token as bearer or `x-api-key` |
 
 **Local trust:** an agent running under the same OS user can access that user's gateway files, including the admin token and master key. This setup is for trusted personal use only. In production, keep the gateway, admin token, and credential storage outside the agent's security boundary; use a private TLS ingress and restrict admin access to the trusted backend.

@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { providers, providerRequest } from './providers.mjs';
 
 const digest = value => createHash('sha256').update(value).digest();
 const json = (res, status, body) => res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
@@ -27,7 +28,7 @@ export function createGateway({ store, adminToken, fetchUpstream = fetch, now = 
   const runs = new Map();
   function revoke(id) { runs.get(id)?.controller?.abort(); runs.delete(id); }
   const server = createServer(async (req, res) => {
-    const token = /^Bearer ([\w.-]+)$/i.exec(req.headers.authorization ?? '')?.[1] ?? '';
+    const token = /^Bearer ([\w.-]+)$/i.exec(req.headers.authorization ?? '')?.[1] ?? (req.url === '/v1/messages' ? req.headers['x-api-key'] : '') ?? '';
     const hash = digest(token);
     const id = hash.toString('hex');
     const route = req.url;
@@ -35,41 +36,46 @@ export function createGateway({ store, adminToken, fetchUpstream = fetch, now = 
       if (route === '/health' && req.method === 'GET') return json(res, 200, { ok: true });
       if (route?.startsWith('/admin/')) {
         if (!timingSafeEqual(hash, adminHash)) throw fail(401, 'Unauthorized');
-        const account = /^\/admin\/credentials\/([A-Za-z0-9_-]{1,100})$/.exec(route)?.[1];
+        const credentialRoute = /^\/admin\/credentials\/([A-Za-z0-9_-]{1,100})(?:\/([a-z]+))?$/.exec(route);
+        const account = credentialRoute?.[1];
+        const provider = credentialRoute?.[2] ?? 'openai';
+        if (account && !providers.has(provider)) throw fail(400, 'Unsupported provider');
         if (account) {
           if (req.method === 'PUT') {
             const { apiKey } = await body(req, 8192);
             if (typeof apiKey !== 'string' || !/^[\x21-\x7e]{8,4096}$/.test(apiKey)) throw fail(400, 'Invalid API key');
-            store.put(account, 'openai', { value: apiKey });
-            for (const [key, run] of runs) if (run.account === account) revoke(key);
+            store.put(account, provider, { value: apiKey });
+            for (const [key, run] of runs) if (run.account === account && run.provider === provider) revoke(key);
             return json(res, 200, { configured: true });
           }
-          if (req.method === 'GET') return json(res, 200, { configured: store.list(account).some(row => row.key === 'openai') });
+          if (req.method === 'GET') return json(res, 200, { configured: store.list(account).some(row => row.key === provider) });
           if (req.method === 'DELETE') {
-            store.delete(account, 'openai');
-            for (const [key, run] of runs) if (run.account === account) revoke(key);
+            store.delete(account, provider);
+            for (const [key, run] of runs) if (run.account === account && run.provider === provider) revoke(key);
             return json(res, 200, { configured: false });
           }
         }
         if (route === '/admin/runs' && req.method === 'POST') {
-          const { account, model, ttlSeconds = 300, requests = 8, maxOutputTokens = 4096 } = await body(req, 8192);
-          if (typeof account !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(account) || typeof model !== 'string' || !/^[A-Za-z0-9_.:-]{1,160}$/.test(model) || !bounded(ttlSeconds, 1, 900) || !bounded(requests, 1, 32) || !bounded(maxOutputTokens, 1, 16384)) throw fail(400, 'Invalid run configuration');
-          if (!store.list(account).some(row => row.key === 'openai')) throw fail(409, 'No credential configured for this account');
+          const { account, model, provider = 'openai', ttlSeconds = 300, requests = 8, maxOutputTokens = 4096 } = await body(req, 8192);
+          if (typeof account !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(account) || typeof model !== 'string' || !/^[A-Za-z0-9_./:-]{1,200}$/.test(model) || !providers.has(provider) || !bounded(ttlSeconds, 1, 900) || !bounded(requests, 1, 32) || !bounded(maxOutputTokens, 1, 16384)) throw fail(400, 'Invalid run configuration');
+          if (!store.list(account).some(row => row.key === provider)) throw fail(409, 'No credential configured for this account');
           for (const [key, run] of runs) if (run.expiresAt <= now()) revoke(key);
           if (runs.size >= 1000) throw fail(503, 'Too many active runs');
           const issued = randomBytes(32).toString('base64url');
           const runId = digest(issued).toString('hex');
           const expiresAt = now() + ttlSeconds * 1000;
-          runs.set(runId, { account, model, expiresAt, remaining: requests, maxOutputTokens });
+          runs.set(runId, { account, provider, model, expiresAt, remaining: requests, maxOutputTokens });
           return json(res, 201, { token: issued, runId, expiresAt });
         }
         const runId = /^\/admin\/runs\/([a-f0-9]{64})$/.exec(route)?.[1];
         if (runId && req.method === 'DELETE') { revoke(runId); return json(res, 200, { ok: true }); }
         throw fail(404, 'Not found');
       }
-      if (route !== '/v1/chat/completions' || req.method !== 'POST') throw fail(404, 'Not found');
+      if (!['/v1/chat/completions', '/v1/messages'].includes(route) || req.method !== 'POST') throw fail(404, 'Not found');
       const run = runs.get(id);
       if (!run || run.expiresAt <= now()) throw fail(401, 'Invalid or expired run token');
+      const provider = providers.get(run.provider);
+      if (route !== (provider.native ? '/v1/messages' : '/v1/chat/completions')) throw fail(400, 'Request format does not match the pinned provider');
       const input = await body(req, 512 * 1024);
       if (runs.get(id) !== run || run.expiresAt <= now()) throw fail(401, 'Invalid or expired run token');
       if (input.model !== run.model || !Array.isArray(input.messages) || input.messages.length === 0) throw fail(400, 'Expected messages and the pinned model');
@@ -83,13 +89,12 @@ export function createGateway({ store, adminToken, fetchUpstream = fetch, now = 
       const disconnect = () => controller.abort();
       res.once('close', disconnect);
       try {
-        const payload = { model: run.model, messages: input.messages, max_completion_tokens: limit, stream: input.stream === true };
-        for (const key of ['tools', 'tool_choice', 'parallel_tool_calls', 'response_format', 'temperature', 'reasoning_effort', 'stream_options']) if (input[key] !== undefined) payload[key] = input[key];
-        const credential = store.get(run.account, 'openai');
+        const credential = store.get(run.account, run.provider);
         if (!credential) throw fail(409, 'Credential removed');
-        const upstream = await fetchUpstream('https://api.openai.com/v1/chat/completions', {
+        const { headers, payload } = providerRequest(provider, run.model, input, limit, credential.value);
+        const upstream = await fetchUpstream(provider.url, {
           method: 'POST', redirect: 'error', signal: controller.signal,
-          headers: { authorization: `Bearer ${credential.value}`, 'content-type': 'application/json' }, body: JSON.stringify(payload),
+          headers, body: JSON.stringify(payload),
         });
         if (!upstream.ok || !upstream.body) {
           await upstream.body?.cancel();
