@@ -1,17 +1,36 @@
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir, stat, writeFile, rename } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { config } from "./config.js";
 import path from "node:path";
 import { z } from "zod";
 import { HttpError } from "./files.js";
+
+const profileDir = (id: string) => path.join(config.dataDir, "pi-profiles", Buffer.from(id).toString("hex"));
+const authFile = (id: string) => path.join(profileDir(id), "auth.json");
+async function managedProfile(id: string) {
+	try { await stat(authFile(id)); return profileDir(id); }
+	catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+}
+export async function savePiKey(id: string, provider: string, key: string) {
+	const external = await piProfile(id);
+	if (external && external !== profileDir(id)) throw new HttpError(409, "This profile is managed by the server administrator");
+	const file = authFile(id);
+	await mkdir(profileDir(id), { recursive: true, mode: 0o700 });
+	// One API-key connection per managed profile. Do not overwrite externally managed OAuth.
+	const temp = `${file}.${randomUUID()}.tmp`;
+	await writeFile(temp, JSON.stringify({ [provider]: { type: "api_key", key } }), { mode: 0o600, flag: "wx" });
+	await rename(temp, file);
+}
 
 const registry = z.record(z.string(), z.string().refine(path.isAbsolute));
 
 /** Administrator-managed mapping from immutable Beezy user IDs to native Pi directories. */
 export async function piProfile(userId: string): Promise<string | undefined> {
 	const file = process.env.BEEZY_PI_PROFILES_FILE;
-	if (!file) return;
+	if (!file) return managedProfile(userId);
 	try {
 		const entries = registry.parse(JSON.parse(await readFile(file, "utf8")));
-		return Object.hasOwn(entries, userId) ? entries[userId] : undefined;
+		return Object.hasOwn(entries, userId) ? entries[userId] : await managedProfile(userId);
 	} catch {
 		throw new HttpError(503, "Cannot load Pi auth profiles");
 	}

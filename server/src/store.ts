@@ -99,6 +99,7 @@ export interface PushSubscriptionRecord {
 }
 
 interface Data {
+	sharedPiFallbacks?: Record<string, { provider: string; id: string }>;
 	tenants: Tenant[];
 	users: User[];
 	logins: LoginSession[];

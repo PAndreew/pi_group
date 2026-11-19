@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
-import { requireAuth } from "./auth.js";
+import { requireAdmin, requireAuth } from "./auth.js";
 import { generateSessionTitle } from "./session-title.js";
 import { creationOptions } from "./preferences.js";
 import { availablePreferredModel, piProfile } from "./pi-profiles.js";
@@ -349,6 +349,19 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return name;
 	};
 
+	const sharedFallback = () => store.data.sharedPiFallbacks?.[tenantId()];
+	router.get("/harnesses/pi/shared-fallback", (_req, res) => res.json({ model: sharedFallback() ?? null }));
+	router.get("/harnesses/pi/shared-models", requireAdmin, async (_req, res) => res.json({ models: await adapterOf("pi").listModels() }));
+	router.put("/harnesses/pi/shared-fallback", requireAdmin, async (req, res) => {
+		const { model } = z.object({ model: z.object({ provider: z.string().max(120), id: z.string().max(200) }).nullable() }).parse(req.body);
+		if (model && !availablePreferredModel(await adapterOf("pi").listModels(), model)) throw new HttpError(400, "Choose a model available to the server’s Pi login");
+		store.data.sharedPiFallbacks ??= {};
+		if (model) store.data.sharedPiFallbacks[tenantId()] = model;
+		else delete store.data.sharedPiFallbacks[tenantId()];
+		saveNow();
+		res.json({ model });
+	});
+
 	const loadedMemory = new WeakMap<object, string>();
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
@@ -357,16 +370,22 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (profile && meta.harness !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
 		const active = adapter.live(meta.id);
 		if (active?.state.running && (active.authProfile !== profile || profile)) throw new HttpError(409, "Wait for the active Pi run to finish");
-		const live = await adapter.open(meta.id, meta.cwd, profile ?? null);
-		hub.attach(meta.key, live);
 		const defaults = user.sessionDefaults;
 		let selectedModel: { provider: string; id: string } | undefined;
+		let useShared = false;
 		if ((profile || defaults?.useModelPerMessage) && defaults?.harness === meta.harness && body.mode !== "steer") {
-			if (live.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
-			const available = await (live.availableModels?.() ?? adapter.listModels());
+			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
+			const available = await adapter.listModels(profile);
 			selectedModel = availablePreferredModel(available, defaults.model, defaults.fallbackModel);
-			if (!selectedModel) throw new HttpError(400, "Neither your preferred model nor your fallback is available on this runtime.");
+			const fallback = profile && sharedFallback();
+			if (!selectedModel && fallback) {
+				selectedModel = availablePreferredModel(await adapter.listModels(), fallback);
+				useShared = !!selectedModel;
+			}
+			if (!selectedModel) throw new HttpError(400, "Neither your preferred model nor a configured fallback is available.");
 		} else if (profile) throw new HttpError(400, "Save your Pi RPC model defaults before sending with your profile");
+		const live = await adapter.open(meta.id, meta.cwd, useShared ? null : profile ?? null);
+		hub.attach(meta.key, live);
 		const run = prepareAssistance(meta, user, live.state.running);
 		if (run.settings.injectionChecks || run.settings.contextExtraction || run.settings.toolSelection) {
 			if (!live.verifyAssistance) throw new HttpError(400, "This runtime does not support Cloudflare assistance");
@@ -385,6 +404,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		try {
 			if (selectedModel && (live.state.model?.provider !== selectedModel.provider || live.state.model?.id !== selectedModel.id)) await live.setModel(selectedModel.provider, selectedModel.id);
 			await live.prompt(input);
+			if (useShared) hub.broadcast(meta.key, { type: "notify", level: "info", text: `Using workspace fallback: ${selectedModel!.provider}/${selectedModel!.id}` });
 			if (injectMemory) loadedMemory.set(live, memory);
 		} catch (error) {
 			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
