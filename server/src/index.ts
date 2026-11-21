@@ -28,6 +28,7 @@ import { loadStore, saveNow, store } from "./store.js";
 import { tenantRoutes } from "./tenants.js";
 import { usageRoutes } from "./usage.js";
 import { vaultRoutes } from "./vault.js";
+import { lithosCompletion } from "./lithos-vault.js";
 
 loadStore();
 expireInteractions();
@@ -50,6 +51,7 @@ app.get("/healthz", (req, res) => {
 	res.setHeader("Cache-Control", "no-store");
 	res.status(ready ? 200 : 503).json({ ready, release: process.env.BEEZY_RELEASE ?? "legacy", draining: draining(), busy: activeMutations() + activeJobs() + activeMemory() + adapters.flatMap((a) => a.liveSessions()).filter((s) => s.state.running || s.state.queue.steering.length || s.state.queue.followUp.length).length });
 });
+app.post("/api/internal/lithos/v1/chat/completions", lithosCompletion);
 app.use(deploymentGate);
 app.use(authenticate);
 

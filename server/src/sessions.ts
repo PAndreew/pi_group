@@ -8,6 +8,7 @@ import { requireAdmin, requireAuth } from "./auth.js";
 import { generateSessionTitle } from "./session-title.js";
 import { creationOptions } from "./preferences.js";
 import { availablePreferredModel, piProfile } from "./pi-profiles.js";
+import { lithosVaultProfile } from "./lithos-vault.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
 import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
@@ -366,7 +367,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const adapter = adapterOf(meta.harness);
-		const profile = await piProfile(user.id);
+		const wantsLithos = meta.harness === "pi" && user.sessionDefaults?.harness === "pi" && user.sessionDefaults.model?.provider === "lithosai";
+		const profile = (wantsLithos ? await lithosVaultProfile(user.id) : undefined) ?? await piProfile(user.id);
 		if (profile && meta.harness !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
 		const active = adapter.live(meta.id);
 		if (active?.state.running && (active.authProfile !== profile || profile)) throw new HttpError(409, "Wait for the active Pi run to finish");
@@ -634,7 +636,11 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 
 	router.get("/harnesses/:id/models", async (req, res) => {
 		const id = String(req.params.id);
-		res.json({ models: await adapterOf(id).listModels(id === "pi" ? await piProfile(req.user!.id) : undefined) });
+		const adapter = adapterOf(id);
+		const models = await adapter.listModels(id === "pi" ? await piProfile(req.user!.id) : undefined);
+		const lithos = id === "pi" ? await lithosVaultProfile(req.user!.id) : undefined;
+		const extra = lithos ? await adapter.listModels(lithos) : [];
+		res.json({ models: [...models.filter(model => !extra.some(other => other.provider === model.provider && other.id === model.id)), ...extra] });
 	});
 
 	/** Sessions of one folder that `user` may see, running first, then most recent. */
