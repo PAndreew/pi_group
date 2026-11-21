@@ -308,6 +308,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return live;
 	};
 
+	const pickedModels = new Map<string, { provider: string; id: string }>();
+	const modelPickKey = (meta: SessionMeta, user: User) => JSON.stringify([tenantId(), meta.key, user.id]);
+
 	/** Start a session for `user` in `cwd` with their saved defaults unless overridden. */
 	const createSession = async (
 		user: User,
@@ -316,9 +319,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (!isTenantMember(user.id)) throw new HttpError(403, "Tenant unavailable");
 		resolveSafe(toRel(input.cwd));
 		const adapter = adapterOf(input.harness);
-		const profile = await piProfile(user.id);
+		const explicit = adapter.id === "pi" ? input.model : undefined;
+		const usesLithos = explicit?.provider === "lithosai";
+		const profile = usesLithos ? await lithosVaultProfile(user.id) : await piProfile(user.id);
+		if (usesLithos && !profile) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
 		if (profile && adapter.id !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
-		const live = await adapter.create(input.cwd, { ...(profile ? {} : creationOptions(input, user.sessionDefaults)), name: input.name, authProfile: profile });
+		if (explicit && !availablePreferredModel(await adapter.listModels(profile), explicit)) throw new HttpError(400, "This model is not available to your account");
+		const live = await adapter.create(input.cwd, { ...(profile && !explicit ? {} : creationOptions(input, user.sessionDefaults)), name: input.name, authProfile: profile });
 		const meta = store.upsertSession({
 			key: `${adapter.id}:${live.id}`,
 			harness: adapter.id,
@@ -330,6 +337,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			visibility: input.visibility ?? "private",
 			shares: (input.shares ?? []).filter((s) => s.userId !== user.id && isTenantMember(s.userId)),
 		});
+		if (explicit) pickedModels.set(modelPickKey(meta, user), explicit);
 		hub.attach(meta.key, live);
 		return meta;
 	};
@@ -367,15 +375,21 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const adapter = adapterOf(meta.harness);
-		const wantsLithos = meta.harness === "pi" && user.sessionDefaults?.harness === "pi" && user.sessionDefaults.model?.provider === "lithosai";
-		const profile = (wantsLithos ? await lithosVaultProfile(user.id) : undefined) ?? await piProfile(user.id);
+		const picked = meta.harness === "pi" ? pickedModels.get(modelPickKey(meta, user)) : undefined;
+		const wantsLithos = meta.harness === "pi" && (picked ?? (user.sessionDefaults?.harness === "pi" ? user.sessionDefaults.model : undefined))?.provider === "lithosai";
+		const lithos = wantsLithos ? await lithosVaultProfile(user.id) : undefined;
+		if (wantsLithos && !lithos) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
+		const profile = lithos ?? await piProfile(user.id);
 		if (profile && meta.harness !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
 		const active = adapter.live(meta.id);
 		if (active?.state.running && (active.authProfile !== profile || profile)) throw new HttpError(409, "Wait for the active Pi run to finish");
 		const defaults = user.sessionDefaults;
 		let selectedModel: { provider: string; id: string } | undefined;
 		let useShared = false;
-		if ((profile || defaults?.useModelPerMessage) && defaults?.harness === meta.harness && body.mode !== "steer") {
+		if (picked && body.mode !== "steer") {
+			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
+			selectedModel = picked;
+		} else if ((profile || defaults?.useModelPerMessage) && defaults?.harness === meta.harness && body.mode !== "steer") {
 			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
 			const available = await adapter.listModels(profile);
 			selectedModel = availablePreferredModel(available, defaults.model, defaults.fallbackModel);
@@ -421,13 +435,16 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	// Serialize admission (including asynchronous Clef checks), otherwise two shared
 	// submissions could replace one another's initiating user/settings before acceptance.
 	const submissions = new Map<string, Promise<void>>();
-	const promptSession = (meta: SessionMeta, user: User, body: PromptInput) => {
+	const serializeSessionChange = (meta: SessionMeta, action: () => Promise<void>) => {
 		const prior = submissions.get(meta.key) ?? Promise.resolve();
-		const next = prior.catch(() => {}).then(() => submitPrompt(meta, user, body));
+		const next = prior.catch(() => {}).then(action);
 		submissions.set(meta.key, next);
 		void next.finally(() => { if (submissions.get(meta.key) === next) submissions.delete(meta.key); }).catch(() => {});
 		return next;
 	};
+
+	const promptSession = (meta: SessionMeta, user: User, body: PromptInput) =>
+		serializeSessionChange(meta, () => submitPrompt(meta, user, body));
 
 	const isRunning = (key?: string) => {
 		const meta = key ? store.session(key) : undefined;
@@ -925,7 +942,21 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	router.post("/sessions/:key/model", async (req, res) => {
 		const { meta, adapter } = writable(req);
 		const body = z.object({ provider: z.string(), id: z.string() }).parse(req.body);
-		await (await ensureLive(meta, adapter)).setModel(body.provider, body.id);
+		const user = req.user!;
+		await serializeSessionChange(meta, async () => {
+			if (meta.harness !== "pi") {
+				await (await ensureLive(meta, adapter)).setModel(body.provider, body.id);
+				return;
+			}
+			if (adapter.live(meta.id)?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
+			const profile = body.provider === "lithosai" ? await lithosVaultProfile(user.id) : await piProfile(user.id);
+			if (body.provider === "lithosai" && !profile) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
+			if (!availablePreferredModel(await adapter.listModels(profile), body)) throw new HttpError(400, "This model is not available to your account");
+			const live = await adapter.open(meta.id, meta.cwd, profile ?? null);
+			hub.attach(meta.key, live);
+			await live.setModel(body.provider, body.id);
+			pickedModels.set(modelPickKey(meta, user), body);
+		});
 		res.json({ ok: true });
 	});
 
