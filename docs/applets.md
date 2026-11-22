@@ -27,20 +27,25 @@ Applets are declarative. The agent picks fields from a fixed set, and the server
 
 - **fields** (up to 25): `markdown` (help text), `text`, `textarea`, `number` (`min`, `max`, `step`), `select` (`options`, `multiple`), `radio` (up to 12 options), `checkbox`, `file` (`accept`, `multiple`) and `folder`. Every field except a checkbox is required unless it has `"optional": true`.
 - **file and folder fields** are filled by uploading into `<applet folder>/uploads` or by browsing the shared root. The server checks that each path exists, is inside the root, and has an accepted extension.
-- **actions** (1–5) are buttons. Each one has a prompt template:
+- **actions** (1–5) are buttons with an `id` and `label`. A button with a `prompt` starts an agent session and fills in its template:
   - `{{id}}` is replaced with the field's value. File and folder paths are relative to the applet's folder and wrapped in backticks. Lists are comma-separated. A checkbox reads yes or no.
   - `{{#id}}…{{/id}}` is kept only when the field is set (checked or non-empty). `{{^id}}…{{/id}}` is kept only when it is not.
   - A template may only name fields that exist.
+- To act without an agent, omit `prompt` and choose a built-in browser action:
+  - `{ "id": "guide", "label": "Open guide", "type": "open_url", "url": "https://example.com/guide" }` — opens an absolute HTTP(S) link in a new tab.
+  - `{ "id": "copy", "label": "Copy template", "type": "copy_text", "text": "Name: " }` — copies literal text to the clipboard.
+  - `{ "id": "reset", "label": "Reset", "type": "reset_form" }` — restores the field defaults and clears file and folder selections.
+  - These buttons don't require filled-in fields, start sessions, or create run history. Their payloads are not templates.
 
 ## Running
 
-A button starts a **new session** in the applet's folder, which is the folder of the session that proposed it. The session belongs to the person who pressed the button and uses their default harness and model. It is named "🧩 title" and receives the filled-in prompt, headed with the applet and action name.
+A prompt button starts a **new session** in the applet's folder, which is the folder of the session that proposed it. The session belongs to the person who pressed the button and uses their default harness and model. It is named "🧩 title" and receives the filled-in prompt, headed with the applet and action name.
 
 Run sessions don't appear in the chat list. They appear on the applet page under **Your runs**, which shows each run's status, its inputs, and the agent's final reply with clickable file links. A run's **Open session** button lets you watch it or follow up. Each person sees only their own runs, and the last 30 per applet are kept.
 
 ## Approval and changes
 
-- Until it is approved, only its owner (the owner of the proposing session) and admins can see an applet. Either of them can approve it, after reviewing the prompts its buttons send. After that, everyone in the tenant can use it, and each run acts as the person who pressed the button.
+- Until it is approved, only its owner (the owner of the proposing session) and admins can see an applet. Either of them can approve it, after reviewing what its buttons do. After that, everyone in the tenant can use it, and each run acts as the person who pressed the button.
 - When an agent proposes an existing slug, that applet changes. Agents call `list_applets` to start from the current spec. If the applet is already approved, the change is kept as a draft: the owner sees a preview and can approve or discard it, and the approved version keeps working in the meantime.
 - A slug belongs to one applet per tenant. An agent working for someone else cannot take it over.
 - Only the owner or an admin can delete an applet. Deleting it also removes its run history, but not its sessions.

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from
 import type { NextFunction, Request, Response, Router } from "express";
 import express from "express";
 import { z } from "zod";
+import { piProfile, savePiKey } from "./pi-profiles.js";
 import { assistanceSettingsSchema, sessionDefaultsSchema } from "./preferences.js";
 import { config } from "./config.js";
 import { type Role, save, store, type User, type LoginSession } from "./store.js";
@@ -116,6 +117,15 @@ const failures = new Map<string, { count: number; until: number }>();
 
 export function authRoutes(): Router {
 	const router = express.Router();
+	router.get("/auth/pi-profile", requireAuth, async (req, res) => {
+		res.json({ connected: Boolean(await piProfile(req.user!.id)) });
+	});
+	router.put("/auth/pi-profile", requireAuth, async (req, res) => {
+		const { provider, key } = z.object({ provider: z.enum(["anthropic", "openai", "openrouter", "google", "zai", "zai-coding-cn"]), key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{7,4095}$/) }).parse(req.body);
+		await savePiKey(req.user!.id, provider, key);
+		res.json({ connected: true });
+	});
+
 
 	router.post("/auth/login", (req, res) => {
 		const body = z.object({ username: z.string().min(1).max(64), password: z.string().min(1).max(256) }).safeParse(req.body);

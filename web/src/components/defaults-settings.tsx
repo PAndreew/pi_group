@@ -13,6 +13,8 @@ export function DefaultsSettings({ onClose }: { onClose: () => void }) {
   const { user, saveDefaults } = useAuth()
   const defaults = user?.sessionDefaults
   const [autoTitle, setAutoTitle] = useState(defaults?.autoTitle ?? false)
+  const [useModelPerMessage, setUseModelPerMessage] = useState(defaults?.useModelPerMessage ?? false)
+  const [fallbackModel, setFallbackModel] = useState(defaults?.fallbackModel)
   const [harnesses, setHarnesses] = useState<Harness[]>([])
   const [harness, setHarness] = useState<string>()
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -59,7 +61,7 @@ export function DefaultsSettings({ onClose }: { onClose: () => void }) {
   const save = async () => {
     setSaving(true)
     try {
-      await saveDefaults({ harness: harness!, model: model!, thinkingLevel: thinking!, autoTitle })
+      await saveDefaults({ ...defaults, harness: harness!, model: model!, thinkingLevel: thinking!, autoTitle, useModelPerMessage, fallbackModel: useModelPerMessage ? fallbackModel : undefined })
       toast.success("Settings saved")
       onClose()
     } catch (error) {
@@ -71,10 +73,10 @@ export function DefaultsSettings({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
-      <p className="text-sm text-muted-foreground">The agent runtime, provider, model and reasoning new sessions and chats start with. Running sessions keep theirs; switch a session's model under its message box.</p>
+      <p className="text-sm text-muted-foreground">The agent runtime, provider, model and reasoning new sessions and chats start with. Existing sessions keep their model unless you enable per-message selection below or change it in the session.</p>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
         <Label>Runtime</Label>
-        <Select value={harness} onValueChange={setHarness}>
+        <Select value={harness} onValueChange={(value) => { setHarness(value); setFallbackModel(undefined) }}>
           <SelectTrigger className="w-full" aria-label="Runtime">
             <SelectValue placeholder="Runtime" />
           </SelectTrigger>
@@ -98,6 +100,15 @@ export function DefaultsSettings({ onClose }: { onClose: () => void }) {
         <Label className="flex items-center gap-2"><input type="checkbox" checked={autoTitle} onChange={e => setAutoTitle(e.target.checked)} /> Automatically generate session titles</Label>
         <Label>Reasoning</Label>
         <ThinkingPicker value={thinking} onChange={setThinking} levels={levels} disabled={loadingModels || levels.length < 2} />
+      </div>
+      <div className="grid gap-2">
+        <Label className="flex items-center gap-2"><input type="checkbox" checked={useModelPerMessage} onChange={e => setUseModelPerMessage(e.target.checked)} /> Prefer my model when I send a message</Label>
+        <p className="text-xs text-muted-foreground">Applies to matching runtimes. Pi RPC uses the native Pi profile assigned by your administrator, if any. Assigned profiles use your preferred model for every turn. The fallback is used only when your preferred model is unavailable before the run.</p>
+        {useModelPerMessage && <>
+          <Label>Fallback model (optional)</Label>
+          <ModelPicker models={models} value={fallbackModel} onChange={setFallbackModel} showProvider />
+          {fallbackModel && <Button type="button" variant="ghost" size="sm" className="justify-self-start" onClick={() => setFallbackModel(undefined)}>Clear fallback</Button>}
+        </>}
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>

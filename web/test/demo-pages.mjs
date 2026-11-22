@@ -1,0 +1,43 @@
+// Build with VITE_DEMO=true and serve with --base=/pi_group/.
+import assert from 'node:assert/strict'
+import { chromium } from 'playwright'
+
+const browser = await chromium.launch()
+try {
+  const page = await browser.newPage({ viewport: { width: 1360, height: 900 } })
+  page.setDefaultTimeout(5000)
+  const errors = [], apiRequests = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.url()) })
+  await page.goto(process.env.DEMO_URL || 'http://127.0.0.1:4173/pi_group/')
+  await page.getByText('Build the weekend planner', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Open detailed steps' }).click()
+  await page.getByText('4 steps in this run.', { exact: false }).waitFor()
+  await page.getByRole('dialog').getByRole('button', { name: '3', exact: true }).click()
+  await page.getByText('npm test', { exact: false }).first().waitFor()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Shared browser', exact: true }).click()
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('canvas')
+    return canvas?.getContext('2d')?.getImageData(0, 0, 1, 1).data[3] === 255
+  })
+  await page.getByRole('button', { name: 'Shared browser', exact: true }).click()
+  await page.locator('textarea').fill('What did you build?')
+  await page.locator('textarea').press('Enter')
+  await page.getByText('This is a scripted demo reply.', { exact: false }).waitFor()
+  await page.getByRole('button', { name: 'Resource monitor', exact: true }).click()
+  await page.getByRole('dialog').getByText('fictional-beezy', { exact: false }).first().waitFor()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Profile and settings' }).click()
+  await page.getByRole('menuitem', { name: 'Manage users' }).click()
+  await page.getByRole('dialog').getByText('Jordan', { exact: true }).waitFor()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Back to chats' }).click()
+  await page.getByText('Weekend crew', { exact: true }).click()
+  await page.getByText('Sounds good. Can we make it work on phones?', { exact: true }).waitFor()
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+  assert.deepEqual(errors, [])
+  assert.deepEqual(apiRequests, [])
+  console.log('Real Beezy demo smoke test passed.')
+} finally { await browser.close() }

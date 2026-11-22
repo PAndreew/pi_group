@@ -24,7 +24,7 @@ SH
 chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH" BEEZY_INSTALL_DIR="$TMP/install with spaces" NODE_ENV=production
 bash "$ROOT/deploy/install.sh" > "$TMP/output"
-grep -q '@earendil-works/pi-coding-agent@0.85.1' "$TEST_LOG"
+grep -q '@earendil-works/pi-coding-agent@1.5.2' "$TEST_LOG"
 grep -q 'npm run setup' "$TEST_LOG"
 grep -q 'npm run build' "$TEST_LOG"
 node --input-type=module <<'NODE'

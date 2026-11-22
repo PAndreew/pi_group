@@ -1,6 +1,7 @@
 import { FileIcon } from "@react-symbols/icons/utils"
-import { Folder, Globe, Link2, Loader2, Search } from "lucide-react"
+import { Folder, Library, Loader2, Search } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
+import { SiteIcon } from "@/components/site-icon"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { api, type ProjectLink } from "@/lib/api"
@@ -13,7 +14,7 @@ const base = (file: string) => file.split("/").pop() || file
 function Row({ icon, title, detail, onClick, href }: { icon: ReactNode; title: string; detail?: string; onClick?: () => void; href?: string }) {
   const className = "flex min-w-0 items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
   const body = <>
-    <span className="shrink-0 text-muted-foreground [&_svg]:size-4">{icon}</span>
+    <span className="shrink-0 text-muted-foreground">{icon}</span>
     <span className="grid min-w-0 flex-1">
       <span className="truncate">{title}</span>
       {detail && <span className="truncate text-xs text-muted-foreground">{detail}</span>}
@@ -66,7 +67,7 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85dvh] min-w-0 flex-col sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Link2 className="size-4" /> Links{project ? ` · ${project.name}` : ""}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Library className="size-4" /> Links{project ? ` · ${project.name}` : ""}</DialogTitle>
           <DialogDescription>This project's folders, and the files and web pages mentioned in its conversations.</DialogDescription>
         </DialogHeader>
         <div className="relative">
@@ -78,13 +79,13 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           {loading && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
           {empty && <p className="py-6 text-center text-sm text-muted-foreground">{needle ? "Nothing matches." : "No links yet."}</p>}
           <Section title="Folders" count={shownFolders.length}>
-            {shownFolders.map(f => <Row key={f} icon={<Folder />} title={base(f)} detail={f === project?.folder ? `${f} · project folder` : f} onClick={go(() => nav.openExplorer(f))} />)}
+            {shownFolders.map(f => <Row key={f} icon={<Folder className="size-4" />} title={base(f)} detail={f === project?.folder ? `${f} · project folder` : f} onClick={go(() => nav.openExplorer(f))} />)}
           </Section>
           <Section title="Files" count={files.length}>
             {files.map(l => <Row key={l.target} icon={<FileIcon fileName={base(l.target)} autoAssign width={16} height={16} aria-hidden="true" />} title={l.label && l.label !== base(l.target) ? `${l.label} — ${base(l.target)}` : base(l.target)} detail={`${l.target} · ${from(l)}`} onClick={go(() => nav.openFile(l.target))} />)}
           </Section>
           <Section title="Web" count={web.length}>
-            {web.map(l => <Row key={l.target} icon={<Globe />} title={l.label ?? l.target.replace(/^https?:\/\//, "")} detail={`${host(l.target)} · ${from(l)}`} href={l.target} />)}
+            {web.map(l => <Row key={l.target} icon={<SiteIcon href={l.target} />} title={l.label ?? l.target.replace(/^https?:\/\//, "")} detail={`${host(l.target)} · ${from(l)}`} href={l.target} />)}
           </Section>
         </div>
       </DialogContent>

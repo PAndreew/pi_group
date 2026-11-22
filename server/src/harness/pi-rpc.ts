@@ -1,3 +1,4 @@
+import { piProfileEnvironment } from "../pi-profiles.js";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -78,13 +79,16 @@ class RpcProcess {
 	onRecord: (record: RpcRecord) => void = () => {};
 	onExit: (code: number | null) => void = () => {};
 
-	constructor(args: string[], cwd: string, sessionKey?: string) {
+	constructor(args: string[], cwd: string, sessionKey?: string, readonly authProfile?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
 		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs"), ...extension("cloudflare-assistance.mjs")];
 		const { command, argv, shell } = piCommand(args);
+		const base = agentEnvironment();
+		delete base.BEEZY_GATEWAY_TOKEN_FILE;
+		const env = { ...(authProfile ? piProfileEnvironment(base, authProfile) : base), PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) };
 		this.child = platform().sandbox.spawn(command, argv, {
 			cwd,
-			env: { ...agentEnvironment(), PI_SKIP_VERSION_CHECK: "1", ...(sessionKey ? interactionEnvironment(sessionKey) : {}) },
+			env,
 			shell,
 		});
 		this.child.onStdout((chunk) => this.read(this.decoder.write(chunk)));
@@ -193,6 +197,7 @@ const toModelInfo = (m: any): ModelInfo => ({
 
 class PiLiveSession extends LiveSessionBase {
 	sessionFile?: string;
+	get authProfile() { return this.rpc.authProfile; }
 
 	constructor(
 		id: string,
@@ -369,6 +374,7 @@ class PiLiveSession extends LiveSessionBase {
 	}
 
 	async setModel(provider: string, modelId: string) {
+		if (this.authProfile && this.state.running) throw new Error("Model is pinned during a personal run");
 		const model = await this.rpc.send({ type: "set_model", provider, modelId });
 		this.state.model = { provider: model.provider, id: model.id };
 		this.emitStatus();
@@ -485,14 +491,12 @@ export class PiRpcAdapter implements HarnessAdapter {
 		}
 	}
 
-	async listModels(): Promise<ModelInfo[]> {
-		const live = [...this.sessions.values()].find((s) => s.state.live);
-		if (live) return live.availableModels();
-		if (this.modelCache && Date.now() - this.modelCache.at < 120_000) return this.modelCache.models;
-		const probe = new PiLiveSession("probe", os.tmpdir(), new RpcProcess(["--mode", "rpc", "--no-session"], os.tmpdir()));
+	async listModels(profile?: string): Promise<ModelInfo[]> {
+		if (!profile && this.modelCache && Date.now() - this.modelCache.at < 120_000) return this.modelCache.models;
+		const probe = new PiLiveSession("probe", os.tmpdir(), new RpcProcess(["--mode", "rpc", "--no-session"], os.tmpdir(), undefined, profile));
 		try {
 			const models = await probe.availableModels();
-			this.modelCache = { at: Date.now(), models };
+			if (!profile) this.modelCache = { at: Date.now(), models };
 			return models;
 		} finally {
 			void probe.close();
@@ -643,16 +647,20 @@ export class PiRpcAdapter implements HarnessAdapter {
 		return session;
 	}
 
-	open(id: string, cwd: string): Promise<PiLiveSession> {
+	open(id: string, cwd: string, profile?: string | null): Promise<PiLiveSession> {
 		const live = this.live(id);
-		if (live) return Promise.resolve(live as PiLiveSession);
+		if (live && (profile === undefined || live.authProfile === (profile ?? undefined))) return Promise.resolve(live as PiLiveSession);
 		const pending = this.starting.get(id);
-		if (pending) return pending;
+		if (pending) return pending.then(() => this.open(id, cwd, profile));
 		const start = (async () => {
+			if (live?.state.running) throw new Error("Wait for the other user's Pi run to finish");
+			if (live) await live.close();
 			const file = await this.fileOf(id, cwd);
-			if (!file) throw new Error("Session file not found");
-			const records = await readJsonl(file);
-			const session = new PiLiveSession(id, cwd, new RpcProcess(["--mode", "rpc", "--session", file], cwd, `pi:${id}`));
+			if (!file && !live?.sessionFile) throw new Error("Session file not found");
+			// Pi does not write its session file until the first assistant message.
+			const records = file ? await readJsonl(file) : [];
+			const args = file ? ["--session", file] : ["--session-id", id, "--session-dir", sessionDirFor(cwd)];
+			const session = new PiLiveSession(id, cwd, new RpcProcess(["--mode", "rpc", ...args], cwd, `pi:${id}`, profile ?? undefined));
 			await session.start(entriesToMessages(records));
 			return this.track(session);
 		})().finally(() => this.starting.delete(id));
@@ -663,8 +671,9 @@ export class PiRpcAdapter implements HarnessAdapter {
 	async create(cwd: string, options: CreateOptions) {
 		const id = randomUUID();
 		const args = ["--mode", "rpc", "--session-id", id];
+		if (options.authProfile) args.push("--session-dir", sessionDirFor(cwd));
 		if (options.name) args.push("--name", options.name);
-		const session = new PiLiveSession(id, cwd, new RpcProcess(args, cwd, `pi:${id}`));
+		const session = new PiLiveSession(id, cwd, new RpcProcess(args, cwd, `pi:${id}`, options.authProfile));
 		await session.start([]);
 		this.track(session);
 		if (options.model) await session.setModel(options.model.provider, options.model.id);

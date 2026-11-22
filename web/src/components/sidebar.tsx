@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { canDelete, DeleteSessionDialog } from "@/components/delete-session-dialog"
+import { canDelete, DeleteSessionDialog, SessionDeleteCheckbox, SessionDeleteToolbar, useSessionDeletion, type SessionDeletion } from "@/components/delete-session-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -64,10 +64,13 @@ export function Breadcrumb({ rootName, folder, onFolder }: { rootName: string; f
 
 type Count = { total: number; running: number }
 
-function SessionRow({ s, selected, onOpen, onDelete, indent }: { s: SessionSummary; selected?: string; onOpen: (key: string) => void; onDelete: (s: SessionSummary) => void; indent?: boolean }) {
+const blockedReason = (s: SessionSummary) => s.deleteBlockedReason || (s.running ? "The agent is running" : s.memoryRun ? "Memory consolidation is in progress" : !canDelete(s) ? "Only the owner or an admin can delete this session" : undefined)
+
+function SessionRow({ s, selected, onOpen, deletion, indent }: { s: SessionSummary; selected?: string; onOpen: (key: string) => void; deletion: SessionDeletion; indent?: boolean }) {
   return (
     <div className={cn("flex items-center rounded-md hover:bg-accent", selected === s.key && "bg-accent", indent && "ml-6")}>
-      <button type="button" onClick={() => onOpen(s.key)} className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-1.5 text-left">
+      {deletion.active && <SessionDeleteCheckbox selection={deletion} target={{ key: s.key, title: s.name || s.firstMessage || "Untitled session" }} blocked={blockedReason(s)} />}
+      <button type="button" disabled={deletion.active} onClick={() => onOpen(s.key)} className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-1.5 text-left">
         <div className="flex items-center gap-1.5">
           <span className={cn("size-2 shrink-0 rounded-full", s.running ? "animate-pulse bg-green-500" : s.live ? "bg-sky-500" : "bg-muted-foreground/30")} />
           <span className="min-w-0 flex-1 truncate text-sm">{s.name || s.firstMessage || "Untitled session"}</span>
@@ -90,10 +93,10 @@ function SessionRow({ s, selected, onOpen, onDelete, indent }: { s: SessionSumma
           {s.access === "read" && <span>· view only</span>}
         </div>
       </button>
-      {canDelete(s) && (
+      {!deletion.active && canDelete(s) && (
         <button
           type="button"
-          onClick={() => onDelete(s)}
+          onClick={deletion.start}
           className="shrink-0 self-stretch rounded-md px-2.5 text-red-500/80 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
           aria-label={`Delete ${s.name || s.firstMessage || "session"}`}
           title="Delete session"
@@ -106,16 +109,25 @@ function SessionRow({ s, selected, onOpen, onDelete, indent }: { s: SessionSumma
 }
 
 /** Sessions of one folder, fetched when its accordion opens and refreshed with the explorer. */
-function FolderSessions({ path, selected, onOpen, onDelete, refresh, indent }: { path: string; selected?: string; onOpen: (key: string) => void; onDelete: (s: SessionSummary) => void; refresh: number; indent?: boolean }) {
+function FolderSessions({ path, selected, onOpen, deletion, refresh, indent }: { path: string; selected?: string; onOpen: (key: string) => void; deletion: SessionDeletion; refresh: number; indent?: boolean }) {
   const [sessions, setSessions] = useState<SessionSummary[]>()
+  const { active: selecting, exclude } = deletion
   useEffect(() => {
-    api.sessions(path).then(({ sessions }) => setSessions(sessions), (error) => toast.error(error.message))
-  }, [path, refresh])
+    let alive = true
+    const load = () => api.sessions(path).then(({ sessions }) => {
+      if (!alive) return
+      setSessions(sessions)
+      exclude(sessions.filter(blockedReason).map((s) => s.key))
+    }, (error) => { if (alive) toast.error(error.message) })
+    void load()
+    const poll = selecting ? setInterval(load, 3_000) : undefined
+    return () => { alive = false; clearInterval(poll) }
+  }, [path, refresh, selecting, exclude])
   if (!sessions) return <Loader2 className={cn("my-1 size-3.5 animate-spin text-muted-foreground", indent ? "ml-9" : "ml-3")} />
   return (
     <div className="grid">
       {sessions.map((s) => (
-        <SessionRow key={s.key} s={s} selected={selected} onOpen={onOpen} onDelete={onDelete} indent={indent} />
+        <SessionRow key={s.key} s={s} selected={selected} onOpen={onOpen} deletion={deletion} indent={indent} />
       ))}
     </div>
   )
@@ -178,7 +190,7 @@ export function Sidebar({
   const [hidden, setHidden] = useState(() => localStorage.getItem("pi-group:hidden") === "1")
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [deleting, setDeleting] = useState<SessionSummary>()
+  const deletion = useSessionDeletion()
   const [refresh, setRefresh] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const [found, setFound] = useState<{ path: string; type: "dir" | "file" }[]>()
@@ -319,6 +331,7 @@ export function Sidebar({
             <RefreshCw />
           </Button>
         </div>
+        {deletion.active && <SessionDeleteToolbar selection={deletion} />}
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {here && (
             <div className="mb-1 border-b pb-1">
@@ -327,7 +340,7 @@ export function Sidebar({
                 <span className="flex-1 text-left">Sessions in this folder</span>
                 <CountBadge count={here} />
               </button>
-              {hereOpen && <FolderSessions path={folder} selected={selectedSession} onOpen={onSession} onDelete={setDeleting} refresh={refresh + version} />}
+              {hereOpen && <FolderSessions path={folder} selected={selectedSession} onOpen={onSession} deletion={deletion} refresh={refresh + version} />}
             </div>
           )}
           {folder && (
@@ -367,7 +380,7 @@ export function Sidebar({
                     </a>
                   )}
                 </div>
-                {open && <FolderSessions path={e.path} selected={selectedSession} onOpen={onSession} onDelete={setDeleting} refresh={refresh + version} indent />}
+                {open && <FolderSessions path={e.path} selected={selectedSession} onOpen={onSession} deletion={deletion} refresh={refresh + version} indent />}
               </div>
             )
           })}
@@ -392,11 +405,10 @@ export function Sidebar({
         </div>
       </div>
       <DeleteSessionDialog
-        session={deleting}
-        onOpenChange={(open) => !open && setDeleting(undefined)}
-        onDeleted={(key) => {
+        selection={deletion}
+        onResult={(keys) => {
           load()
-          onSessionDeleted(key)
+          for (const key of keys) onSessionDeleted(key)
         }}
       />
     </div>

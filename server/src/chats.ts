@@ -224,7 +224,7 @@ export interface ChatDeps {
 	onRun: (listener: (key: string, outcome: RunOutcome) => void) => void;
 	setQuiet: (quiet: (key: string) => boolean) => void;
 	/** Summary of a session for the chat list. */
-	sessionSummary: (meta: SessionMeta, user: User) => { running: boolean; live: boolean; name?: string; firstMessage?: string; updatedAt: string; path: string; harness: string };
+	sessionSummary: (meta: SessionMeta, user: User) => { running: boolean; live: boolean; name?: string; firstMessage?: string; updatedAt: string; path: string; harness: string; deleteBlockedReason?: string };
 	/** Rewrite one message of a session that is not running; `pick` returns undefined when there is nothing to change. */
 	editSession: (meta: SessionMeta, pick: (messages: AgentMessage[]) => Rewrite | undefined) => Promise<boolean>;
 	/** Remove a message from a session now, or once its run ends; resolves true when queued. */
@@ -423,7 +423,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			.filter((meta) => !meta.applet && !meta.memory && !meta.archivedAt && involved(user, meta))
 			.map((meta) => {
 				const s = deps.sessionSummary(meta, user);
-				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
+				return { kind: "session" as const, id: meta.key, title: s.name || s.firstMessage || "Untitled session", folder: s.path, harness: s.harness, running: s.running, live: s.live, updatedAt: s.updatedAt, deleteBlockedReason: s.deleteBlockedReason, memory: Boolean(meta.memory), canDelete: ["owner", "admin"].includes(accessOf(user, meta) ?? ""), projectId: visibleProjectId(user, projectIdOf(meta.cwd, meta.projectId)), canMove: ["owner", "admin"].includes(accessOf(user, meta) ?? "") };
 			});
 		// ?project= narrows the list to one project; a pending move shows on the item.
 		const project = typeof req.query.project === "string" ? req.query.project : undefined;

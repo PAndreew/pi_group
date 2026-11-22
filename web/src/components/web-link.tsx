@@ -1,6 +1,7 @@
-import { Copy, Globe } from "lucide-react"
+import { Copy } from "lucide-react"
 import type { ComponentProps } from "react"
 import { toast } from "sonner"
+import { SiteIcon } from "@/components/site-icon"
 import { copyText } from "@/lib/clipboard"
 import { cn } from "@/lib/utils"
 
@@ -9,7 +10,7 @@ export function WebLink({ href, children, className, ...props }: ComponentProps<
   return (
     <span className="inline items-baseline">
       <a {...props} href={href} target="_blank" rel="noreferrer noopener" className={cn("break-words", className)}>
-        <Globe aria-hidden="true" className="mr-1 inline size-3.5 align-[-0.125em]" />
+        <SiteIcon href={href} className="mr-1" />
         {children}
       </a>
       <button

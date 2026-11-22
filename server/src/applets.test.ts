@@ -40,6 +40,20 @@ test("specs refuse templates that name missing fields, duplicate IDs and foreign
 	assert.equal(appletSpec.safeParse({ ...translator, fields: [{ type: "script", id: "x", label: "x" }] }).success, false);
 });
 
+test("non-agent buttons accept only supported actions and HTTP(S) URLs", async () => {
+	const { appletSpec } = await import("./applets.js");
+	const valid = { id: "guide", label: "Open guide", type: "open_url", url: "https://example.com/guide" };
+	const check = (action: unknown) => appletSpec.safeParse({ ...translator, fields: [], actions: [action] }).success;
+	assert.equal(check(valid), true);
+	assert.equal(check({ id: "copy", label: "Copy", type: "copy_text", text: "{{literal}}" }), true);
+	assert.equal(check({ id: "reset", label: "Reset", type: "reset_form" }), true);
+	for (const url of ["javascript:alert(1)", "data:text/html,test", "file:///etc/hosts", "//example.com", "https:example.com"]) {
+		assert.equal(check({ ...valid, url }), false, url);
+	}
+	assert.equal(check({ ...valid, prompt: "Start an agent too" }), false);
+	assert.equal(check({ ...valid, type: "script" }), false);
+});
+
 test("values are checked and fill the template, paths relative to the run's folder", async () => {
 	const { appletSpec, checkValues, renderPrompt } = await import("./applets.js");
 	const spec = appletSpec.parse(translator);
@@ -49,9 +63,11 @@ test("values are checked and fill the template, paths relative to the run's fold
 	assert.throws(() => checkValues(spec, { files: ["../outside.docx"], target: "English" }), /outside the shared root/);
 	const values = checkValues(spec, { files: ["work/uploads/report.docx"], target: "German", bilingual: true });
 	assert.deepEqual(values, { files: ["work/uploads/report.docx"], target: "German", glossary: "", bilingual: true });
-	assert.equal(renderPrompt(spec, spec.actions[0].prompt, values, path.join(dir, "work"), dir), "/skill:docx-translator\nTranslate `uploads/report.docx` into German. Make it bilingual.");
+	const [action] = spec.actions;
+	assert.ok("prompt" in action);
+	assert.equal(renderPrompt(spec, action.prompt, values, path.join(dir, "work"), dir), "/skill:docx-translator\nTranslate `uploads/report.docx` into German. Make it bilingual.");
 	const plain = checkValues(spec, { files: ["work/uploads/report.docx"], target: "English", glossary: "Kabel = cable" });
-	assert.equal(renderPrompt(spec, spec.actions[0].prompt, plain, dir, dir), "/skill:docx-translator\nTranslate `work/uploads/report.docx` into English. Translation only.\nGlossary: Kabel = cable");
+	assert.equal(renderPrompt(spec, action.prompt, plain, dir, dir), "/skill:docx-translator\nTranslate `work/uploads/report.docx` into English. Translation only.\nGlossary: Kabel = cable");
 });
 
 test("agents propose applets that the tenant can use once the owner approves them", async () => {
@@ -96,7 +112,8 @@ test("agents propose applets that the tenant can use once the owner approves the
 	try {
 		assert.equal((await bridge("POST", translator, "wrong")).status, 403);
 		assert.equal((await bridge("POST", { ...translator, actions: [] })).status, 400);
-		const proposed = await (await bridge("POST", { ...translator, reason: "Asked for a translator" })).json();
+		const reset = { id: "reset", label: "Reset", type: "reset_form" };
+		const proposed = await (await bridge("POST", { ...translator, actions: [...translator.actions, reset], reason: "Asked for a translator" })).json();
 		assert.equal(proposed.url, "/apps/docx-translator");
 
 		const asOwner = await login(owner.username);
@@ -117,6 +134,11 @@ test("agents propose applets that the tenant can use once the owner approves the
 
 		// Anyone in the tenant runs it as themselves, each run in a new session in the applet's folder.
 		assert.equal((await asOther("GET", "/applets")).body.applets.length, 1);
+		assert.deepEqual((await asOther("GET", "/applets/docx-translator")).body.applet.spec.actions[1], reset);
+		const nativeRun = await asOther("POST", "/applets/docx-translator/run", { action: "reset", values: {} });
+		assert.equal(nativeRun.status, 400);
+		assert.match(nativeRun.body.error, /runs in the browser/);
+		assert.equal(n, 0);
 		assert.equal((await asOther("POST", "/applets/docx-translator/run", { ...run, values: {} })).status, 400);
 		const started = (await asOther("POST", "/applets/docx-translator/run", run)).body.run;
 		assert.equal(started.status, "running");

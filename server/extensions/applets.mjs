@@ -9,6 +9,9 @@ export default function (pi) {
   const common = { id, label: text(120), help: { type: "string", maxLength: 500 }, optional: { type: "boolean", default: false, description: "May be left empty (fields are required by default)." } };
   const options = { type: "array", minItems: 1, maxItems: 100, items: text(100) };
   const field = (type, properties, required = ["id", "label"]) => ({ type: "object", additionalProperties: false, properties: { type: { const: type }, ...properties }, required: ["type", ...required] });
+  const action = (properties) => ({
+    type: "object", additionalProperties: false, properties: { id, label: text(60), ...properties }, required: ["id", "label", ...Object.keys(properties)],
+  });
   const call = async (method, body, signal) => {
     const response = await fetch(url, {
       method,
@@ -27,7 +30,8 @@ export default function (pi) {
     description: [
       "Save a small form (an \"applet\") the user can open any time at /apps/<slug> to run a task again without typing it out, e.g. a document translator with a file picker and a language dropdown.",
       "Use it when the user asks for an applet, app, form or button for a repeatable task. Fields come from a fixed set: markdown (help text), text, textarea, number, select (multiple: true for several), radio, checkbox, file (accept: [\".docx\"], multiple), folder.",
-      "Each action is a button with a prompt template. Pressing it starts a new agent session in this folder with the filled-in prompt:",
+      "A button with prompt starts a new agent session in this folder with the filled-in prompt. For buttons that do not use an agent, omit prompt and use type: open_url with an absolute HTTP(S) url, copy_text with literal text, or reset_form to restore field defaults. These actions run directly in the browser; their payloads are not templates.",
+      "For prompt buttons:",
       "- {{fieldId}} is the value; file and folder paths are relative to this folder, in backticks; lists are comma-separated; checkboxes are yes/no.",
       "- {{#fieldId}}…{{/fieldId}} is kept only when the field is set (checked, non-empty); {{^fieldId}}…{{/fieldId}} only when it is not.",
       "Write prompts that stand alone: the run has no memory of this conversation, so name the skill (\"/skill:name\" on its own line at the start, if one fits) and spell out where results go.",
@@ -58,7 +62,12 @@ export default function (pi) {
         },
         actions: {
           type: "array", minItems: 1, maxItems: 5,
-          items: { type: "object", additionalProperties: false, properties: { id, label: text(60), prompt: text(20000) }, required: ["id", "label", "prompt"] },
+          items: { anyOf: [
+            action({ prompt: text(20000) }),
+            action({ type: { const: "open_url" }, url: { ...text(2000), format: "uri" } }),
+            action({ type: { const: "copy_text" }, text: text(20000) }),
+            action({ type: { const: "reset_form" } }),
+          ] },
         },
       },
       required: ["slug", "title", "fields", "actions"],

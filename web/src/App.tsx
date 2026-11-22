@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Link2, Loader2, LogOut, Monitor, Moon, Menu, Sun, Users } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Library, Loader2, LogOut, Monitor, Moon, PanelLeft, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -140,6 +140,7 @@ function Workspace() {
   const notifications = useRunNotifications(route.session, route.chat)
   const [newFolder, setNewFolder] = useState<string>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectSessions, setSelectSessions] = useState(false)
   useEffect(() => setDrawerOpen(false), [route.chat, route.session, route.file, route.app])
   const [creating, setCreating] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
@@ -158,6 +159,7 @@ function Workspace() {
   }
   const go = (next: Partial<Route>) => {
     previewReturn.current = null
+    setSelectSessions(false)
     setRoute({ chat: undefined, session: undefined, file: undefined, app: undefined, ...next })
   }
   const openFile = (path: string, fromExplorer = false) => {
@@ -213,8 +215,8 @@ function Workspace() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
           <div className="flex shrink-0 items-center gap-1">
-            <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><Menu /></Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Project links" title="Project links" onClick={() => setLinksOpen(true)}><Link2 /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><PanelLeft /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="Project links" title="Project links" onClick={() => setLinksOpen(true)}><Library /></Button>
           </div>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -279,13 +281,13 @@ function Workspace() {
             {route.chat ? (
               <ChatView key={route.chat} chatId={route.chat} />
             ) : route.session ? (
-              <SessionView key={route.session} sessionKey={route.session} header={back} onDeleted={nav.home} />
+              <SessionView key={route.session} sessionKey={route.session} header={back} onDeleted={nav.home} onSelectSessions={() => { nav.home(); setSelectSessions(true) }} />
             ) : route.file ? (
               <FileViewer path={route.file} onClose={closePreview} />
             ) : route.app ? (
               <AppletView key={route.app} slug={route.app} header={back} />
             ) : (
-              <Home />
+              <Home selectSessions={selectSessions} />
             )}
           </main>
           {previewPanel && <FilePreviewPanel lastEdit={lastEdit} className="w-96 shrink-0" />}

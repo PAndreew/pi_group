@@ -18,7 +18,7 @@ import { useProjects } from "@/lib/projects"
  * or more people, or both; add /folder to pick where pi works (the project's folder otherwise; for
  * General, the shared chat folder).
  */
-export function Home() {
+export function Home({ selectSessions }: { selectSessions?: boolean }) {
   const { user } = useAuth()
   const nav = useNav()
   const { active: project } = useProjects()
@@ -64,7 +64,7 @@ export function Home() {
 
   return (
     <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col lg:max-w-none">
-      <ChatList key={project?.id} className="min-h-0 flex-1" requests />
+      <ChatList key={project?.id} className="min-h-0 flex-1" requests selectSessions={selectSessions} />
       <div data-chat-composer className="relative grid gap-1 p-2 sm:p-3">
         {recent.length > 0 && !overlay && (
           <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-1" aria-label="Recent folders">

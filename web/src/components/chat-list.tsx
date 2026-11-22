@@ -2,7 +2,7 @@ import { Brain, Folder, FolderInput, Loader2, MoreVertical, Trash2, WandSparkles
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
-import { DeleteSessionDialog } from "@/components/delete-session-dialog"
+import { DeleteSessionDialog, SessionDeleteCheckbox, SessionDeleteToolbar, useSessionDeletion } from "@/components/delete-session-dialog"
 import { PiAvatar } from "@/components/mention-composer"
 import { MoveDialog, MoveRequests, type MoveTarget } from "@/components/project-move"
 import { SwipeActions, type SwipeAction } from "@/components/swipe-actions"
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
 import { useChatSearch } from "@/lib/chat-search"
-import { api, type ChatListItem, type SessionSummary } from "@/lib/api"
+import { api, type ChatListItem } from "@/lib/api"
 import { useNav } from "@/lib/nav"
 import { useProjects } from "@/lib/projects"
 import { subscribeUserEvents } from "@/lib/user-stream"
@@ -34,7 +34,7 @@ function Avatars({ item, selfId }: { item: ChatListItem; selfId?: string }) {
  * The active project's chats and sessions, newest first; those with pi working are on top. Refreshes
  * on chat, run and project events. Swiping a row left uncovers Move (to another project) and Delete.
  */
-export function ChatList({ selected, className, requests }: { selected?: string; className?: string; requests?: boolean }) {
+export function ChatList({ selected, className, requests, selectSessions }: { selected?: string; className?: string; requests?: boolean; selectSessions?: boolean }) {
   const { user } = useAuth()
   const nav = useNav()
   const { active } = useProjects()
@@ -44,14 +44,21 @@ export function ChatList({ selected, className, requests }: { selected?: string;
   const [items, setItems] = useState<ChatListItem[]>()
   const { query } = useChatSearch()
   const [swiped, setSwiped] = useState<string>()
-  const [deleting, setDeleting] = useState<SessionSummary>()
+  const deletion = useSessionDeletion(selectSessions)
+  const { active: selecting, exclude } = deletion
+  const [revision, setRevision] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     if (!project) return
-    const load = () => api.chats(project).then(({ chats }) => setItems(chats), () => setItems((current) => current ?? []))
+    let alive = true
+    const load = () => api.chats(project).then(({ chats }) => {
+      if (!alive) return
+      setItems(chats)
+      exclude(chats.flatMap((item) => item.kind === "session" && (!item.canDelete || item.running || item.deleteBlockedReason) ? [item.id] : []))
+    }, () => alive && setItems((current) => current ?? []))
     void load()
-    const poll = setInterval(load, 20_000)
+    const poll = setInterval(load, selecting ? 3_000 : 20_000)
     const unsubscribe = subscribeUserEvents((event) => {
       if (!["chat_message", "chat_update", "run", "projects", "stream_open"].includes(event.type)) return
       clearTimeout(timer.current)
@@ -60,18 +67,20 @@ export function ChatList({ selected, className, requests }: { selected?: string;
     const onVisible = () => document.visibilityState === "visible" && void load()
     document.addEventListener("visibilitychange", onVisible)
     return () => {
+      alive = false
       clearInterval(poll)
       clearTimeout(timer.current)
       unsubscribe()
       document.removeEventListener("visibilitychange", onVisible)
     }
-  }, [selected, project])
+  }, [selected, project, selecting, exclude, revision])
 
   const q = query.trim().toLowerCase()
   const visible = items?.filter((i) => !q || i.title.toLowerCase().includes(q) || i.folder.toLowerCase().includes(q))
 
   return (
     <div className={cn("flex min-h-0 min-w-0 max-w-full flex-col", className)}>
+      {selecting && <SessionDeleteToolbar selection={deletion} />}
       <div className="chat-scroll-fade min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {requests && <MoveRequests />}
@@ -79,13 +88,16 @@ export function ChatList({ selected, className, requests }: { selected?: string;
         {visible?.map((item) => {
           const actions: SwipeAction[] = []
           if (item.canMove) actions.push({ label: `Move ${item.title} to another project`, icon: <FolderInput />, className: "bg-sky-600 hover:bg-sky-700", onClick: () => setMoving({ kind: item.kind, id: item.id, title: item.title, projectId: item.projectId }) })
-          if (item.kind === "session" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => void api.session(item.id).then(({ session }) => setDeleting(session), (error) => toast.error(error.message)) })
+          if (item.kind === "session" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => { setSwiped(undefined); deletion.start() } })
           if (item.kind === "chat" && item.canDelete) actions.push({ label: `Delete ${item.title}`, icon: <Trash2 />, className: "bg-red-600 hover:bg-red-700", onClick: () => setDeletingChat(item) })
           const row = (
           <div key={item.id} className={cn("flex w-full min-w-0 max-w-full items-center rounded-lg hover:bg-accent", selected === item.id && "bg-accent")}>
+          {selecting && item.kind === "session" && (
+            <SessionDeleteCheckbox selection={deletion} target={{ key: item.id, title: item.title }} blocked={item.deleteBlockedReason || (item.running ? "The agent is running" : !item.canDelete ? "Only the owner or an admin can delete this session" : undefined)} />
+          )}
           <button
-            key={item.id}
             type="button"
+            disabled={selecting}
             onClick={() => (item.kind === "chat" ? nav.openChat(item.id) : nav.openSession(item.id, item.folder))}
             className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-lg px-2 py-2 text-left"
           >
@@ -112,7 +124,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
               </span>
             </span>
           </button>
-          {actions.length > 0 && (
+          {!selecting && actions.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm" className="mr-1 shrink-0" aria-label={`Actions for ${item.title}`}><MoreVertical /></Button>
@@ -134,7 +146,7 @@ export function ChatList({ selected, className, requests }: { selected?: string;
           )}
           </div>
           )
-          if (!actions.length) return row
+          if (selecting || !actions.length) return row
           return (
             <SwipeActions key={item.id} actions={actions} open={swiped === item.id} onOpenChange={(open) => setSwiped(open ? item.id : undefined)}>
               {row}
@@ -181,13 +193,12 @@ export function ChatList({ selected, className, requests }: { selected?: string;
         </DialogContent>
       </Dialog>
       <DeleteSessionDialog
-        session={deleting}
-        onOpenChange={(open) => {
-          if (open) return
-          setDeleting(undefined)
-          setSwiped(undefined)
+        selection={deletion}
+        onResult={(keys) => {
+          const deleted = new Set(keys)
+          setItems((current) => current?.filter((i) => i.kind !== "session" || !deleted.has(i.id)))
+          setRevision((value) => value + 1)
         }}
-        onDeleted={(key) => setItems((current) => current?.filter((i) => i.id !== key))}
       />
     </div>
   )

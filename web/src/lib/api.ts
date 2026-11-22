@@ -7,6 +7,8 @@ export interface SessionDefaults {
   model: { provider: string; id: string }
   thinkingLevel: string
   autoTitle?: boolean
+  useModelPerMessage?: boolean
+  fallbackModel?: { provider: string; id: string }
 }
 
 export interface AssistanceSettings {
@@ -80,6 +82,7 @@ export interface SessionSummary {
   memoryPrivate?: boolean
   keepLive?: boolean
   archivedAt?: string
+  deleteBlockedReason?: string
   /** Memory extraction running for this session, with the worker to watch. */
   memoryRun?: { worker?: string; part: number; parts: number }
   owner?: string
@@ -300,7 +303,7 @@ export interface Chat {
 type ListedInProject = { projectId: string; canMove: boolean; /** The project a move waits to go to, for approval by the people in it. */ moving?: string }
 export type ChatListItem =
   | ({ kind: "chat"; id: string; title: string; folder: string; pi: boolean; canDelete?: boolean; members: { id: string; username: string }[]; running: boolean; updatedAt: string; unread: number; last?: { author: string; text: string } } & ListedInProject)
-  | ({ kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean } & ListedInProject)
+  | ({ kind: "session"; id: string; title: string; folder: string; harness: string; running: boolean; live: boolean; updatedAt: string; memory: boolean; canDelete?: boolean; deleteBlockedReason?: string } & ListedInProject)
 
 /** What sessions and chats are grouped by within a tenant; General is the default. */
 export interface Project {
@@ -432,7 +435,12 @@ export interface AppletSpec {
   title: string
   description: string
   fields: AppletField[]
-  actions: { id: string; label: string; prompt: string }[]
+  actions: ({ id: string; label: string } & (
+    | { prompt: string }
+    | { type: "open_url"; url: string }
+    | { type: "copy_text"; text: string }
+    | { type: "reset_form" }
+  ))[]
 }
 
 /** A form an agent designed: each button starts a new session with its filled-in prompt, once approved. */
@@ -521,6 +529,11 @@ export const api = {
   answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
   assistanceStatus: () => request<AssistanceStatus>("GET", "/api/assistance/status"),
   saveAssistance: (settings: AssistanceSettings) => request<{ user: User }>("PUT", "/api/auth/assistance", settings),
+  piProfile: () => request<{ connected: boolean }>("GET", "/api/auth/pi-profile"),
+  savePiProfile: (provider: string, key: string) => request("PUT", "/api/auth/pi-profile", { provider, key }),
+  sharedPiModels: () => request<{ models: ModelInfo[] }>("GET", "/api/harnesses/pi/shared-models"),
+  sharedPiFallback: () => request<{ model: SessionDefaults["model"] | null }>("GET", "/api/harnesses/pi/shared-fallback"),
+  saveSharedPiFallback: (model: SessionDefaults["model"] | null) => request("PUT", "/api/harnesses/pi/shared-fallback", { model }),
   saveDefaults: (defaults: SessionDefaults) => request<{ user: User }>("PUT", "/api/auth/defaults", defaults),
   me: () => request<{ user: User; tenantId?: string }>("GET", "/api/auth/me"),
   tenants: () => request<{ active: string; tenants: { id: string; name: string; canShare: boolean }[] }>("GET", "/api/tenants"),
@@ -627,7 +640,7 @@ export const api = {
   discardAppletDraft: (id: string) => request<{ applet: Applet }>("DELETE", `/api/applets/${enc(id)}/draft`),
   runApplet: (id: string, action: string, values: Record<string, unknown>) => request<{ run: AppletRun }>("POST", `/api/applets/${enc(id)}/run`, { action, values }),
   deleteApplet: (id: string) => request("DELETE", `/api/applets/${enc(id)}`),
-  deleteSession: (key: string) => request("DELETE", `/api/sessions/${enc(key)}`),
+  deleteSessions: (keys: string[]) => request<{ deleted: string[]; skipped: { key: string; reason: string }[] }>("POST", "/api/sessions/batch-delete", { keys }),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),
   lastEdit: (scope: { session: string } | { project: string }) => request<{ file: string | null; sessionKey?: string }>("GET", `/api/sessions/last-edit?${q(scope)}`),
   createSession: (body: { harness: string; path: string; projectId?: string; memoryPrivate?: boolean; name?: string; model?: { provider: string; id: string }; thinkingLevel?: string }) =>

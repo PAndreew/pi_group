@@ -1,3 +1,4 @@
+import { PiProfileSettings } from "@/components/pi-profile-settings"
 import { Brain, Cloud, Cpu } from "lucide-react"
 import { CloudflareSettings } from "@/components/cloudflare-settings"
 import { DefaultsSettings } from "@/components/defaults-settings"
@@ -14,12 +15,14 @@ export function ModelSettingsDialog({ open, onOpenChange }: { open: boolean; onO
           <DialogDescription className="sr-only">Session defaults, Cloudflare assistance and project memory.</DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="defaults" className="min-w-0">
-          <TabsList className="w-full">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="defaults"><Cpu /> Defaults</TabsTrigger>
+            <TabsTrigger value="providers">Providers</TabsTrigger>
             <TabsTrigger value="cloudflare"><Cloud /> Cloudflare</TabsTrigger>
             <TabsTrigger value="memory"><Brain /> Project memory</TabsTrigger>
           </TabsList>
           <TabsContent value="defaults" className="pt-2"><DefaultsSettings onClose={() => onOpenChange(false)} /></TabsContent>
+          <TabsContent value="providers" className="pt-2"><PiProfileSettings /></TabsContent>
           <TabsContent value="cloudflare" className="pt-2"><CloudflareSettings /></TabsContent>
           <TabsContent value="memory" className="pt-2"><ProjectMemorySettings /></TabsContent>
         </Tabs>

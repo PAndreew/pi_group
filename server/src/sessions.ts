@@ -4,9 +4,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
-import { requireAuth } from "./auth.js";
+import { requireAdmin, requireAuth } from "./auth.js";
 import { generateSessionTitle } from "./session-title.js";
 import { creationOptions } from "./preferences.js";
+import { availablePreferredModel, piProfile } from "./pi-profiles.js";
+import { lithosVaultProfile } from "./lithos-vault.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
 import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
@@ -15,7 +17,7 @@ import { mountJobs } from "./jobs.js";
 import { mountWatches } from "./watches.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
-import { extractionOf, mountMemory, projectMemory } from "./memory.js";
+import { extractionOf, isConsolidating, mountMemory, projectMemory } from "./memory.js";
 import { mountLinks } from "./links.js";
 import { wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
 import { platform } from "./ports/index.js";
@@ -289,13 +291,15 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 
 	/** Resolve a session and the caller's access; 404 when the caller may not even know it exists. */
-	const load = (req: Request) => {
-		const key = String(req.params.key);
+	const deleting = new Set<string>();
+	const loadSession = (key: string, user: User) => {
 		const meta = store.session(key);
-		const access = meta && !meta.deleted && accessOf(req.user!, meta);
+		const access = meta && !meta.deleted && accessOf(user, meta);
 		if (!meta || !access) throw new HttpError(404, "Session not found");
+		if (deleting.has(key)) throw new HttpError(409, "This session is being deleted");
 		return { key, meta, access, adapter: adapterOf(meta.harness) };
 	};
+	const load = (req: Request) => loadSession(String(req.params.key), req.user!);
 
 	mountInteractions(router, load);
 	mountAssistance(router, (user, meta) => canWrite(accessOf(user, meta)));
@@ -306,6 +310,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return live;
 	};
 
+	const pickedModels = new Map<string, { provider: string; id: string }>();
+	const modelPickKey = (meta: SessionMeta, user: User) => JSON.stringify([tenantId(), meta.key, user.id]);
+
 	/** Start a session for `user` in `cwd` with their saved defaults unless overridden. */
 	const createSession = async (
 		user: User,
@@ -314,7 +321,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (!isTenantMember(user.id)) throw new HttpError(403, "Tenant unavailable");
 		resolveSafe(toRel(input.cwd));
 		const adapter = adapterOf(input.harness);
-		const live = await adapter.create(input.cwd, { ...creationOptions(input, user.sessionDefaults), name: input.name });
+		const explicit = adapter.id === "pi" ? input.model : undefined;
+		const usesLithos = explicit?.provider === "lithosai";
+		const profile = usesLithos ? await lithosVaultProfile(user.id) : await piProfile(user.id);
+		if (usesLithos && !profile) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
+		if (profile && adapter.id !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
+		if (explicit && !availablePreferredModel(await adapter.listModels(profile), explicit)) throw new HttpError(400, "This model is not available to your account");
+		const live = await adapter.create(input.cwd, { ...(profile && !explicit ? {} : creationOptions(input, user.sessionDefaults)), name: input.name, authProfile: profile });
 		const meta = store.upsertSession({
 			key: `${adapter.id}:${live.id}`,
 			harness: adapter.id,
@@ -326,6 +339,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			visibility: input.visibility ?? "private",
 			shares: (input.shares ?? []).filter((s) => s.userId !== user.id && isTenantMember(s.userId)),
 		});
+		if (explicit) pickedModels.set(modelPickKey(meta, user), explicit);
 		hub.attach(meta.key, live);
 		return meta;
 	};
@@ -346,10 +360,50 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return name;
 	};
 
+	const sharedFallback = () => store.data.sharedPiFallbacks?.[tenantId()];
+	router.get("/harnesses/pi/shared-fallback", (_req, res) => res.json({ model: sharedFallback() ?? null }));
+	router.get("/harnesses/pi/shared-models", requireAdmin, async (_req, res) => res.json({ models: await adapterOf("pi").listModels() }));
+	router.put("/harnesses/pi/shared-fallback", requireAdmin, async (req, res) => {
+		const { model } = z.object({ model: z.object({ provider: z.string().max(120), id: z.string().max(200) }).nullable() }).parse(req.body);
+		if (model && !availablePreferredModel(await adapterOf("pi").listModels(), model)) throw new HttpError(400, "Choose a model available to the server’s Pi login");
+		store.data.sharedPiFallbacks ??= {};
+		if (model) store.data.sharedPiFallbacks[tenantId()] = model;
+		else delete store.data.sharedPiFallbacks[tenantId()];
+		saveNow();
+		res.json({ model });
+	});
+
 	const loadedMemory = new WeakMap<object, string>();
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
-		const live = await ensureLive(meta, adapterOf(meta.harness));
+		const adapter = adapterOf(meta.harness);
+		const picked = meta.harness === "pi" ? pickedModels.get(modelPickKey(meta, user)) : undefined;
+		const wantsLithos = meta.harness === "pi" && (picked ?? (user.sessionDefaults?.harness === "pi" ? user.sessionDefaults.model : undefined))?.provider === "lithosai";
+		const lithos = wantsLithos ? await lithosVaultProfile(user.id) : undefined;
+		if (wantsLithos && !lithos) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
+		const profile = lithos ?? await piProfile(user.id);
+		if (profile && meta.harness !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
+		const active = adapter.live(meta.id);
+		if (active?.state.running && (active.authProfile !== profile || profile)) throw new HttpError(409, "Wait for the active Pi run to finish");
+		const defaults = user.sessionDefaults;
+		let selectedModel: { provider: string; id: string } | undefined;
+		let useShared = false;
+		if (picked && body.mode !== "steer") {
+			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
+			selectedModel = picked;
+		} else if ((profile || defaults?.useModelPerMessage) && defaults?.harness === meta.harness && body.mode !== "steer") {
+			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
+			const available = await adapter.listModels(profile);
+			selectedModel = availablePreferredModel(available, defaults.model, defaults.fallbackModel);
+			const fallback = profile && sharedFallback();
+			if (!selectedModel && fallback) {
+				selectedModel = availablePreferredModel(await adapter.listModels(), fallback);
+				useShared = !!selectedModel;
+			}
+			if (!selectedModel) throw new HttpError(400, "Neither your preferred model nor a configured fallback is available.");
+		} else if (profile) throw new HttpError(400, "Save your Pi RPC model defaults before sending with your profile");
+		const live = await adapter.open(meta.id, meta.cwd, useShared ? null : profile ?? null);
+		hub.attach(meta.key, live);
 		const run = prepareAssistance(meta, user, live.state.running);
 		if (run.settings.injectionChecks || run.settings.contextExtraction || run.settings.toolSelection) {
 			if (!live.verifyAssistance) throw new HttpError(400, "This runtime does not support Cloudflare assistance");
@@ -366,7 +420,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
 		saveNow();
 		try {
+			if (selectedModel && (live.state.model?.provider !== selectedModel.provider || live.state.model?.id !== selectedModel.id)) await live.setModel(selectedModel.provider, selectedModel.id);
 			await live.prompt(input);
+			if (useShared) hub.broadcast(meta.key, { type: "notify", level: "info", text: `Using workspace fallback: ${selectedModel!.provider}/${selectedModel!.id}` });
 			if (injectMemory) loadedMemory.set(live, memory);
 		} catch (error) {
 			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
@@ -374,19 +430,24 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			throw error;
 		}
 		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
-		if (autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
+		if (!profile && autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 
 	// Serialize admission (including asynchronous Clef checks), otherwise two shared
 	// submissions could replace one another's initiating user/settings before acceptance.
 	const submissions = new Map<string, Promise<void>>();
-	const promptSession = (meta: SessionMeta, user: User, body: PromptInput) => {
+	const serializeSessionChange = (meta: SessionMeta, action: () => Promise<void>) => {
 		const prior = submissions.get(meta.key) ?? Promise.resolve();
-		const next = prior.catch(() => {}).then(() => submitPrompt(meta, user, body));
+		const next = prior.catch(() => {}).then(action);
 		submissions.set(meta.key, next);
 		void next.finally(() => { if (submissions.get(meta.key) === next) submissions.delete(meta.key); }).catch(() => {});
 		return next;
+	};
+
+	const promptSession = (meta: SessionMeta, user: User, body: PromptInput) => {
+		if (deleting.has(meta.key)) return Promise.reject(new HttpError(409, "This session is being deleted"));
+		return serializeSessionChange(meta, () => submitPrompt(meta, user, body));
 	};
 
 	const isRunning = (key?: string) => {
@@ -553,6 +614,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	};
 	hub.onRun((key) => void setTimeout(() => void drainDeletes(key), 0));
 
+	const deleteBlockedReason = (meta: SessionMeta) => {
+		if (deleting.has(meta.key)) return "This session is being deleted";
+		if (byId.get(meta.harness)?.live(meta.id)?.state.running || submissions.has(meta.key)) return "The agent is running";
+		if (hub.count(meta.key) > 0) return "Someone is viewing this session";
+		if (isConsolidating(meta.key)) return "Memory consolidation is in progress";
+	};
+
 	const summary = (meta: SessionMeta, user: User, listing?: SessionListing) => {
 		const live = byId.get(meta.harness)?.live(meta.id);
 		return {
@@ -567,6 +635,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			messageCount: live?.state.messages.length ?? listing?.messageCount ?? 0,
 			live: Boolean(live),
 			running: Boolean(live?.state.running),
+			deleteBlockedReason: deleteBlockedReason(meta),
 			pinned: Boolean(meta.pinned),
 			owner: meta.ownerId ? (store.userById(meta.ownerId)?.username ?? "unknown") : undefined,
 			visibility: meta.visibility,
@@ -595,7 +664,12 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	});
 
 	router.get("/harnesses/:id/models", async (req, res) => {
-		res.json({ models: await adapterOf(String(req.params.id)).listModels() });
+		const id = String(req.params.id);
+		const adapter = adapterOf(id);
+		const models = await adapter.listModels(id === "pi" ? await piProfile(req.user!.id) : undefined);
+		const lithos = id === "pi" ? await lithosVaultProfile(req.user!.id) : undefined;
+		const extra = lithos ? await adapter.listModels(lithos) : [];
+		res.json({ models: [...models.filter(model => !extra.some(other => other.provider === model.provider && other.id === model.id)), ...extra] });
 	});
 
 	/** Sessions of one folder that `user` may see, running first, then most recent. */
@@ -880,7 +954,21 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	router.post("/sessions/:key/model", async (req, res) => {
 		const { meta, adapter } = writable(req);
 		const body = z.object({ provider: z.string(), id: z.string() }).parse(req.body);
-		await (await ensureLive(meta, adapter)).setModel(body.provider, body.id);
+		const user = req.user!;
+		await serializeSessionChange(meta, async () => {
+			if (meta.harness !== "pi") {
+				await (await ensureLive(meta, adapter)).setModel(body.provider, body.id);
+				return;
+			}
+			if (adapter.live(meta.id)?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
+			const profile = body.provider === "lithosai" ? await lithosVaultProfile(user.id) : await piProfile(user.id);
+			if (body.provider === "lithosai" && !profile) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
+			if (!availablePreferredModel(await adapter.listModels(profile), body)) throw new HttpError(400, "This model is not available to your account");
+			const live = await adapter.open(meta.id, meta.cwd, profile ?? null);
+			hub.attach(meta.key, live);
+			await live.setModel(body.provider, body.id);
+			pickedModels.set(modelPickKey(meta, user), body);
+		});
 		res.json({ ok: true });
 	});
 
@@ -927,18 +1015,44 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ ok: true });
 	});
 
-	/** Owners and admins delete sessions; viewers are told so they can leave the page. */
-	router.delete("/sessions/:key", async (req, res) => {
-		const { key, meta, access, adapter } = load(req);
+	/** Check current eligibility immediately before each deletion, not just when the list was loaded. */
+	const removeSession = async (key: string, user: User) => {
+		const { meta, access, adapter } = loadSession(key, user);
 		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can delete this session");
-		const purged = await adapter.deleteSession(meta.id, meta.cwd);
-		if (purged) store.removeSession(key);
-		else {
-			meta.deleted = true;
-			delete meta.authorship;
+		const blocked = deleteBlockedReason(meta);
+		if (blocked) throw new HttpError(409, blocked);
+		deleting.add(key);
+		try {
+			const purged = await adapter.deleteSession(meta.id, meta.cwd);
+			if (purged) store.removeSession(key);
+			else {
+				const current = store.session(key) ?? meta;
+				current.deleted = true;
+				delete current.authorship;
+			}
+			saveNow();
+			hub.broadcast(key, { type: "deleted", by: user.username });
+		} finally {
+			deleting.delete(key);
 		}
-		saveNow();
-		hub.broadcast(key, { type: "deleted", by: req.user!.username });
+	};
+	router.post("/sessions/batch-delete", async (req, res) => {
+		const { keys } = z.object({ keys: z.array(z.string().min(1)).min(1) }).parse(req.body);
+		const deleted: string[] = [];
+		const skipped: { key: string; reason: string }[] = [];
+		for (const key of new Set(keys)) {
+			try {
+				await removeSession(key, req.user!);
+				deleted.push(key);
+			} catch (error) {
+				if (!(error instanceof HttpError)) console.error("Session deletion failed:", error);
+				skipped.push({ key, reason: error instanceof HttpError ? error.message : "Could not delete this session" });
+			}
+		}
+		res.json({ deleted, skipped });
+	});
+	router.delete("/sessions/:key", async (req, res) => {
+		await removeSession(String(req.params.key), req.user!);
 		res.json({ ok: true });
 	});
 
@@ -984,7 +1098,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		workerHarness: async (user: User) => (byId.has("pi-durable") && (await byId.get("pi-durable")!.available()).ok ? "pi-durable" : harnessFor(user)),
 	};
 	chats = mountChats(router, chatDeps);
-	mountMemory(router, chatDeps);
+	mountMemory(router, { ...chatDeps, isDeleting: (key) => deleting.has(key) });
 	mountJobs(router, {
 		...chatDeps,
 		isRunning,

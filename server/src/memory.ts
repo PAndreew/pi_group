@@ -21,6 +21,7 @@ import { inTenant, tenantId } from "./tenant-context.js";
 let deploymentMemory = 0;
 export const activeMemory = () => deploymentMemory;
 export interface MemoryDeps extends ChatDeps {
+ isDeleting: (key: string) => boolean;
  readMessages: (meta: SessionMeta) => Promise<AgentMessage[]>;
  listModels: (harness: string) => Promise<ModelInfo[]>;
  /** The runtime memory workers run on: pi-durable when available (runs resume after a restart), else the user's default. */
@@ -89,6 +90,9 @@ export type SourceStatus = { id: string; title: string; status: "queued" | "extr
 /** Sessions being consolidated right now, for the progress chip in the session itself. */
 const extracting = new Map<string, { worker?: string; part: number; parts: number }>();
 export const extractionOf = (key: string) => extracting.get(key);
+/** Includes queued sources and the worker, not just the source currently being extracted. */
+const consolidating = new Set<string>();
+export const isConsolidating = (key: string) => consolidating.has(key);
 
 /** The session's project, when its initiating user and every viewer may read the project's memory. */
 function memoryProject(meta: SessionMeta, user: User) {
@@ -182,8 +186,10 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
   const shares = viewers.filter(id => id !== user.id).map(userId => ({ userId, access: "read" as const }));
   let worker = await deps.createSession(user, { harness: await deps.workerHarness(user), cwd: p.cwd, name, model: p.memoryModel, thinkingLevel: p.memoryThinking, projectId: p.id, ...(shares.length ? { visibility: "shared" as const, shares } : {}) });
   worker = store.upsertSession({ ...worker, memory: true, projectId: p.id });
+  consolidating.add(worker.key);
   try { await run(worker); }
   finally {
+   consolidating.delete(worker.key);
    cancellations.get(worker.key)?.();
    if (!busy(worker)) store.upsertSession({ ...store.session(worker.key)!, deleted: true });
   }
@@ -205,6 +211,14 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
   const state: Progress = { phase: "consolidate", batch: 0, batches: 0, sources: [] };
   progress.set(p.id, state);
   const failures: string[] = [];
+  const locked = new Set<string>();
+  const lock = (s: SessionMeta) => {
+   const current = store.session(s.key);
+   if (!current || current.deleted || deps.isDeleting(s.key) || (!locked.has(s.key) && consolidating.has(s.key))) return false;
+   locked.add(s.key);
+   consolidating.add(s.key);
+   return true;
+  };
   try {
    mkdirSync(dir, { recursive: true });
    const manifest = readManifest(dir);
@@ -212,7 +226,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
    type Input = { id: string; title: string; lines: string[]; from: number; to: number; readAt: string; viewers: string[]; session?: string; valid: () => boolean; done: (at: string) => void };
    const inputs: Input[] = [];
    for (const s of sessions(p)) {
-    if (busy(s) || s.archivedAt || (s.consolidatedAt && s.consolidatedAt >= (s.updatedAt ?? s.createdAt))) continue;
+    if (busy(s) || s.archivedAt || (s.consolidatedAt && s.consolidatedAt >= (s.updatedAt ?? s.createdAt)) || !lock(s)) continue;
     const readAt = new Date().toISOString();
     const messages = await deps.readMessages(s);
     // Fewer messages than recorded means history was edited: read it again from the start.
@@ -302,7 +316,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
    }
 
    for (const s of sessions(p)) {
-    if (!archiveEligible(s) || busy(s) || recentlyActive(s) || !s.consolidatedAt || s.consolidatedAt < (s.updatedAt ?? s.createdAt)) continue;
+    if (!archiveEligible(s) || busy(s) || recentlyActive(s) || !s.consolidatedAt || s.consolidatedAt < (s.updatedAt ?? s.createdAt) || !lock(s)) continue;
     const version = s.updatedAt ?? s.createdAt;
     const messages = await deps.readMessages(s);
     const current = store.session(s.key)!;
@@ -318,6 +332,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
   finally {
    for (const source of state.sources) if (source.status === "extracting" || source.status === "queued") source.status = "failed";
    for (const source of state.sources) extracting.delete(source.id);
+   for (const key of locked) consolidating.delete(key);
    state.phase = "done";
    rmSync(staging, { recursive: true, force: true });
    running.delete(p.id); deploymentMemory--;

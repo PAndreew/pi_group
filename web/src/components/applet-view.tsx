@@ -1,4 +1,4 @@
-import { ArrowUp, CheckCircle2, CircleSlash, File, Folder, FolderOpen, LayoutGrid, Loader2, Play, ShieldCheck, Trash2, Upload, X, XCircle } from "lucide-react"
+import { ArrowUp, CheckCircle2, CircleSlash, Copy, ExternalLink, File, Folder, FolderOpen, LayoutGrid, Loader2, Play, RotateCcw, ShieldCheck, Trash2, Upload, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Markdown } from "@/components/markdown"
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { copyText } from "@/lib/clipboard"
 import { api, type Applet, type AppletField, type AppletRun, type AppletSpec, type FsEntry } from "@/lib/api"
 import { uploadDir } from "@/lib/attachments"
 import { useNav } from "@/lib/nav"
@@ -257,12 +258,29 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
         ),
       )}
       <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-        {spec.actions.map((action, i) => (
-          <Button key={action.id} type="button" variant={i === 0 ? "default" : "outline"} disabled={disabled || missing.length > 0} onClick={() => void run(action.id)} title={missing.length ? `Fill in: ${missing.map((f) => f.label).join(", ")}` : undefined}>
-            {busy === action.id ? <Loader2 className="animate-spin" /> : <Play />} {action.label}
-          </Button>
-        ))}
-        {onRun && missing.length > 0 && <span className="text-xs text-muted-foreground">Fill in {missing.map((f) => f.label).join(", ")}</span>}
+        {spec.actions.map((action, i) => {
+          const variant = i === 0 ? "default" : "outline"
+          if ("prompt" in action) return (
+            <Button key={action.id} type="button" variant={variant} disabled={disabled || missing.length > 0} onClick={() => void run(action.id)} title={missing.length ? `Fill in: ${missing.map((f) => f.label).join(", ")}` : undefined}>
+              {busy === action.id ? <Loader2 className="animate-spin" /> : <Play />} {action.label}
+            </Button>
+          )
+          if (action.type === "open_url" && onRun) return (
+            <Button key={action.id} asChild variant={variant}>
+              <a href={action.url} target="_blank" rel="noopener noreferrer"><ExternalLink /> {action.label}</a>
+            </Button>
+          )
+          const Icon = action.type === "open_url" ? ExternalLink : action.type === "copy_text" ? Copy : RotateCcw
+          return (
+            <Button key={action.id} type="button" variant={variant} disabled={!onRun} onClick={() => {
+              if (action.type === "reset_form") setValues(initialValues(spec))
+              if (action.type === "copy_text") void copyText(action.text).then(() => toast.success("Copied"), () => toast.error("Could not copy to the clipboard"))
+            }}>
+              <Icon /> {action.label}
+            </Button>
+          )
+        })}
+        {onRun && spec.actions.some((action) => "prompt" in action) && missing.length > 0 && <span className="text-xs text-muted-foreground">Fill in {missing.map((f) => f.label).join(", ")}</span>}
       </div>
     </form>
   )
@@ -301,16 +319,22 @@ function RunItem({ run, folder, onOpenSession }: { run: AppletRun; folder: strin
   )
 }
 
-/** What approving lets the applet do: the prompts its buttons send. */
-function Prompts({ spec }: { spec: AppletSpec }) {
+/** What approving lets each button do. */
+function ActionPreview({ spec }: { spec: AppletSpec }) {
   return (
     <div className="grid gap-2">
-      {spec.actions.map((a) => (
-        <div key={a.id} className="grid gap-1">
-          <p className="text-xs font-medium">“{a.label}” sends:</p>
-          <pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 text-[11px] whitespace-pre-wrap">{a.prompt}</pre>
-        </div>
-      ))}
+      {spec.actions.map((a) => {
+        const [description, payload] = "prompt" in a ? ["starts an agent session with:", a.prompt]
+          : a.type === "open_url" ? ["opens this link in a new tab:", a.url]
+          : a.type === "copy_text" ? ["copies this text to the clipboard:", a.text]
+          : ["restores the form defaults."]
+        return (
+          <div key={a.id} className="grid gap-1">
+            <p className="text-xs font-medium">“{a.label}” {description}</p>
+            {payload && <pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 text-[11px] whitespace-pre-wrap wrap-anywhere">{payload}</pre>}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -390,7 +414,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
               {applet.canManage && (!applet.approved || applet.draft) && (
                 <section className="grid gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
                   <p>
-                    {applet.approved ? "The agent proposed a change. The approved version below keeps working until you approve it." : "Nobody can use this applet until you approve it."} Each button starts a new agent session in /{applet.folder} as the person who pressed it, with the prompt below filled in from the form.
+                    {applet.approved ? "The agent proposed a change. The approved version below keeps working until you approve it." : "Nobody can use this applet until you approve it."} Review what each button does below before approving.
                   </p>
                   {(applet.note || applet.proposedIn) && (
                     <p className="text-xs text-muted-foreground">
@@ -413,7 +437,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
                       <AppletForm key={`draft-${applet.version}`} spec={applet.draft} folder={applet.folder} />
                     </div>
                   )}
-                  <Prompts spec={applet.draft ?? applet.spec} />
+                  <ActionPreview spec={applet.draft ?? applet.spec} />
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" disabled={busy} onClick={() => void act(() => api.approveApplet(applet.id, applet.version))}>
                       <ShieldCheck /> {applet.draft ? "Approve the change" : "Approve"}

@@ -2,7 +2,7 @@
 # Install a fixed Beezy release and a private, fixed pi version. No sudo required.
 set -euo pipefail
 BEEZY_VERSION=beezy-v0.1.0
-PI_VERSION=0.85.1
+PI_VERSION=1.5.2
 INSTALL_DIR="${BEEZY_INSTALL_DIR:-$HOME/.local/share/beezy}"
 for command in node npm git; do
   command -v "$command" >/dev/null || { echo "Required: $command (Node.js >=22.19)." >&2; exit 1; }

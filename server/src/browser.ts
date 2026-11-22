@@ -49,7 +49,7 @@ function launch(): Promise<Browser> {
 		}
 		const executablePath = process.env.BROWSER_EXECUTABLE || CANDIDATES.find((file) => existsSync(file));
 		try {
-			const browser = await playwright.chromium.launch({ executablePath, headless: true, args: ["--disable-dev-shm-usage"] });
+			const browser = await playwright.chromium.launch({ executablePath, headless: process.env.BROWSER_HEADED !== "1", args: ["--disable-dev-shm-usage"] });
 			browser.on("disconnected", () => (chromium = undefined));
 			return browser;
 		} catch (error) {
@@ -191,6 +191,7 @@ class SessionBrowser {
 	private viewers = new Map<WebSocket, { canInput: boolean }>();
 	private cdp?: CDPSession;
 	private frame?: Buffer;
+	private searchHistory = new Map<string, string>();
 	private idle?: NodeJS.Timeout;
 	private screencasting = false;
 	private queue = Promise.resolve();
@@ -204,7 +205,7 @@ class SessionBrowser {
 
 	static async open(key: string) {
 		const browser = await launch();
-		const context = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: false });
+		const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1.5, acceptDownloads: false });
 		const page = await context.newPage();
 		const session = new SessionBrowser(key, context, page);
 		await session.init();
@@ -212,6 +213,10 @@ class SessionBrowser {
 	}
 
 	private async init() {
+		await this.page.route((url) => url.origin === new URL(SEARCH_PAGE).origin, async (route) => {
+			const body = this.searchHistory.get(route.request().url());
+			await route.fulfill({ status: body ? 200 : 404, contentType: body ? "text/html; charset=utf-8" : "text/plain", body: body ?? "Enter a keyword in the address bar to search.", headers: { "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "cache-control": "no-store" } });
+		});
 		this.cdp = await this.context.newCDPSession(this.page);
 		this.cdp.on("Page.screencastFrame", ({ data, sessionId }) => {
 			void this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
@@ -259,7 +264,7 @@ class SessionBrowser {
 		if (on === this.screencasting || !this.cdp) return;
 		this.screencasting = on;
 		const viewport = this.page.viewportSize() ?? VIEWPORT;
-		if (on) await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: viewport.width, maxHeight: viewport.height }).catch(() => {});
+		if (on) await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 82, maxWidth: Math.ceil(viewport.width * 1.5), maxHeight: Math.ceil(viewport.height * 1.5) }).catch(() => {});
 		else await this.cdp.send("Page.stopScreencast").catch(() => {});
 	}
 
@@ -298,6 +303,23 @@ class SessionBrowser {
 			return send(ws, { type: "picked", id: message.id, ...pick });
 		}
 		if (!canInput) throw new Error("You have view-only access to this browser.");
+		if (message.type === "quote" || message.type === "select-text") {
+			const text = await this.page.evaluate((range) => {
+				if (range) {
+					const start = document.caretRangeFromPoint(range.start.x, range.start.y);
+					const end = document.caretRangeFromPoint(range.end.x, range.end.y);
+					const isText = (node?: Node) => node?.nodeType === Node.TEXT_NODE && !node.parentElement?.closest('input, textarea, [contenteditable]');
+					if (!start || !end || !isText(start.startContainer) || !isText(end.startContainer)) return "";
+					const selection = window.getSelection();
+					selection?.setBaseAndExtent(start.startContainer, start.startOffset, end.startContainer, end.startOffset);
+				}
+				const selection = window.getSelection();
+				if (!selection || selection.anchorNode?.parentElement?.closest('input, textarea, [contenteditable]')) return "";
+				return selection.toString().trim().slice(0, 4000);
+			}, message.type === "select-text" ? { start: message.start, end: message.end } : undefined);
+			if (!text) throw new Error("Select text on the page first.");
+			return send(ws, { type: "quoted", text });
+		}
 		switch (message.type) {
 			case "navigate":
 				await this.goto(message.url);
@@ -344,7 +366,16 @@ class SessionBrowser {
 	}
 
 	async goto(input: string) {
-		const url = normalizeUrl(input);
+		let url = normalizeUrl(input);
+		if (input.trim() !== url && url.startsWith(`${SEARCH_PAGE}?`)) {
+			const query = new URL(url).searchParams.get("q") ?? "";
+			if (!process.env.BRAVE_SEARCH_API_KEY) {
+				url = /^hacker\s*news$/i.test(query) ? "https://news.ycombinator.com/" : `https://www.bing.com/search?${new URLSearchParams({ q: query, setlang: "en", cc: "US" })}`;
+			} else {
+				this.searchHistory.set(url, await searchPage(query));
+				if (this.searchHistory.size > 50) this.searchHistory.delete(this.searchHistory.keys().next().value!);
+			}
+		}
 		const response = await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
 		const error = searchResponseError(url, response?.status());
 		if (error) throw new Error(error);
@@ -380,7 +411,8 @@ const clientMessage = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("inspect"), ...point, depth: z.number().int().min(0).max(200).optional() }),
 	z.object({ type: z.literal("pick"), id: z.string().max(100), x: z.number().finite().optional(), y: z.number().finite().optional(), depth: z.number().int().min(0).max(200).optional(), rect: z.object({ ...point, width: z.number().positive(), height: z.number().positive() }).optional() }),
 	z.object({ type: z.literal("navigate"), url: z.string().min(1).max(4000) }),
-	z.object({ type: z.enum(["back", "forward", "reload", "close"]) }),
+	z.object({ type: z.enum(["back", "forward", "reload", "close", "quote"]) }),
+	z.object({ type: z.literal("select-text"), start: z.object(point), end: z.object(point) }),
 	z.object({ type: z.literal("viewport"), width: z.number().int().min(320).max(1920), height: z.number().int().min(320).max(1600) }),
 	z.object({
 		type: z.literal("mouse"),
@@ -397,7 +429,7 @@ const clientMessage = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("text"), text: z.string().max(10_000) }),
 ]);
 
-export const searchUrl = (query: string) => `https://www.bing.com/search?${new URLSearchParams({ q: query, setlang: "en", cc: "US" })}`;
+import { SEARCH_PAGE, searchPage, searchUrl } from "./browser-search.js";
 
 export function searchResponseError(url: string, status?: number): string | undefined {
 	if (![202, 403, 429].includes(status ?? 0)) return;
@@ -411,7 +443,6 @@ export function searchResponseError(url: string, status?: number): string | unde
 export function normalizeUrl(input: string) {
 	const text = input.trim();
 	if (text === "about:blank") return text;
-	if (/^hacker\s*news$/i.test(text)) return "https://news.ycombinator.com/";
 	const address = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^(localhost|\[::1\])(?=[:/?#]|$)/i.test(text) || /^[^\s/]+:\d+(?=[/?#]|$)/.test(text) || /^[^\s/?#]+\.[a-z][a-z0-9-]*\.?(?=[:/?#]|$)/i.test(text) || /^\d+\.\d+\.\d+\.\d+(?=[:/?#]|$)/.test(text);
 	if (!address) return searchUrl(text);
 	const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : /^(localhost|127\.|\[::1\]|0\.0\.0\.0|\d+\.\d+\.\d+\.\d+)/.test(text) || /^[^/]+:\d+/.test(text) ? `http://${text}` : `https://${text}`;

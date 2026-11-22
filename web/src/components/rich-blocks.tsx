@@ -1,5 +1,6 @@
-import { ExternalLink, Globe, Table2, ChartColumn } from "lucide-react"
+import { ExternalLink, Table2, ChartColumn } from "lucide-react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { SiteIcon } from "@/components/site-icon"
 import { api, type LinkPreview } from "@/lib/api"
 import type { ChartSpec } from "@/lib/rich-blocks"
 import { cn } from "@/lib/utils"
@@ -235,7 +236,7 @@ export function LinkPreviewCard({ url }: { url: string }) {
       {data?.image && !broken && <img src={data.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="w-28 shrink-0 bg-muted object-cover sm:w-36" />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 p-2.5">
         <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          {data?.icon ? <img src={data.icon} alt="" referrerPolicy="no-referrer" className="size-3.5 rounded-sm" onError={(e) => (e.currentTarget.style.display = "none")} /> : <Globe className="size-3.5" />}
+          <SiteIcon icon={data?.icon} />
           <span className="truncate">{data?.siteName ?? host}</span>
           <ExternalLink className="ml-auto size-3 shrink-0" />
         </span>

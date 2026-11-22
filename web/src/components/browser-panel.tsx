@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Loader2, Monitor, Power, RotateCw, Search, Smartphone, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Quote, Loader2, Monitor, Power, RotateCw, Search, Smartphone, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { BrowserAsk, type BrowserAnswer } from "@/components/browser-ask"
@@ -29,8 +29,7 @@ export type BrowserAskProps = {
   onSend: (text: string, picks: ElementRef[], page: { url: string; title: string }) => Promise<void>
   /** Why sending is not possible right now (e.g. the agent is running). */
   disabled?: string
-  answer?: BrowserAnswer
-  onCloseAnswer: () => void
+  replies: BrowserAnswer[]
   folder?: string
 }
 
@@ -47,6 +46,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const [text, setText] = useState("")
   const [scale, setScale] = useState(1)
   const [phoneMode, setPhoneMode] = useState(false)
+  const [quote, setQuote] = useState("")
+  const [selectingText, setSelectingText] = useState(false)
   const [asking, setAsking] = useState(false)
   const [askPicks, setAskPicks] = useState<ElementRef[]>([])
   const ws = useRef<WebSocket>(undefined)
@@ -95,6 +96,9 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
       } else if (message.type === "hover") {
         if (message.box) depth.current = message.depth ?? 0
         setHover(message.box ? { box: message.box, label: message.label, depth: message.depth ?? 0, count: message.count ?? 1 } : undefined)
+      } else if (message.type === "quoted") {
+        setQuote(message.text)
+        setAsking(true)
       } else if (message.type === "picked") {
         setPending((n) => Math.max(0, n - 1))
         onPickRef.current({ id: message.id, url: message.url, title: message.title, elements: message.elements, image: message.image })
@@ -191,7 +195,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     e.currentTarget.setPointerCapture(e.pointerId)
     const at = toPage(e)
     pointer.current = { ...at, clientX: e.clientX, clientY: e.clientY, moved: false, shift: e.shiftKey }
-    if (picking || e.pointerType === "touch" || !page.canInput) return
+    if (selectingText || picking || e.pointerType === "touch" || !page.canInput) return
     const last = lastDown.current
     const count = Date.now() - last.at < 400 && Math.abs(last.x - at.x) < 5 && Math.abs(last.y - at.y) < 5 ? Math.min(last.count + 1, 3) : 1
     lastDown.current = { at: Date.now(), ...at, count }
@@ -202,6 +206,10 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     const at = toPage(e)
     const down = pointer.current
     if (down && Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) > 8) down.moved = true
+    if (selectingText) {
+      if (down?.moved) setDrag({ x: Math.min(down.x, at.x), y: Math.min(down.y, at.y), width: Math.abs(at.x - down.x), height: Math.max(2, Math.abs(at.y - down.y)) })
+      return
+    }
     if (picking) {
       if (down?.moved) {
         setHover(undefined)
@@ -235,6 +243,14 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     const down = pointer.current
     pointer.current = undefined
     const at = toPage(e)
+    if (selectingText) {
+      setDrag(undefined)
+      if (down?.moved) {
+        send({ type: "select-text", start: { x: down.x, y: down.y }, end: at })
+        setSelectingText(false)
+      }
+      return
+    }
     if (picking) {
       setDrag(undefined)
       setHover(undefined)
@@ -315,6 +331,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           size="icon-sm"
           disabled={status.state !== "open"}
           onClick={() => {
+            setSelectingText(false)
             setPicking((p) => !p)
             setHover(undefined)
           }}
@@ -324,7 +341,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           {pending ? <Loader2 className="animate-spin" /> : <Crosshair />}
         </Button>
         </div>
-        <span className="truncate px-1 text-center text-xs text-muted-foreground" title={page.url && page.url !== "about:blank" ? page.url : undefined}>
+        <span className="min-w-0 truncate px-1 text-center text-xs text-muted-foreground" title={page.url && page.url !== "about:blank" ? page.url : undefined}>
           {page.url && page.url !== "about:blank" ? page.url : "Please open a site or search for a keyword"}
         </span>
         <div className="flex items-center gap-1">
@@ -369,11 +386,12 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           <div
             ref={surface}
             tabIndex={0}
-            className={cn("relative touch-none bg-white outline-none select-none", picking && "cursor-crosshair")}
+            className={cn("relative touch-none bg-white outline-none select-none", picking && "cursor-crosshair", selectingText && "cursor-text")}
             style={{ width: page.viewport.width * scale, height: page.viewport.height * scale }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            onPointerCancel={() => { pointer.current = undefined; setDrag(undefined) }}
             onPointerLeave={() => picking && !pointer.current && setHover(undefined)}
             onKeyDown={(e) => onKey(e, "down")}
             onKeyUp={(e) => onKey(e, "up")}
@@ -403,17 +421,21 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             open={asking}
             onOpenChange={setAsking}
             picks={askPicks}
+            quote={quote}
+            onRemoveQuote={() => setQuote("")}
             onRemovePick={(id) => setAskPicks((list) => list.filter((r) => r.id !== id))}
             onSend={async (text) => {
-              await ask.onSend(text, askPicks, { url: page.url, title: page.title })
+              const question = quote ? `${text}\n\nSelected text:\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}` : text
+              await ask.onSend(question, askPicks, { url: page.url, title: page.title })
+              setQuote("")
               setAskPicks([])
             }}
             disabled={ask.disabled}
-            answer={ask.answer}
-            onCloseAnswer={ask.onCloseAnswer}
+            replies={ask.replies}
             folder={ask.folder}
           />
         )}
+        {selectingText && <span className="pointer-events-none absolute top-2 rounded-full bg-background px-3 py-1 text-xs shadow">Drag from the start to the end of the text</span>}
         {picks > 0 && (
           <span className="absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground shadow lg:hidden">
             {picks} picked, added to your message
@@ -427,9 +449,10 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "forward" })} aria-label="Forward" title="Forward">
           <ArrowRight />
         </Button>
+        {ask && <Button variant={selectingText ? "default" : "ghost"} size="icon-sm" disabled={!page.canInput || blank} aria-pressed={selectingText} onClick={() => { setPicking(false); setHover(undefined); setSelectingText((active) => !active) }} aria-label="Select text" title="Select text"><Quote /></Button>}
         <form onSubmit={navigate} className="relative min-w-0 flex-1">
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input id="browser-address" aria-label="URL or search keyword" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search Bing or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
+          <Input id="browser-address" aria-label="URL or search keyword" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search the web or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
         </form>
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label="Refresh" title="Refresh">
           <RotateCw />
