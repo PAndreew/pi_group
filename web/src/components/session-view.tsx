@@ -37,6 +37,7 @@ import { BrowserPanel, type BrowserAskProps } from "@/components/browser-panel"
 import { type ElementRef, refImageFile, refLabel, refsPrompt } from "@/lib/element-refs"
 import { MessageBody } from "@/components/message-body"
 import { MemoryRunChip } from "@/components/memory-run-chip"
+import { ProjectMemoryPill } from "@/components/project-memory-pill"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
@@ -57,6 +58,7 @@ import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type Sess
 import { buildRuns, messageText, type Run } from "@/lib/steps"
 import { ConversationHeader } from "@/lib/nav-slot"
 import { useProjects } from "@/lib/projects"
+import { splitProjectMemory } from "@/lib/project-memory"
 import { cn, relativePath } from "@/lib/utils"
 
 const MAX_INLINE_IMAGE = 5 * 1024 * 1024
@@ -70,8 +72,7 @@ function readBase64(file: File) {
   })
 }
 
-function UserBubble({ message, folder }: { message: AgentMessage; folder?: string }) {
-  const text = messageText(message.content)
+function UserBubble({ message, text, memory, onRemoveMemory, folder }: { message: AgentMessage; text: string; memory?: string; onRemoveMemory?: () => void; folder?: string }) {
   // Uploads show from their files (MessageBody); inline copies only when the prompt names no stored image.
   const images = Array.isArray(message.content) && imageRefs(text, folder).length === 0 ? message.content.filter((c: any) => c?.type === "image").map((img: any) => ({ src: `data:${img.mimeType};base64,${img.data}` })) : []
   return (
@@ -80,6 +81,7 @@ function UserBubble({ message, folder }: { message: AgentMessage; folder?: strin
         {(body) => (
           <div className="min-w-0">
             <div className="rounded-2xl rounded-br-sm bg-blue-50 px-3.5 py-2 text-sm text-black">
+              {memory !== undefined && <ProjectMemoryPill memory={memory} onRemove={onRemoveMemory} />}
               <MessageBody text={body} folder={folder} />
               <ImageGallery images={images} />
               <MessageTime at={message.timestamp} />
@@ -227,6 +229,7 @@ function RunView({
   onShare,
   onEdit,
   editBlocked,
+  onRemoveMemory,
   onDelete,
   pendingDelete,
   selfId,
@@ -248,6 +251,7 @@ function RunView({
   /** Absent without write access. */
   onEdit?: (target: EditTarget) => void
   editBlocked?: string
+  onRemoveMemory?: (message: AgentMessage, body: string) => void
   /** Delete one of your own prompts; absent without write access. */
   onDelete?: (message: AgentMessage, text: string) => void
   /** Whether this run's prompt waits to be deleted when the agent finishes. */
@@ -256,7 +260,8 @@ function RunView({
   interactions?: React.ReactNode
 }) {
   const sourceId = `run-${run.key}`
-  const userText = run.user ? messageText(run.user.content) : ""
+  const rawUserText = run.user ? messageText(run.user.content) : ""
+  const { body: userText, memory } = splitProjectMemory(rawUserText)
   const answerText = run.answer
   const answerMessage = run.steps.at(-1)?.message
   const user = run.user
@@ -265,7 +270,7 @@ function RunView({
       {user && (
         <div {...replySource(userText)}>
           <div className={cn(pendingDelete && "opacity-50")}>
-            <UserBubble message={user} folder={folder} />
+            <UserBubble message={user} text={userText} memory={memory} folder={folder} onRemoveMemory={onRemoveMemory && userText.trim() && user.author?.id === selfId && !pendingDelete ? () => onRemoveMemory(user, userText) : undefined} />
           </div>
           {userText && (
             <MessageActions
@@ -275,7 +280,7 @@ function RunView({
               onReply={onReply && (() => onReply({ author: user.author?.username ?? "Unknown author", text: userText, sourceId }))}
               onEdit={onEdit && (() => onEdit({ message: user, text: userText, prompt: true }))}
               editBlocked={onEdit && (user.author?.id !== selfId ? "Only the author can edit this message" : editBlocked)}
-              onDelete={onDelete && user.author?.id === selfId && !pendingDelete ? () => onDelete(user, userText) : undefined}
+              onDelete={onDelete && user.author?.id === selfId && !pendingDelete ? () => onDelete(user, rawUserText) : undefined}
               deletePending={pendingDelete}
             />
           )}
@@ -434,16 +439,36 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
       toast.error((error as Error).message)
     }
   }
+  const removeMemory = async (message: AgentMessage, body: string) => {
+    if (!state) return
+    setSending(true)
+    try {
+      await api.editMessage(sessionKey, {
+        index: state.messages.indexOf(message),
+        timestamp: message.timestamp,
+        expect: messageText(message.content),
+        text: body,
+      })
+      if (editing?.message === message) cancelEdit()
+      refresh()
+      toast.success("Project memory removed from this message")
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSending(false)
+    }
+  }
   const saveEdit = async (target: EditTarget) => {
     const body = text.trim()
     if (!body || !state) return
     setSending(true)
     try {
+      const raw = target.prompt ? messageText(target.message.content) : target.text
       await api.editMessage(sessionKey, {
         index: state.messages.indexOf(target.message),
         timestamp: target.message.timestamp,
-        expect: target.text,
-        text: target.prompt ? replaceReplyBody(target.text, body) : body,
+        expect: raw,
+        text: target.prompt ? splitProjectMemory(raw).prefix + replaceReplyBody(target.text, body) : body,
       })
       cancelEdit()
       refresh()
@@ -627,6 +652,7 @@ export function SessionView({ sessionKey, header, onDeleted }: { sessionKey: str
                 onShare={setForwarding}
                 onEdit={canWrite ? startEdit : undefined}
                 editBlocked={running ? "Wait until the agent has finished" : undefined}
+                onRemoveMemory={canWrite && !running && !sending ? removeMemory : undefined}
                 onDelete={canWrite ? (message, text) => void deletePrompt(message, text) : undefined}
                 pendingDelete={Boolean(run.user && state?.pendingDeletes?.some((d) => d.text === messageText(run.user!.content) && (d.timestamp === undefined || d.timestamp === run.user!.timestamp)))}
                 selfId={user?.id}

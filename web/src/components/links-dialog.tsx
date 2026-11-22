@@ -1,5 +1,5 @@
 import { FileIcon } from "@react-symbols/icons/utils"
-import { Folder, Globe, Link2, Loader2, Search } from "lucide-react"
+import { Folder, Globe, Library, Loader2, Search } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -66,7 +66,7 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85dvh] min-w-0 flex-col sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Link2 className="size-4" /> Links{project ? ` · ${project.name}` : ""}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Library className="size-4" /> Links{project ? ` · ${project.name}` : ""}</DialogTitle>
           <DialogDescription>This project's folders, and the files and web pages mentioned in its conversations.</DialogDescription>
         </DialogHeader>
         <div className="relative">

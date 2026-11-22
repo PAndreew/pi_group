@@ -434,7 +434,12 @@ export interface AppletSpec {
   title: string
   description: string
   fields: AppletField[]
-  actions: { id: string; label: string; prompt: string }[]
+  actions: ({ id: string; label: string } & (
+    | { prompt: string }
+    | { type: "open_url"; url: string }
+    | { type: "copy_text"; text: string }
+    | { type: "reset_form" }
+  ))[]
 }
 
 /** A form an agent designed: each button starts a new session with its filled-in prompt, once approved. */

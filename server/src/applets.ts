@@ -14,8 +14,8 @@ import { inTenant } from "./tenant-context.js";
 
 /*
  * Applets: small forms an agent designs from a closed set of fields, saved for good and opened from
- * the grid icon or /apps/<slug>. Each button fills a prompt template with the form's values and
- * starts a fresh agent session in the applet's folder. Agents propose them through the
+ * the grid icon or /apps/<slug>. Buttons either start an agent session with a filled-in prompt
+ * or perform a built-in browser action. Agents propose them through the
  * propose_applet tool (extensions/applets.mjs); nobody else sees or runs one until its owner (or an
  * admin) approves it, and an approved applet keeps running its approved version while a change waits.
  * See docs/applets.md.
@@ -43,7 +43,13 @@ export const fieldSchema = z.discriminatedUnion("type", [
 export type AppletField = z.infer<typeof fieldSchema>;
 type InputField = Exclude<AppletField, { type: "markdown" }>;
 
-const actionSchema = z.object({ id: fieldId, label: text(60), prompt: text(20_000) }).strict();
+const button = { id: fieldId, label: text(60) };
+const actionSchema = z.union([
+	z.object({ ...button, prompt: text(20_000) }).strict(),
+	z.object({ ...button, type: z.literal("open_url"), url: text(2000).pipe(z.url({ protocol: /^https?$/ })).refine((url) => /^https?:\/\//i.test(url), "Use an absolute HTTP(S) URL") }).strict(),
+	z.object({ ...button, type: z.literal("copy_text"), text: z.string().min(1).max(20_000) }).strict(),
+	z.object({ ...button, type: z.literal("reset_form") }).strict(),
+]);
 const SECTION = /\{\{([#^])([a-zA-Z][a-zA-Z0-9_]*)\}\}([\s\S]*?)\{\{\/\2\}\}/g;
 const VARIABLE = /\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/g;
 
@@ -62,6 +68,7 @@ export const appletSpec = z
 		if (ids.size !== inputs.length) ctx.addIssue({ code: "custom", message: "Field IDs must be unique" });
 		if (new Set(spec.actions.map((a) => a.id)).size !== spec.actions.length) ctx.addIssue({ code: "custom", message: "Action IDs must be unique" });
 		for (const action of spec.actions) {
+			if (!("prompt" in action)) continue;
 			const used = [...action.prompt.matchAll(SECTION)].map((m) => m[2]).concat([...action.prompt.replace(SECTION, "$3").matchAll(VARIABLE)].map((m) => m[1]));
 			for (const id of used) if (!ids.has(id)) ctx.addIssue({ code: "custom", message: `Action “${action.label}” uses {{${id}}}, which is not a field` });
 		}
@@ -374,6 +381,7 @@ export function mountApplets(router: Router, deps: AppletDeps) {
 		const body = z.object({ action: z.string(), values: z.record(z.string(), z.unknown()) }).strict().parse(req.body);
 		const action = applet.spec.actions.find((a) => a.id === body.action);
 		if (!action) throw new HttpError(400, "Unknown action");
+		if (!("prompt" in action)) throw new HttpError(400, "This action runs in the browser, not in an agent session");
 		if (!statSync(applet.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new HttpError(409, "The applet's folder is gone");
 		const values = checkValues(applet.spec, body.values);
 		const root = resolveSafe("");
