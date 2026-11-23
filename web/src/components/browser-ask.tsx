@@ -47,7 +47,8 @@ export function BrowserAsk({
   const body = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (open) input.current?.focus()
+    // Opening with a pick should not cover the browser with the on-screen keyboard.
+    if (open && !matchMedia("(pointer: coarse)").matches) input.current?.focus()
   }, [open])
   // Follow the answer as it streams in.
   useEffect(() => {

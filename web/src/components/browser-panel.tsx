@@ -63,9 +63,9 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const pickingRef = useRef(picking)
   pickingRef.current = picking
   const wheelSum = useRef(0)
-  // While the ask box is open, picks go into it instead of the message box.
+  const floatingPicks = useRef(new Set<string>())
   const onPickRef = useRef(onPick)
-  onPickRef.current = asking ? (ref: ElementRef) => setAskPicks((list) => [...list, ref]) : onPick
+  onPickRef.current = onPick
   const pageRef = useRef(page)
   pageRef.current = page
 
@@ -101,7 +101,13 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         setAsking(true)
       } else if (message.type === "picked") {
         setPending((n) => Math.max(0, n - 1))
-        onPickRef.current({ id: message.id, url: message.url, title: message.title, elements: message.elements, image: message.image })
+        const ref: ElementRef = { id: message.id, url: message.url, title: message.title, elements: message.elements, image: message.image }
+        if (floatingPicks.current.delete(ref.id)) {
+          setAskPicks((list) => [...list, ref])
+          setAsking(true)
+        } else {
+          onPickRef.current(ref)
+        }
       } else if (message.type === "error") {
         setPending(0)
         toast.error(message.message)
@@ -180,8 +186,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   }, [status.state])
 
   const pick = (target: object) => {
+    const id = crypto.randomUUID()
+    // Below lg the browser covers the session composer, so picks go to the floating draft.
+    if (ask && (asking || !matchMedia("(min-width: 64rem)").matches)) floatingPicks.current.add(id)
     setPending((n) => n + 1)
-    send({ type: "pick", id: crypto.randomUUID(), ...target })
+    send({ type: "pick", id, ...target })
   }
   /** Highlight the element `step` layers deeper (or, negative, higher) under the pointer. */
   const layer = (step: number) => {

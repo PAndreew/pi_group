@@ -194,6 +194,7 @@ class SessionBrowser {
 	private searchHistory = new Map<string, string>();
 	private idle?: NodeJS.Timeout;
 	private screencasting = false;
+	private capturingPick = false;
 	private queue = Promise.resolve();
 	closed = false;
 
@@ -220,6 +221,7 @@ class SessionBrowser {
 		this.cdp = await this.context.newCDPSession(this.page);
 		this.cdp.on("Page.screencastFrame", ({ data, sessionId }) => {
 			void this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+			if (this.capturingPick) return;
 			this.frame = Buffer.from(data, "base64");
 			for (const ws of this.viewers.keys()) {
 				// A slow viewer skips frames rather than queueing them.
@@ -261,7 +263,7 @@ class SessionBrowser {
 	}
 
 	private async screencast(on: boolean) {
-		if (on === this.screencasting || !this.cdp) return;
+		if ((on && this.capturingPick) || on === this.screencasting || !this.cdp) return;
 		this.screencasting = on;
 		const viewport = this.page.viewportSize() ?? VIEWPORT;
 		if (on) await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 82, maxWidth: Math.ceil(viewport.width * 1.5), maxHeight: Math.ceil(viewport.height * 1.5) }).catch(() => {});
@@ -392,7 +394,18 @@ class SessionBrowser {
 		const x = Math.max(0, pick.box.x - pad);
 		const y = Math.max(0, pick.box.y - pad);
 		const clip = { x, y, width: Math.min(viewport.width, pick.box.x + pick.box.width + pad) - x, height: Math.min(viewport.height, pick.box.y + pick.box.height + pad) - y };
-		const image = clip.width > 2 && clip.height > 2 ? (await this.page.screenshot({ clip, type: "png" })).toString("base64") : undefined;
+		let image: string | undefined;
+		if (clip.width > 2 && clip.height > 2) {
+			// Chromium can stream the temporary cropped surface. Keep showing the last full frame.
+			this.capturingPick = true;
+			try {
+				await this.screencast(false);
+				image = (await this.page.screenshot({ clip, type: "png" })).toString("base64");
+			} finally {
+				this.capturingPick = false;
+				await this.screencast(this.viewers.size > 0);
+			}
+		}
 		return { url: this.page.url(), title: await this.page.title().catch(() => ""), ...pick, image };
 	}
 
