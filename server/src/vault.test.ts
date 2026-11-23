@@ -72,6 +72,7 @@ test("people manage their own and their projects' vault secrets; an agent reads 
 		const agent = (suffix: string, credential = bridge.BEEZY_INTERACTION_TOKEN) => fetch(`${base}/vault-bridge/${encodeURIComponent("pi:s1")}${suffix}`, { headers: { Authorization: `Bearer ${credential}` } }).then(async (r) => ({ status: r.status, body: await r.json() }));
 		assert.deepEqual((await agent("")).body.secrets.map((s: { key: string; description: string; value?: string }) => [s.key, s.description, s.value]), [["GITHUB_TOKEN", "GitHub for acme", undefined]]);
 		assert.deepEqual((await agent("/GITHUB_TOKEN")).body, { key: "GITHUB_TOKEN", value: "ghp_anna", scope: "personal" });
+		assert.deepEqual((await agent("?values=1")).body.secrets, [{ key: "GITHUB_TOKEN", scope: "personal", value: "ghp_anna" }], "the extension gets all values, to fill and redact them");
 		assert.equal((await agent("/GITHUB_TOKEN", "forged")).status, 403);
 
 		assert.equal((await call(annaCookie, "DELETE", "/vault/secrets/GITHUB_TOKEN")).status, 200);

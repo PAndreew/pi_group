@@ -253,6 +253,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(updates().length, 0, "private sessions do not update memory");
 		await memoryControls.updateNow(soloMeta.key);
 		assert.deepEqual(updates().map(p => p.id), [soloMeta.id], "the update runs in the session itself");
+		assert.ok(!adapter.live(soloMeta.id)!.state.messages.some((m: any) => JSON.stringify(m).includes(MEMORY_UPDATE_TAG)), "the update turn is removed from the session afterwards");
 		assert.ok(!memoryControls.pending(soloMeta.key), "the update prompt is not activity");
 		assert.equal(store.session(soloMeta.key)!.updatedAt, "2020-01-01T00:00:00.000Z", "a background update does not move the session up");
 		const status = (await call("chat-admin", "GET", endpoint)).body;
@@ -282,6 +283,9 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(store.session(soloMeta.key)!.keepLive, true);
 		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "read public context" });
 		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>") && p.text.includes("`deploy` — Deploy") && p.text.includes("Beezy API server")), "sessions get the master");
+		await until(() => !adapter.live(privateSession.id)!.state.running, "private session idle");
+		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "again" });
+		assert.ok(!prompts.some(p => p.id === privateSession.id && p.text.endsWith("again") && p.text.includes("<project-memory>")), "memory is put in front of a prompt at most once a day");
 		// The pi extension reads and updates topics over the session's bridge, with the owner's access.
 		const memoryBridge = (key: string, token: string, body: object, route = "") => fetch(`${base}/memory-bridge/${encodeURIComponent(key)}${route}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
 		const token = (key: string) => interactionEnvironment(key).BEEZY_INTERACTION_TOKEN;

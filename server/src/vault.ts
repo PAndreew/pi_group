@@ -100,7 +100,11 @@ export function vaultRoutes(): Router {
 	router.get("/vault-bridge/:key", async (req, res) => {
 		const { personal, project } = agentNamespaces(String(req.params.key), req.headers.authorization);
 		const [own, shared] = await Promise.all([platform().secrets.list(personal), project ? platform().secrets.list(project) : []]);
-		res.json({ secrets: [...own.map((s) => ({ ...s, scope: "personal" })), ...shared.map((s) => ({ ...s, scope: "project" }))] });
+		const secrets = [...own.map((s) => ({ ...s, scope: "personal" as const })), ...shared.map((s) => ({ ...s, scope: "project" as const }))];
+		if (req.query.values !== "1") return void res.json({ secrets });
+		// For the agent's extension only: it puts values into tool calls and redacts them from tool results.
+		res.setHeader("Cache-Control", "no-store");
+		res.json({ secrets: await Promise.all(secrets.map(async (s) => ({ key: s.key, scope: s.scope, value: (await platform().secrets.get(s.scope === "personal" ? personal : project!, s.key).catch(() => ({ value: "" }))).value }))) });
 	});
 	/** One value; personal first unless `?scope=project` asks for the project's. */
 	router.get("/vault-bridge/:key/:secret", async (req, res) => {

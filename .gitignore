@@ -16,3 +16,4 @@ __pycache__/
 *.pyc
 lipread/.venv/
 lipread/models/
+.bloat-audit/

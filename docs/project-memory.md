@@ -8,7 +8,7 @@ Memory updates itself; there is no schedule to set. When a session someone worke
 
 **Group chats** take part too; the last message sent marks their activity. A chat with pi in it uses its pi session, timed by that session's provider: the session gets the update prompt plus what people said since pi's last turn (pi then counts as having seen it), queued like an @pi turn so nothing interleaves, and no reply is posted to the chat. A chat without pi has no cache to catch: `MEMORY_IDLE_MINUTES` (default 15) after its last message, a short-lived hidden worker reads the messages since the chat's last update (last 40,000 characters) and is removed afterwards. Every member must have project access.
 
-Only sessions and chats with activity since the server started are considered: old ones are never swept up, and after a restart they take part again once someone works in them. Private sessions, applets and sessions whose viewers lack project access never update memory. The update prompt does not count as activity, does not move the session up the list and does not title it.
+Only sessions and chats with activity since the server started are considered: old ones are never swept up, and after a restart they take part again once someone works in them. Private sessions, applets and sessions whose viewers lack project access never update memory. The update prompt does not count as activity, does not move the session up the list and does not title it. Once the update has run, its prompt and everything the agent did for it are deleted from the session (after the next run when someone prompted meanwhile), so housekeeping does not pile up in the context.
 
 ## Topics and the overview
 
@@ -19,7 +19,7 @@ Memory is a short **overview** plus a set of **topics**, one Markdown file each,
 - `MEMORY.md`: the master the server **generates** from the overview and the topic headers. Never edit it by hand.
 - `memory/archives/<id>.json.gz`: losslessly compressed session metadata and messages. Harness originals are retained as well; archiving is not deletion.
 
-**What agents get.** Only the master is put in front of the first prompt of each agent runtime, and again after it changes. This also works for sessions started in linked repositories. The master tells the agent to read only the topics relevant to its task, with the `project_memory` tool, which pi and pi durable sessions both have:
+**What agents get.** Only the master is put in front of a prompt, at most once per rolling 24 hours per session (memory updates never get it; their prompt lists the topics). Changes made meanwhile reach the agent at the next injection or through `project_memory`. This also works for sessions started in linked repositories. The master tells the agent to read only the topics relevant to its task, with the `project_memory` tool, which pi and pi durable sessions both have:
 - `topics` reads whole topics by name;
 - `query` finds matching lines across all topics;
 - with neither, it lists the topics.

@@ -22,7 +22,7 @@ export function SkillDropup({ value, sessionKey, onChange }: { value: string; se
 
   return (
     <div
-      className="absolute bottom-full left-0 z-20 mb-1 flex max-h-64 w-full flex-col rounded-md border bg-popover shadow-md"
+      data-suggestions className="absolute bottom-full left-0 z-20 mb-1 flex max-h-64 w-full flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault()

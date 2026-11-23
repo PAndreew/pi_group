@@ -7,9 +7,9 @@ The **Secrets of** picker at the top switches between your **Personal** secrets 
 Agents get two tools:
 
 - `vault_list_secrets` returns the keys and descriptions of the session owner's personal secrets and the session's project secrets, each marked `personal` or `project`. It never returns values.
-- `vault_get_secret` returns one value by its key. When a key exists in both, the personal one wins unless the agent passes `scope: "project"`.
+- `vault_get_secret` checks that a key exists and returns the placeholder to use for it, never the value. When a key exists in both, the personal one wins unless the agent passes `scope: "project"`.
 
-The UI hides values returned by `vault_get_secret`, but the agent's session history still contains them. Anyone the session is shared with can read that history, so share sessions that use secrets only with people who may see those secrets.
+**Placeholders.** Agents never see secret values. They write `{{vault:KEY}}` (or `{{vault:project:KEY}}`) wherever a value belongs: in a file they write or edit, in a bash command, in any tool argument. The pi extension (`server/extensions/vault.mjs`, helpers in `extensions/lib/vault-redact.mjs`) fills the values in just before the tool runs; the stored tool call keeps the placeholder. A placeholder without a matching secret blocks the call. In every tool result (file reads, command output, edit diffs), each known value is turned back into its placeholder, so an agent that opens a filled file sees `TOKEN={{vault:API_TOKEN}}` and can edit it as shown. Values are refreshed every 30 seconds from `GET /api/vault-bridge/:key?values=1`. Values shorter than 6 characters are not redacted (they would match ordinary text), and output streamed live to the UI while a command runs is not redacted; only pi RPC sessions have the vault tools.
 
 ## Who can see which secrets
 

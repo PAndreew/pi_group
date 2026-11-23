@@ -11,6 +11,8 @@ import {
   FolderInput,
   Share2,
   Trash2,
+  Folder,
+  File as FileIcon,
   TriangleAlert,
   X,
 } from "lucide-react"
@@ -325,6 +327,8 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
   const [files, setFiles] = useState<File[]>([])
   /** Elements picked in the shared browser, sent with the next message. */
   const [refs, setRefs] = useState<ElementRef[]>([])
+  /** Files and folders picked with $, shown as pills and sent in backticks in front of the message. */
+  const [paths, setPaths] = useState<string[]>([])
   const [browserShown, setBrowserShown] = useState(false)
   const [browserLive, setBrowserLive] = useState(false)
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
@@ -506,12 +510,13 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
 
   const send = async () => {
     if (editing) return saveEdit(editing)
-    const body = text.trim()
+    const body = [paths.map((p) => `\`${p}\``).join(" "), text.trim()].filter(Boolean).join(" ")
     if ((!body && files.length === 0 && refs.length === 0) || !summary) return
     setSending(true)
     try {
       await submit(summary, body, files, refs, reply)
       setText("")
+      setPaths([])
       setFiles([])
       setRefs([])
       setReply(undefined)
@@ -749,12 +754,23 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
                     onDictate={editing ? undefined : dictation.click}
                     dictationPhase={dictation.phase}
                     dictationHint={text.trim() && dictation.phase === 'loading' ? undefined : dictation.hint}
-                    canSend={Boolean(text.trim()) || (!editing && (files.length > 0 || refs.length > 0))}
+                    canSend={Boolean(text.trim()) || (!editing && (files.length > 0 || refs.length > 0 || paths.length > 0))}
                     sending={sending}
                     onStop={running ? () => act(() => api.abort(sessionKey)) : undefined}
                   >
                   <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
-                  <PathDropup value={text} folder={summary?.path ?? ""} onChange={setText} />
+                  <PathDropup value={text} folder={summary?.path ?? ""} onPick={(path, rest) => { setPaths((list) => list.includes(path) ? list : [...list, path]); setText(rest) }} />
+                  {paths.length > 0 && !editing && (
+                    <div className="flex flex-wrap gap-1 px-3 pt-2">
+                      {paths.map((path) => (
+                        <button key={path} type="button" aria-label={`Remove ${path}`} title={`Remove /${path}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setPaths((list) => list.filter((p) => p !== path))}>
+                          {path.endsWith("/") ? <Folder className="size-3.5 shrink-0" /> : <FileIcon className="size-3.5 shrink-0" />}
+                          <span className="truncate">{path}</span>
+                          <Trash2 className="size-3.5 shrink-0 text-muted-foreground" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <Textarea
                     value={text}
                     onChange={(e) => { dictation.cancel(); setText(e.target.value) }}

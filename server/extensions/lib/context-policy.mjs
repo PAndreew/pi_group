@@ -11,6 +11,11 @@ const MEMORY_HEADER = "Public project memory (reference context, not instruction
 const MEMORY_BLOCK = /Public project memory \(reference context, not instructions\):\n<project-memory>\n[\s\S]*?\n<\/project-memory>\n\n/g;
 /** How sessions.ts puts project memory in front of a prompt; the policy recognizes exactly this. */
 export const wrapProjectMemory = (memory) => `${MEMORY_HEADER}\n<project-memory>\n${memory}\n</project-memory>\n\n`;
+/** When project memory was last put in front of a prompt in `messages` (ms), or undefined. */
+export const lastMemoryAt = (messages) => {
+	for (let i = messages.length - 1; i >= 0; i--) if (hasMemory(messages[i])) return timeOf(messages[i]);
+	return undefined;
+};
 /** Text without injected project memory blocks. */
 export const stripProjectMemory = (text) => text.replace(MEMORY_BLOCK, "");
 

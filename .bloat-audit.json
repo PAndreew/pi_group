@@ -1,0 +1,23 @@
+{
+  "exclude": [
+    "data",
+    "workspace",
+    "uploads",
+    "models",
+    "lipread",
+    "docs",
+    "public",
+    "dist"
+  ],
+  "node_packages": [
+    "server",
+    "web",
+    "vault"
+  ],
+  "timeout": 600,
+  "tools": {
+    "jscpd": {
+      "cmd": "jscpd {root}/server/src {root}/server/extensions {root}/web/src {root}/vault/src {root}/gateway --silent --min-tokens 70 --reporters json,consoleFull --output {out}/jscpd --ignore {excl_glob}"
+    }
+  }
+}

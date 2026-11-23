@@ -18,7 +18,7 @@ import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
 import { isConsolidating, mountMemory, noteSessionActivity, projectMemory } from "./memory.js";
 import { mountLinks } from "./links.js";
-import { wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
+import { lastMemoryAt, wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
@@ -68,6 +68,8 @@ export function involved(user: User, meta: SessionMeta) {
 	const ledger = meta.authorship;
 	return Boolean(ledger && (Object.values(ledger.authors).some((a) => a.id === user.id) || ledger.pending.some((p) => p.author.id === user.id)));
 }
+
+const MEMORY_REPEAT_MS = 24 * 3_600_000;
 
 export interface RunOutcome {
 	kind: "finished" | "error" | "aborted";
@@ -373,7 +375,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ model });
 	});
 
-	const loadedMemory = new WeakMap<object, string>();
+	/** When this runtime last got project memory (also before the prompt shows up in its messages). */
+	const loadedMemory = new WeakMap<object, number>();
 	/** `background` prompts (memory updates) neither title the session nor move it up the list. */
 	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput, options: { background?: boolean } = {}) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
@@ -406,8 +409,10 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const live = await adapter.open(meta.id, meta.cwd, useShared ? null : profile ?? null);
 		hub.attach(meta.key, live);
 		if (meta.archivedAt) throw new HttpError(409, "Restore this archived session before sending messages");
-		const memory = meta.memory ? "" : projectMemory(meta, user);
-		const injectMemory = Boolean(memory && loadedMemory.get(live) !== memory);
+		// Project memory goes in front of a prompt at most once per rolling 24 hours, so it does not pile up in the context.
+		const memory = meta.memory || options.background ? "" : projectMemory(meta, user);
+		const lastInjected = Math.max(lastMemoryAt(live.state.messages) || 0, loadedMemory.get(live) ?? 0);
+		const injectMemory = Boolean(memory && Date.now() - lastInjected > MEMORY_REPEAT_MS);
 		const input = { ...body, text: injectMemory ? wrapProjectMemory(memory) + body.text : body.text, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
@@ -418,7 +423,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			if (selectedModel && (live.state.model?.provider !== selectedModel.provider || live.state.model?.id !== selectedModel.id)) await live.setModel(selectedModel.provider, selectedModel.id);
 			await live.prompt(input);
 			if (useShared) hub.broadcast(meta.key, { type: "notify", level: "info", text: `Using workspace fallback: ${selectedModel!.provider}/${selectedModel!.id}` });
-			if (injectMemory) loadedMemory.set(live, memory);
+			if (injectMemory) loadedMemory.set(live, Date.now());
 		} catch (error) {
 			ledger.pending = ledger.pending.filter((p) => p.id !== promptId);
 			save();
@@ -525,6 +530,36 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (message.role === "user" && stored.messages.findIndex((m) => m.role === "user") === target.index) {
 			const firstUser = messages.find((m) => m.role === "user");
 			current.firstMessage = firstUser ? firstLine(messageText(firstUser)) : undefined;
+		}
+		saveNow();
+		const state: SessionState = { messages, partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: false, name: current.name ?? stored.name };
+		hub.broadcast(meta.key, { type: "state", state: hub.state(meta.key, state) });
+		return true;
+	};
+
+	/**
+	 * Remove the last turn whose prompt contains `marker`: the prompt and everything the agent did for it, up to
+	 * the next prompt. False when the agent is running (try again later); harnesses that cannot delete keep it.
+	 */
+	const dropTurn = async (meta: SessionMeta, marker: string) => {
+		const adapter = adapterOf(meta.harness);
+		if (!adapter.deleteMessage) return true;
+		if (adapter.live(meta.id)?.state.running) return false;
+		const stored = await adapter.readSession(meta.id, meta.cwd);
+		if (!stored) return false;
+		const start = stored.messages.findLastIndex((m) => m.role === "user" && messageText(m).includes(marker));
+		if (start < 0) return true;
+		let end = stored.messages.findIndex((m, i) => i > start && m.role === "user");
+		if (end < 0) end = stored.messages.length;
+		if (adapter.live(meta.id)?.state.running) return false;
+		await adapter.live(meta.id)?.close();
+		for (let i = end - 1; i >= start; i--) await adapter.deleteMessage(meta.id, meta.cwd, i);
+		const current = store.session(meta.key)!;
+		const messages = stored.messages.filter((_, i) => i < start || i >= end);
+		let remaining = stored.messages;
+		for (let i = end - 1; i >= start; i--) {
+			if (current.authorship) dropAuthor(current.authorship, remaining, i);
+			remaining = remaining.filter((_, j) => j !== i);
 		}
 		saveNow();
 		const state: SessionState = { messages, partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: false, name: current.name ?? stored.name };
@@ -1097,6 +1132,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		sessionProvider: (meta) => byId.get(meta.harness)?.live(meta.id)?.state.model?.provider ?? store.userById(meta.ownerId ?? "")?.sessionDefaults?.model.provider,
 		providers: async (user) => [...new Set((await adapterOf(await harnessFor(user)).listModels()).map((m) => m.provider))],
 		chatTurn: (chatId, since, run) => chats.memoryTurn(chatId, since, run),
+		dropTurn,
 	});
 	mountJobs(router, {
 		...chatDeps,

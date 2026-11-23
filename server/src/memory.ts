@@ -56,6 +56,8 @@ export interface MemoryDeps extends ChatDeps {
  sessionProvider: (meta: SessionMeta) => string | undefined;
  /** Providers of the models agents can use, for the cache settings. */
  providers: (user: User) => Promise<string[]>;
+ /** Remove the last turn whose prompt contains `marker`; false when it has to wait (agent running). */
+ dropTurn: (meta: SessionMeta, marker: string) => Promise<boolean>;
  /** Run a chat memory update as one of the chat's turns (see mountChats). */
  chatTurn: (chatId: string, since: string | undefined, run: (unseen: string, recent: ChatMessage[]) => Promise<void>) => Promise<void>;
 }
@@ -216,6 +218,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
  deps.onRun((key, outcome) => {
   const waiter = waiters.get(key);
   if (waiter) { waiters.delete(key); waiter(outcome); return; }
+  if (untidy.has(key)) void setTimeout(() => void tidy(key), 0);
   // A run ended: the quiet period starts now.
   if (timers.has(key)) schedule(key);
   const chat = chatOfSession(key);
@@ -231,7 +234,17 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
   try { await deps.promptSession(meta, user, { text }, { background: true }); }
   catch (error) { waiters.delete(meta.key); throw error; }
   const outcome = await finished;
+  // The update is housekeeping: once memory is written, its prompt and work leave the conversation.
+  await tidy(meta.key);
   if (outcome.kind !== "finished") throw new Error(`Memory update ${outcome.kind}`);
+ };
+ /** Sessions whose update turn still has to be removed (they were busy again when it ended). */
+ const untidy = new Set<string>();
+ const tidy = async (key: string) => {
+  const meta = store.session(key);
+  if (!meta || meta.deleted) return void untidy.delete(key);
+  try { if (await deps.dropTurn(meta, MEMORY_UPDATE_TAG)) untidy.delete(key); else untidy.add(key); }
+  catch (error) { untidy.delete(key); console.error(`Removing the memory update from ${key} failed:`, (error as Error).message); }
  };
  const eligible = (s: SessionMeta | undefined): s is SessionMeta => Boolean(s && !s.deleted && !s.archivedAt && !s.memoryPrivate && !s.memory && !s.applet && !chatOfSession(s.key) && !deps.isDeleting(s.key));
 
