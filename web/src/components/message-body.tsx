@@ -1,12 +1,13 @@
 import { FileIcon } from "@react-symbols/icons/utils"
 import { Share } from "lucide-react"
 import { useContext } from "react"
+import { BrowserReferenceCards } from "@/components/browser-reference-cards"
 import { ImageGallery } from "@/components/image-gallery"
 import { Markdown } from "@/components/markdown"
 import { WebLink } from "@/components/web-link"
 import { api } from "@/lib/api"
 import { fileParts, isVideo, mediaRefs, withoutAttachmentList } from "@/lib/attachments"
-import { withoutRefDetails } from "@/lib/element-refs"
+import { splitBrowserRefs } from "@/lib/element-refs"
 import { useMissingFiles } from "@/lib/missing-files"
 import { NavContext } from "@/lib/nav"
 import { linkify, parseShared } from "@/lib/shared"
@@ -70,12 +71,24 @@ function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
 export function MessageBody({ text, folder, tinted }: { text: string; folder?: string; tinted?: boolean }) {
   const shared = parseShared(text)
   if (!shared) {
-    const images = mediaRefs(text, folder).map((path) => ({ src: api.rawUrl(path), name: path.split("/").pop(), download: api.downloadUrl(path), video: isVideo(path) }))
+    const { text: message, pages } = splitBrowserRefs(text)
+    const body = withoutAttachmentList(message)
+    const names = new Set(pages.flatMap((page) => page.picks.map((pick) => pick.screenshot)))
+    const screenshots = new Map<string, string>()
+    const images = mediaRefs(message, folder).flatMap((path) => {
+      const name = path.split("/").pop()!
+      if (names.has(name)) {
+        screenshots.set(name, path)
+        return []
+      }
+      return [{ src: api.rawUrl(path), name, download: api.downloadUrl(path), video: isVideo(path) }]
+    })
     return (
       <>
-        <div className="whitespace-pre-wrap break-words">
-          <TextWithLinks text={withoutRefDetails(withoutAttachmentList(text))} folder={folder} />
-        </div>
+        {body && <div className="whitespace-pre-wrap break-words">
+          <TextWithLinks text={body} folder={folder} />
+        </div>}
+        <BrowserReferenceCards pages={pages} screenshots={screenshots} />
         <ImageGallery images={images} />
       </>
     )

@@ -49,11 +49,49 @@ export function refsPrompt(refs: ElementRef[], images: (string | undefined)[]) {
   return lines.join("\n")
 }
 
-/** The message as people read it: the picks without the HTML the model gets. */
-export function withoutRefDetails(text: string) {
-  const start = text.indexOf(HEADER)
-  if (start < 0) return text
-  const end = text.indexOf("\n\n", start)
-  const block = text.slice(start, end < 0 ? undefined : end)
-  return text.slice(0, start) + block.split("\n").filter((line) => !line.startsWith("     `")).join("\n") + (end < 0 ? "" : text.slice(end))
+interface DisplayPick {
+  screenshot?: string
+  elements: { selector: string; text?: string; origin?: string; bounds: string }[]
+}
+
+export interface ReferencePage {
+  url: string
+  title?: string
+  picks: DisplayPick[]
+}
+
+/** Read the persisted prompt format (including older messages) without changing what the agent sees. */
+export function splitBrowserRefs(text: string): { text: string; pages: ReferencePage[] } {
+  const unchanged = { text, pages: [] }
+  if (!text.includes(HEADER)) return unchanged
+  const paragraphs = text.split(/\r?\n\r?\n/)
+  const index = paragraphs.findLastIndex((part) => part.split(/\r?\n/, 1)[0] === HEADER)
+  if (index < 0) return unchanged
+
+  const pages = new Map<string, ReferencePage>()
+  let pick: DisplayPick | undefined
+  let number = 0
+  for (const line of paragraphs[index].split(/\r?\n/).slice(1)) {
+    const shot = /, screenshot (picked-\d+-\d+(?: \(\d+\))?\.png):$/.exec(line)
+    const page = /^(\d+)\. On (\S+)(?: \((.*)\))?:$/.exec(shot ? `${line.slice(0, shot.index)}:` : line)
+    if (page) {
+      if (Number(page[1]) !== ++number || (pick && !pick.elements.length)) return unchanged
+      const [, , url, title] = page
+      const group = pages.get(url) ?? { url, title, picks: [] }
+      pages.set(url, group)
+      pick = { screenshot: shot?.[1], elements: [] }
+      group.picks.push(pick)
+      continue
+    }
+    if (!pick) return unchanged
+    // The original HTML can contain backticks; it is never rendered in the card.
+    if (pick.elements.length && line.startsWith("     `")) continue
+    const element = /^   - `(.*?)`(?: "(.*)")?(?: \((.*)\))? at (-?\d+,-?\d+ \d+×\d+)$/.exec(line)
+    if (!element) return unchanged
+    const [, selector, label, origin, bounds] = element
+    pick.elements.push({ selector, text: label, origin, bounds })
+  }
+  if (!pick?.elements.length) return unchanged
+  paragraphs.splice(index, 1)
+  return { text: paragraphs.join("\n\n"), pages: [...pages.values()] }
 }

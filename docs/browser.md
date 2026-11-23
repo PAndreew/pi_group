@@ -26,7 +26,7 @@ Referenced page elements (picked in the shared browser):
      `<button data-testid="save" class="btn">Save</button>`
 ```
 
-The chat shows this block without the HTML lines.
+The chat shows a card for each source page, with the picked text and a link to each saved screenshot. Expand **Details** to see selectors, bounds, and source locations. The model still receives the full block.
 
 **Source locations** come from whichever of these the page provides, in order:
 - `data-insp-path` attributes from [code-inspector-plugin](https://github.com/zh-lx/code-inspector), the most reliable option. Add it to your Vite, webpack or Next.js config in development.
