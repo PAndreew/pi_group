@@ -8,10 +8,16 @@ import { activeTenant, setActiveTenant } from "@/lib/tenant"
 interface AuthValue {
   user: User | null
   loading: boolean
+  /** While loading: still trying, or the server could not be reached and a retry is scheduled. */
+  connection: Connection
+  /** Retry reaching the server now instead of waiting for the next attempt. */
+  retry: () => void
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   saveDefaults: (defaults: SessionDefaults) => Promise<void>
 }
+
+export type Connection = { state: "connecting" } | { state: "offline"; retryAt: number; attempt: number; reason: string }
 
 const AuthContext = createContext<AuthValue | null>(null)
 // React StrictMode replays mount effects; a notification must switch only once.
@@ -29,7 +35,18 @@ function rememberedUser(): User | null {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(rememberedUser)
-  const [loading, setLoading] = useState(true)
+  // A remembered user renders at once while /me revalidates in the background; only a first
+  // visit (or a notification switching tenants) waits for the server.
+  const [loading, setLoading] = useState(() => {
+    const target = new URLSearchParams(window.location.search).get("tenant")
+    return !rememberedUser() || Boolean(target && target !== activeTenant())
+  })
+  const [connection, setConnection] = useState<Connection>({ state: "connecting" })
+  const [attempt, setAttempt] = useState(0)
+  const retry = useCallback(() => {
+    setConnection({ state: "connecting" })
+    setAttempt((n) => n + 1)
+  }, [])
 
   useEffect(() => {
     if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
@@ -38,6 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let redirecting = false
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
     api
       .me()
       .then(async ({ user, tenantId }) => {
@@ -68,13 +87,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         setUser(user)
+        if (!redirecting) setLoading(false)
       })
       .catch((error) => {
-        // Offline or the server is restarting: keep the remembered user; only a 401 signs out.
-        if (error instanceof ApiError && error.status === 401) setUser(null)
-        else if (!rememberedUser()) setUser(null)
+        if (cancelled) return
+        // Only a 401 signs out. Offline or the server restarting: keep the remembered user, or
+        // (first visit) keep the splash up and try again with backoff instead of showing a login
+        // form that cannot work either.
+        if (error instanceof ApiError && error.status === 401) {
+          setUser(null)
+          setLoading(false)
+        } else if (rememberedUser()) setLoading(false)
+        else {
+          const delay = Math.min(2000 * 2 ** attempt, 15_000)
+          const reason = !(error instanceof ApiError) ? "No answer from the server." : error.status >= 500 ? `The server isn't responding (${error.status}).` : `The server answered ${error.status}.`
+          setConnection({ state: "offline", retryAt: Date.now() + delay, attempt: attempt + 1, reason })
+          timer = setTimeout(() => setAttempt((n) => n + 1), delay)
+        }
       })
-      .finally(() => { if (!redirecting) setLoading(false) })
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [attempt])
+
+  // Coming back online or to the front: retry at once.
+  useEffect(() => {
+    if (!loading || connection.state !== "offline") return
+    const now = () => document.visibilityState === "visible" && retry()
+    window.addEventListener("online", now)
+    document.addEventListener("visibilitychange", now)
+    return () => {
+      window.removeEventListener("online", now)
+      document.removeEventListener("visibilitychange", now)
+    }
+  }, [loading, connection.state, retry])
+
+  useEffect(() => {
     const onUnauthorized = () => setUser(null)
     window.addEventListener("pi-group:unauthorized", onUnauthorized)
     const onStorage = (event: StorageEvent) => {
@@ -108,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
 
-  return <AuthContext.Provider value={{ user, loading, login, logout, saveDefaults }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, loading, connection, retry, login, logout, saveDefaults }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

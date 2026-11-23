@@ -77,14 +77,26 @@ function setCookie(res: Response, token: string, maxAgeSec: number) {
 	res.setHeader("Set-Cookie", parts.join("; "));
 }
 
-/** Attach `req.user` when the cookie maps to a live login. */
-export function authenticate(req: Request, _res: Response, next: NextFunction) {
+/** A login that is used is extended to the full TTL again, at most once per this interval. */
+const RENEW_EVERY_MS = 24 * 3600_000;
+
+/**
+ * Attach `req.user` when the cookie maps to a live login. Logins slide: whoever keeps using the
+ * app is never signed out by the TTL, only after LOGIN_TTL_DAYS without a single request.
+ */
+export function authenticate(req: Request, res: Response, next: NextFunction) {
 	const token = readCookie(req, COOKIE);
 	if (token) {
 		const login = store.data.logins.find((l) => l.tokenHash === sha256(token));
 		if (login && login.expiresAt > Date.now()) {
 			req.user = store.userById(login.userId);
 			req.login = login;
+			const ttlMs = config.loginTtlDays * 86400_000;
+			if (req.user && login.expiresAt - Date.now() < ttlMs - RENEW_EVERY_MS) {
+				login.expiresAt = Date.now() + ttlMs;
+				save();
+				setCookie(res, token, ttlMs / 1000);
+			}
 		}
 	}
 	if (req.user) {

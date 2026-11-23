@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Library, Loader2, LogOut, Monitor, Moon, PanelLeft, Sun, Users } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Library, LogOut, Monitor, Moon, PanelLeft, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -15,6 +15,7 @@ import { ChatSearchBox } from "@/components/chat-search-box"
 import { FilePreviewDialog, FilePreviewPanel, useLastEdit } from "@/components/file-preview-panel"
 import { ProjectSwitcher } from "@/components/project-bar"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
+import { Splash } from "@/components/splash"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { ChatSearchProvider } from "@/lib/chat-search"
 import { NavSlotContext } from "@/lib/nav-slot"
@@ -140,6 +141,9 @@ function Workspace() {
   const notifications = useRunNotifications(route.session, route.chat)
   const [newFolder, setNewFolder] = useState<string>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Desktop sidebar: open by default, the header icon hides it; remembered per browser.
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem("pi-group:sidebar") !== "0")
+  const toggleSidebar = () => setSidebarOpen((open) => { localStorage.setItem("pi-group:sidebar", open ? "0" : "1"); return !open })
   const [selectSessions, setSelectSessions] = useState(false)
   useEffect(() => setDrawerOpen(false), [route.chat, route.session, route.file, route.app])
   const [creating, setCreating] = useState(false)
@@ -215,7 +219,7 @@ function Workspace() {
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
           <div className="flex shrink-0 items-center gap-1">
-            <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => !wide && setDrawerOpen(true)}><PanelLeft /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label={wide ? (sidebarOpen ? "Hide sidebar" : "Show sidebar") : "Open navigation"} title={wide ? (sidebarOpen ? "Hide sidebar" : "Show sidebar") : undefined} onClick={() => (wide ? toggleSidebar() : setDrawerOpen(true))}><PanelLeft /></Button>
             <Button variant="ghost" size="icon-sm" aria-label="Project links" title="Project links" onClick={() => setLinksOpen(true)}><Library /></Button>
           </div>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
@@ -275,7 +279,7 @@ function Workspace() {
         </Sheet>
 
         <div className="flex min-h-0 flex-1">
-          {wide && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="w-64 shrink-0"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
+          {wide && sidebarOpen && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="w-64 shrink-0"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
           {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex lg:hidden 2xl:flex 2xl:w-72" />}
           <main className={`min-h-0 min-w-0 flex-1 ${inside ? "overflow-hidden" : "overflow-visible"}`}>
             {route.chat ? (
@@ -323,13 +327,8 @@ function Workspace() {
 }
 
 function Gate() {
-  const { user, loading } = useAuth()
-  if (loading)
-    return (
-      <div className="flex h-dvh items-center justify-center">
-        <Loader2 className="animate-spin text-muted-foreground" />
-      </div>
-    )
+  const { user, loading, connection, retry } = useAuth()
+  if (loading) return <Splash connection={connection} onRetry={retry} />
   return user ? (
     <ProjectsProvider>
       <ChatSearchProvider>

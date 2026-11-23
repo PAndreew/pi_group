@@ -65,7 +65,9 @@ export function Home({ selectSessions }: { selectSessions?: boolean }) {
   return (
     <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col lg:max-w-none">
       <ChatList key={project?.id} className="min-h-0 flex-1" requests selectSessions={selectSessions} />
-      <div data-chat-composer className="relative grid gap-1 p-2 sm:p-3">
+      <div data-chat-composer className="relative p-2 sm:p-3">
+        {/* Same width as the composer inside a session (max-w-3xl). */}
+        <div className="relative mx-auto grid w-full max-w-3xl gap-1">
         {recent.length > 0 && !overlay && (
           <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-1" aria-label="Recent folders">
             {recent.map((f) => (
@@ -118,6 +120,7 @@ export function Home({ selectSessions }: { selectSessions?: boolean }) {
           }}
         />
         <ComposerTools folder={folder} onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}${command}`)} />
+        </div>
       </div>
     </div>
   )

@@ -312,6 +312,8 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
   const { uploadFolder } = useProjects()
   const interactions = useInteractions(sessionKey)
   const { state, connected, deletedBy, browser } = useSessionStream(sessionKey)
+  // Short drops (back from the background, a server restart) heal silently; only say so if it lasts.
+  const reconnecting = useLasting(!connected, 2500)
   const [summary, setSummary] = useState<SessionSummary>()
   const [models, setModels] = useState<ModelInfo[]>([])
   /** Steps modal of one run; `step` is the expanded step, null shows just the grid. */
@@ -585,7 +587,7 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
               {summary && <span>· {summary.harness}</span>}
               {summary?.pinned && <Pin className="size-3" />}
               {summary?.visibility === "shared" && <Share2 className="size-3" />}
-              {!connected && <span className="text-amber-600">· reconnecting…</span>}
+              {reconnecting && <span className="text-amber-600">· reconnecting…</span>}
             </div>
           </div>
           {summary && (
@@ -828,4 +830,15 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
       </Dialog>
     </div>
   )
+}
+
+/** `value`, but only once it has stayed true for `ms`. */
+function useLasting(value: boolean, ms: number) {
+  const [lasting, setLasting] = useState(false)
+  useEffect(() => {
+    if (!value) return void setLasting(false)
+    const timer = setTimeout(() => setLasting(true), ms)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return lasting
 }
