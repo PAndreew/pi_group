@@ -10,7 +10,7 @@ export interface Nav {
   openExplorer: (folder: string) => void
   openApplet: (slug: string) => void
   /** Start a session in a folder with the saved defaults (or ask for them first). */
-  newSession: (folder: string) => void
+  newSession: (folder: string, options?: { browser?: boolean; model?: { provider: string; id: string }; thinkingLevel?: string }) => void
 }
 
 export const NavContext = createContext<Nav | null>(null)

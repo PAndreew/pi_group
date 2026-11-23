@@ -256,7 +256,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	};
 
 	/** Live event to every member; a push to the others when it is someone's message. */
-	const fanOut = (chat: Chat, type: "chat_message" | "chat_update", message: ChatMessage, pushText?: { author: string; text: string; except?: string }) => {
+	const fanOut = (chat: Chat, type: "chat_message" | "chat_update" | "chat_title", message?: ChatMessage, pushText?: { author: string; text: string; except?: string }) => {
 		for (const userId of memberIds(chat.id)) {
 			if (!isTenantMember(userId, chat.tenantId ?? "work")) continue;
 			deps.sendTo(userId, { type, tenantId: chat.tenantId ?? "work", chatId: chat.id, message });
@@ -627,6 +627,10 @@ export function mountChats(router: Router, deps: ChatDeps) {
 	return {
 		busy,
 		isMember,
+		titleChanged: (key: string) => {
+			const chat = chatOfSession(key);
+			if (chat) fanOut(chat, "chat_title");
+		},
 		title: (chatId: string, viewerId: string) => {
 			const chat = getChat(chatId);
 			return chat ? chatTitle(chat, viewerId) : undefined;

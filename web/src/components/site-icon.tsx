@@ -16,22 +16,24 @@ function faviconUrl(href?: string) {
 
 const globe = <Globe className="size-3" />
 
-function Favicon({ src }: { src: string }) {
+function Favicon({ src, fallback }: { src: string; fallback?: string }) {
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading")
+  if (status === "failed") return fallback && fallback !== src ? <Favicon key={fallback} src={fallback} /> : globe
   return <>
     {status !== "ready" && globe}
-    {status !== "failed" && <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+    <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
       onLoad={() => setStatus("ready")} onError={() => setStatus("failed")}
-      className={cn("absolute size-3 rounded-full object-contain", status !== "ready" && "opacity-0")} />}
+      className={cn("absolute size-3 rounded-full object-contain", status !== "ready" && "opacity-0")} />
   </>
 }
 
 /** A decorative badge with the same footprint before, after, or without a favicon load. */
 export function SiteIcon({ href, icon, className }: { href?: string; icon?: string; className?: string }) {
-  const src = icon || faviconUrl(href)
+  const lookup = faviconUrl(href)
+  const src = icon || lookup
   return (
     <span aria-hidden="true" className={cn("relative inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-current/10 align-[-0.2em]", className)}>
-      {src ? <Favicon key={src} src={src} /> : globe}
+      {src ? <Favicon key={src} src={src} fallback={lookup} /> : globe}
     </span>
   )
 }

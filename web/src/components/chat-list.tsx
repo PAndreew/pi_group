@@ -60,7 +60,7 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
     void load()
     const poll = setInterval(load, selecting ? 3_000 : 20_000)
     const unsubscribe = subscribeUserEvents((event) => {
-      if (!["chat_message", "chat_update", "run", "projects", "stream_open"].includes(event.type)) return
+      if (!["chat_message", "chat_update", "chat_title", "run", "projects", "stream_open"].includes(event.type)) return
       clearTimeout(timer.current)
       timer.current = setTimeout(load, 300)
     })

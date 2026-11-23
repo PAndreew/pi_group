@@ -139,7 +139,8 @@ function Workspace() {
   const [route, setRoute] = useRoute()
   const { active: project } = useProjects()
   const notifications = useRunNotifications(route.session, route.chat)
-  const [newFolder, setNewFolder] = useState<string>()
+  const [newSession, setNewSession] = useState<{ folder: string; options?: Parameters<Nav["newSession"]>[1] }>()
+  const [openBrowserFor, setOpenBrowserFor] = useState<string>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Desktop sidebar: open by default, the header icon hides it; remembered per browser.
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem("pi-group:sidebar") !== "0")
@@ -161,7 +162,8 @@ function Workspace() {
     setRoute(back?.route ?? { chat: undefined, session: undefined, file: undefined, app: undefined })
     if (back?.explorer) setExplorer((e) => ({ ...e, open: true }))
   }
-  const go = (next: Partial<Route>) => {
+  const go = (next: Partial<Route>, browser = false) => {
+    setOpenBrowserFor(browser ? next.session : undefined)
     previewReturn.current = null
     setSelectSessions(false)
     setRoute({ chat: undefined, session: undefined, file: undefined, app: undefined, ...next })
@@ -181,22 +183,22 @@ function Workspace() {
       openFile: (path) => openFile(path),
       openExplorer: (folder) => setExplorer({ open: true, folder, query: "" }),
       openApplet: (slug) => go({ app: slug }),
-      newSession: (folder) => setNewFolder(folder),
+      newSession: (folder, options) => setNewSession({ folder, options }),
     }),
     [setRoute, route],
   )
 
-  /** Explorer → New session: create with the saved defaults, or ask for them first. */
+  /** Create with the saved defaults, or ask for the runtime and model first. */
   useEffect(() => {
-    if (newFolder === undefined || !user?.sessionDefaults || creating) return
-    const folder = newFolder
-    setNewFolder(undefined)
+    if (!newSession || !user?.sessionDefaults || creating) return
+    const { folder, options } = newSession
+    setNewSession(undefined)
     setCreating(true)
     api
-      .createSession({ harness: user.sessionDefaults.harness, path: folder, projectId: project?.id })
-      .then(({ session }) => nav.openSession(session.key, folder), (error) => toast.error(error.message))
+      .createSession({ harness: user.sessionDefaults.harness, path: folder, projectId: project?.id, model: options?.model, thinkingLevel: options?.thinkingLevel })
+      .then(({ session }) => go({ session: session.key, folder }, options?.browser), (error) => toast.error(error.message))
       .finally(() => setCreating(false))
-  }, [newFolder, user, creating, nav, project])
+  }, [newSession, user, creating, project])
 
   const back = (
     <Button variant="ghost" size="icon-sm" onClick={nav.home} aria-label="Back to chats">
@@ -285,26 +287,26 @@ function Workspace() {
             {route.chat ? (
               <ChatView key={route.chat} chatId={route.chat} />
             ) : route.session ? (
-              <SessionView key={route.session} sessionKey={route.session} header={back} onDeleted={nav.home} onSelectSessions={() => { nav.home(); setSelectSessions(true) }} />
+              <SessionView key={route.session} sessionKey={route.session} initialBrowserShown={route.session === openBrowserFor} header={back} onDeleted={nav.home} onSelectSessions={() => { nav.home(); setSelectSessions(true) }} />
             ) : route.file ? (
               <FileViewer path={route.file} onClose={closePreview} />
             ) : route.app ? (
               <AppletView key={route.app} slug={route.app} header={back} />
             ) : (
-              <Home selectSessions={selectSessions} />
+              <Home selectSessions={selectSessions} creatingSession={creating} />
             )}
           </main>
           {previewPanel && <FilePreviewPanel lastEdit={lastEdit} className="w-96 shrink-0" />}
         </div>
 
         <NewSessionDialog
-          folder={newFolder ?? route.folder}
+          folder={newSession?.folder ?? route.folder}
           projectId={project?.id}
-          open={newFolder !== undefined && !user?.sessionDefaults}
-          onOpenChange={(open) => !open && setNewFolder(undefined)}
+          open={newSession !== undefined && !user?.sessionDefaults}
+          onOpenChange={(open) => !open && setNewSession(undefined)}
           onCreated={(s) => {
-            setNewFolder(undefined)
-            nav.openSession(s.key, s.path)
+            setNewSession(undefined)
+            go({ session: s.key, folder: s.path }, newSession?.options?.browser)
           }}
         />
         <FilePreviewDialog lastEdit={lastEdit} open={previewOpen && !previewPanel} onOpenChange={setPreviewOpen} />

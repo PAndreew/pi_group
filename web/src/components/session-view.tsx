@@ -308,7 +308,7 @@ function RunView({
   )
 }
 
-export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }: { sessionKey: string; header?: React.ReactNode; onDeleted: (key: string) => void; onSelectSessions: () => void }) {
+export function SessionView({ sessionKey, initialBrowserShown = false, header, onDeleted, onSelectSessions }: { sessionKey: string; initialBrowserShown?: boolean; header?: React.ReactNode; onDeleted: (key: string) => void; onSelectSessions: () => void }) {
   const { user } = useAuth()
   const { uploadFolder } = useProjects()
   const interactions = useInteractions(sessionKey)
@@ -332,7 +332,7 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
   const [refs, setRefs] = useState<ElementRef[]>([])
   /** Files and folders picked with $, shown as pills and sent in backticks in front of the message. */
   const [paths, setPaths] = useState<string[]>([])
-  const [browserShown, setBrowserShown] = useState(false)
+  const [browserShown, setBrowserShown] = useState(initialBrowserShown)
   const [browserLive, setBrowserLive] = useState(false)
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
@@ -360,8 +360,6 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
   }, [refresh])
 
   useEffect(() => {
-    setRefs([])
-    setBrowserShown(false)
     api.browserStatus(sessionKey).then((status) => setBrowserLive(status.open), () => setBrowserLive(false))
   }, [sessionKey])
 

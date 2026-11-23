@@ -188,8 +188,12 @@ export function ChatView({ chatId }: { chatId: string }) {
     }
     void load().then(sync)
     const unsubscribe = subscribeUserEvents((event) => {
-      if (event.type === "stream_open") return sync()
+      if (event.type === "stream_open") {
+        if (latest.current) void refreshHeader()
+        return sync()
+      }
       if (event.chatId !== chatId) return
+      if (event.type === "chat_title") return void refreshHeader()
       if (event.type === "chat_message" || event.type === "chat_update") merge([event.message])
       if (event.type === "chat_delete") setMessages((current) => current?.filter((m) => m.id !== event.messageId))
       // The first @pi links a session, and mentions can add people: refresh the header.

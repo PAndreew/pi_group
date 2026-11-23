@@ -347,18 +347,24 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return meta;
 	};
 
-	/** Send a prompt as `user`, starting the runtime if needed; while a run is going it is queued as a follow-up unless a mode is given. */
-	const titleSession = async (meta: SessionMeta, fallback?: string) => {
+	const titleSession = async (meta: SessionMeta, user: User, firstPrompt?: { text: string; authProfile?: string }) => {
 		const adapter = adapterOf(meta.harness);
-		const state = adapter.live(meta.id)?.state ?? await adapter.readSession(meta.id, meta.cwd);
-		if (!state?.model) throw new HttpError(400, "Select a model before generating a title");
+		const live = adapter.live(meta.id);
 		const previous = meta.name;
-		const text = state.messages.filter(m => m.role === "user" || m.role === "assistant").map(m => `${m.role}: ${messageText(m)}`).join("\n") || fallback || "";
+		const state = live?.state ?? await adapter.readSession(meta.id, meta.cwd);
+		if (!state?.model) throw new HttpError(400, "Select a model before generating a title");
+		const text = firstPrompt?.text ?? state.messages.filter(m => m.role === "user" || m.role === "assistant").map(m => `${m.role}: ${messageText(m)}`).join("\n");
 		if (!text) throw new HttpError(400, "Session has no messages");
-		const name = await generateSessionTitle(state.model, text);
-		if (meta.name !== previous) return;
-		meta.name = name;
+		// Automatic titles use the same credentials as the accepted turn. Manual titles never borrow another user's profile.
+		const authProfile = firstPrompt ? firstPrompt.authProfile : meta.harness !== "pi" ? undefined : state.model.provider === "lithosai" ? await lithosVaultProfile(user.id) : await piProfile(user.id);
+		if (!firstPrompt && !authProfile && (live?.authProfile || state.model.provider === "lithosai")) throw new HttpError(400, "Connect your own Pi profile to generate a title for this model");
+		const name = await generateSessionTitle(state.model, text, authProfile);
+		const current = store.session(meta.key);
+		if (!current || current.deleted) throw new HttpError(404, "Session unavailable");
+		if (current.name !== previous) return current.name ?? "";
+		current.name = name;
 		save();
+		chats.titleChanged(meta.key);
 		await adapter.live(meta.id)?.setName(name);
 		return name;
 	};
@@ -432,7 +438,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		}
 		if (!options.background) store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
 		noteSessionActivity(meta.key, body.text);
-		if (!profile && autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
+		if (autoTitle) void titleSession(store.session(meta.key)!, user, { text: body.text, authProfile: live.authProfile }).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 
@@ -1018,7 +1024,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 
 	router.post("/sessions/:key/generate-title", async (req, res) => {
 		const { meta } = writable(req);
-		res.json({ name: await titleSession(meta) });
+		res.json({ name: await titleSession(meta, req.user!) });
 	});
 
 	router.post("/sessions/:key/name", async (req, res) => {

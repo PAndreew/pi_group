@@ -236,7 +236,7 @@ export function LinkPreviewCard({ url }: { url: string }) {
       {data?.image && !broken && <img src={data.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="w-28 shrink-0 bg-muted object-cover sm:w-36" />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 p-2.5">
         <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <SiteIcon icon={data?.icon} />
+          <SiteIcon href={url} icon={data?.icon} />
           <span className="truncate">{data?.siteName ?? host}</span>
           <ExternalLink className="ml-auto size-3 shrink-0" />
         </span>

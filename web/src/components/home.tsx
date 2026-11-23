@@ -18,7 +18,7 @@ import { useProjects } from "@/lib/projects"
  * or more people, or both; add /folder to pick where pi works (the project's folder otherwise; for
  * General, the shared chat folder).
  */
-export function Home({ selectSessions }: { selectSessions?: boolean }) {
+export function Home({ selectSessions, creatingSession }: { selectSessions?: boolean; creatingSession?: boolean }) {
   const { user } = useAuth()
   const nav = useNav()
   const { active: project } = useProjects()
@@ -99,7 +99,8 @@ export function Home({ selectSessions }: { selectSessions?: boolean }) {
           placeholder="Message: @someone and /folder"
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
-            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} />
+            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || creatingSession} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()}
+              browser={{ live: false, shown: false, toggle: () => nav.newSession(folder, { ...composerConfig, browser: true }) }} />
           }
           onFiles={(files) => void attach(files)}
           onSubmit={async (message) => {

@@ -24,10 +24,12 @@ function piCommand(args: string[]) {
 }
 
 /** Run a one-shot pi CLI command (e.g. `pi mcp list --json`) and collect its output. */
-export function runPi(args: string[], cwd: string, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
+export function runPi(args: string[], cwd: string, timeoutMs = 30_000, authProfile?: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
 	return new Promise((resolve) => {
 		const { command, argv, shell } = piCommand(args);
-		const child = platform().sandbox.spawn(command, argv, { cwd, env: { ...agentEnvironment(), PI_SKIP_VERSION_CHECK: "1" }, shell });
+		const base = agentEnvironment();
+		const env = authProfile ? piProfileEnvironment(base, authProfile) : base;
+		const child = platform().sandbox.spawn(command, argv, { cwd, env: { ...env, PI_SKIP_VERSION_CHECK: "1" }, shell });
 		child.end();
 		let stdout = "";
 		let stderr = "";
