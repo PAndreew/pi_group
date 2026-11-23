@@ -1,6 +1,7 @@
 import { ChevronRight, LayoutGrid, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { api, type Applet } from "@/lib/api"
 import { useNav } from "@/lib/nav"
@@ -11,6 +12,7 @@ export function AppletsDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const nav = useNav()
   const [applets, setApplets] = useState<Applet[]>()
   const [error, setError] = useState<string>()
+  const [installing, setInstalling] = useState(false)
 
   const load = useCallback(() => api.applets().then(({ applets }) => (setApplets(applets), setError(undefined)), (e: Error) => setError(e.message)), [])
   useEffect(() => {
@@ -24,16 +26,31 @@ export function AppletsDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     nav.openApplet(applet.slug)
   }
 
+  const install = async () => {
+    setInstalling(true)
+    try {
+      const { applet } = await api.installTodoDump()
+      launch(applet)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setInstalling(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85dvh] min-w-0 flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Applets</DialogTitle>
-          <DialogDescription>Forms for tasks you run again and again. Ask the agent to make one; it is ready once you approve it.</DialogDescription>
+          <DialogDescription>Forms and dashboards for tasks you do often. Start from a template or ask an agent to make an applet.</DialogDescription>
         </DialogHeader>
         <div className="-mx-2 grid min-h-0 min-w-0 grid-cols-1 gap-2 overflow-y-auto px-2">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!applets && !error && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
+          {applets && !applets.some((a) => a.slug === "todo-dump") && (
+            <Button type="button" variant="outline" disabled={installing} onClick={() => void install()}>Add Todo Dump</Button>
+          )}
           {applets?.length === 0 && (
             <div className="grid justify-items-center gap-2 px-4 py-6 text-center text-sm text-muted-foreground">
               <LayoutGrid className="size-8 opacity-50" />

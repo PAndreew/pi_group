@@ -15,18 +15,45 @@ const spec = {
   ],
 }
 const applet = { id: 'a1', slug: 'docx-translator', title: 'DOCX translator', description: spec.description, folder: 'work', owner: 'u', version: 1, approved: true, hasDraft: false, canManage: true, createdAt: '', updatedAt: '', spec }
+const expenseSpec = {
+  slug: 'expenses', title: 'Expense log', description: '',
+  fields: [{ type: 'number', id: 'amount', label: 'Amount' }],
+  actions: [{ id: 'save', label: 'Save expense', type: 'data_write', write: 'insert', fields: { amount: 'amount' }, reset: true }],
+  data: {
+    writes: [{ id: 'insert', type: 'insert' }],
+    views: [
+      { id: 'ledger', type: 'table', title: 'Ledger', columns: [{ key: 'amount', label: 'Amount' }] },
+      { id: 'summary', type: 'chart', title: 'Monthly spend', chart: 'bar', x: 'month', y: 'amount', label: 'Spending' },
+    ],
+  },
+}
+const expenseApplet = { ...applet, id: 'a2', slug: 'expenses', title: 'Expense log', spec: expenseSpec }
 const runs = [{ id: 'r1', action: 'run', status: 'finished', startedAt: new Date().toISOString(), values: { files: [`uploads/${long}`], target: 'German' }, output: `Done: [${long.replace('.docx', '_DE.docx')}](uploads/${long.replace('.docx', '_DE.docx')}) and \`uploads/${long}\`` }]
 const browser = await chromium.launch({ headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 375, height: 800 } })
   let agentRuns = 0
+  const expenses = []
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname.replace(/\/tenants\/[^/]+/, '')
     let body = { moves: [], requests: [], models: [], harnesses: [], projects: [{ id: 'general', name: 'General', general: true, folder: '', links: [] }], tenants: [], jobs: [], applets: [applet], sessions: [], users: [], folders: [], chatFolder: 'pi-chat' }
     if (path === '/api/auth/me') body = { user: { id: 'u', username: 'Tester', role: 'user' } }
     else if (path === '/api/applets/docx-translator') body = { applet, runs }
-    else if (path === '/api/applets/a1/run') agentRuns++
+    else if (path === '/api/applets/a1/run' || path === '/api/applets/a2/run') agentRuns++
+    else if (path === '/api/applets/expenses') body = { applet: expenseApplet, runs: [] }
+    else if (path === '/api/applets/a2/data/write') {
+      const input = route.request().postDataJSON()
+      assert.deepEqual(input, { action: 'save', values: { amount: 45 } })
+      expenses.push(input.values)
+      body = { id: expenses.length, changed: true }
+    } else if (path === '/api/applets/a2/data/views') {
+      const total = expenses.reduce((n, row) => n + row.amount, 0)
+      body = { views: {
+        ledger: { rows: expenses, nextOffset: null },
+        summary: { rows: total ? [{ month: '2026-11', amount: total }] : [], nextOffset: null },
+      } }
+    }
     else if (path === '/api/fs/upload') body = { files: [{ path: `work/uploads/${long}` }] }
     else if (path === '/api/chats') body = { chats: [] }
     else if (path.includes('/sessions')) body = { sessions: [] }
@@ -56,4 +83,14 @@ try {
   assert.ok(await translate.isDisabled(), 'reset clears the uploaded selection')
   assert.equal(agentRuns, 0)
   console.log('PASS: applet fits a 375px screen; link, copy and reset do not start agent runs')
+  await page.goto(`${process.env.TEST_URL || 'http://127.0.0.1:5173'}/#app=expenses`)
+  const amount = page.getByRole('spinbutton', { name: 'Amount' })
+  await amount.fill('45')
+  await page.getByRole('button', { name: 'Save expense' }).click()
+  await page.getByRole('table', { name: 'Ledger' }).getByRole('cell', { name: '45' }).waitFor()
+  await page.getByText('2026-11', { exact: true }).waitFor()
+  assert.equal(await amount.inputValue(), '')
+  assert.equal(agentRuns, 0)
+  assert.equal(expenses.length, 1)
+  console.log('PASS: a stateful applet saves and refreshes its table and chart without starting an agent')
 } finally { await browser.close() }

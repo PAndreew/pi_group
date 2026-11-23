@@ -73,7 +73,7 @@ test("values are checked and fill the template, paths relative to the run's fold
 test("agents propose applets that the tenant can use once the owner approves them", async () => {
 	const { authenticate, authRoutes, createUser } = await import("./auth.js");
 	const { loadStore, store } = await import("./store.js");
-	const { interactionEnvironment } = await import("./interactions.js");
+	const { interactionEnvironment, withNewSessionOwner } = await import("./interactions.js");
 	const { mountApplets } = await import("./applets.js");
 	loadStore();
 	const owner = createUser("applet-owner", "test-password", "member");
@@ -164,6 +164,68 @@ test("agents propose applets that the tenant can use once the owner approves the
 		assert.equal((await asOther("GET", "/applets/docx-translator")).body.applet.draft, undefined);
 		await asOwner("POST", `/applets/${applet.id}/approve`, { version: 2 });
 		assert.equal((await asOther("POST", "/applets/docx-translator/run", { ...run, values: { ...run.values, target: "Hungarian" } })).status, 200);
+
+		// A stateful template captures data without creating an agent session.
+		const template = await asOwner("POST", "/applets/templates/todo-dump");
+		assert.equal(template.status, 200);
+		const todo = "/applets/todo-dump";
+		const save = (text: string) => ({ action: "save", values: { entry: text } });
+		assert.equal((await asOwner("POST", `${todo}/data/write`, save("Coffee"))).status, 409);
+		await asOwner("POST", `${todo}/approve`, { version: 1 });
+		const text = "Bought coffee on 2026-11-03; with 'quotes'";
+		assert.equal((await asOwner("POST", `${todo}/data/write`, save(text))).status, 200);
+		assert.equal((await asOwner("POST", `${todo}/data/write`, save("Buy coffee"))).status, 200);
+		assert.equal(n, 2);
+		assert.deepEqual((await asOther("GET", `${todo}/data/views`)).body.views.inbox.rows, []);
+		assert.equal((await asOwner("GET", `${todo}/data/views`)).body.views.inbox.rows[1].entry, text);
+		assert.equal((await asOwner("POST", `${todo}/data/write`, save(""))).status, 400);
+		assert.equal((await asOwner("POST", `${todo}/data/write`, save("Bought coffee on 2026-11-13"))).status, 200);
+		const agentData = async (kind: "read" | "write", body: object, key = "fake:src", auth = interactionEnvironment(key).BEEZY_APPLET_DATA_TOKEN) => {
+			const res = await fetch(`${url}/applet-data-bridge/${encodeURIComponent(key)}/${kind}`, {
+				method: "POST", headers: { Authorization: `Bearer ${auth}`, "Content-Type": "application/json" }, body: JSON.stringify({ applet: "todo-dump", ...body }),
+			});
+			return { status: res.status, body: await res.json() };
+		};
+		assert.equal((await agentData("read", { read: "pending" }, "fake:src", token)).status, 403);
+		const newKey = "fake:fresh";
+		const startupToken = withNewSessionOwner(owner.id, "work", () => interactionEnvironment(newKey).BEEZY_APPLET_DATA_TOKEN);
+		assert.ok(startupToken);
+		const newlyStarted = store.upsertSession({ key: newKey, harness: "fake", id: "fresh", cwd: dir, ownerId: owner.id });
+		assert.equal((await agentData("read", { read: "pending" }, newKey, startupToken)).status, 200);
+		store.upsertSession({ ...newlyStarted, ownerId: other.id });
+		assert.equal((await agentData("read", { read: "pending" }, newKey, startupToken)).status, 403);
+		const pending = await agentData("read", { read: "pending", limit: 1 });
+		assert.deepEqual(pending.body.rows.map((row: { id: number }) => row.id), [1]);
+		assert.equal(pending.body.nextOffset, 1);
+		assert.equal(store.session("fake:src")?.memoryPrivate, true);
+		const classify = (id: number, kind: string, item: string | null, purchasedOn: string | null) => agentData("write", { write: "classify", values: { id, kind, item, purchasedOn } });
+		assert.equal((await classify(1, "purchase", "coffee", "2026-02-30")).status, 400);
+		assert.equal((await classify(1, "purchase", "coffee", "2026-11-03")).body.changed, true);
+		assert.equal((await classify(2, "task", null, null)).body.changed, true);
+		assert.equal((await asOwner("POST", `${todo}/data/write`, { action: "correct", values: { record: 3, kind: "purchase", item: "coffee", date: "2026-11-13" } })).status, 200);
+		assert.equal((await classify(3, "note", null, null)).body.changed, false);
+		assert.deepEqual((await agentData("read", { read: "pending" })).body.rows, []);
+		assert.deepEqual((await agentData("read", { read: "frequency" })).body.rows, [{ item: "coffee", count: 2, days: 10 }]);
+		assert.deepEqual((await asOwner("GET", `${todo}/data/views`)).body.views.monthly.rows, [{ purchasedOn: "2026-11", count: 2 }]);
+		assert.equal((await agentData("write", { write: "capture", values: { entry: "not agent-enabled" } })).status, 404);
+		assert.equal((await asOther("POST", `${todo}/data/write`, { action: "remove", values: { record: 1 } })).status, 404);
+		store.upsertSession({ ...store.session("fake:src")!, visibility: "shared" });
+		assert.equal((await agentData("read", { read: "inbox" })).status, 403);
+		store.upsertSession({ ...store.session("fake:src")!, visibility: "private" });
+
+		const original = (await asOwner("GET", todo)).body.applet.spec;
+		assert.equal((await bridge("POST", { ...original, data: undefined })).status, 400); // fields and actions must still reference valid writes
+		const next = { ...original, title: "Todo Dump updated", data: { ...original.data, views: [] } };
+		assert.equal((await bridge("POST", next)).status, 200);
+		assert.equal((await asOwner("GET", `${todo}/data/views`)).body.views.inbox.rows.length, 3);
+		assert.equal((await asOwner("POST", `${todo}/approve`, { version: 2 })).status, 200);
+		assert.deepEqual((await asOwner("GET", `${todo}/data/views`)).body.views, {});
+		assert.deepEqual((await agentData("read", { read: "frequency" })).body.rows, [{ item: "coffee", count: 2, days: 10 }]);
+		assert.equal((await asOwner("DELETE", todo)).status, 200);
+		assert.equal((await asOwner("POST", "/applets/templates/todo-dump")).status, 200);
+		assert.equal((await asOwner("POST", `${todo}/approve`, { version: 1 })).status, 200);
+		assert.deepEqual((await asOwner("GET", `${todo}/data/views`)).body.views.inbox.rows, []);
+		assert.equal((await asOwner("DELETE", todo)).status, 200);
 
 		// Someone else's agent cannot take over the slug, and only the owner deletes it.
 		store.upsertSession({ key: "fake:other", harness: "fake", id: "other", cwd: dir, ownerId: other.id });

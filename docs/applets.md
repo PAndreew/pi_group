@@ -1,6 +1,6 @@
 # Applets
 
-An applet is a small form for a task you run again and again, such as a document translator with a file picker and a language dropdown. Ask the agent for one. It calls its `propose_applet` tool (`server/extensions/applets.mjs`, pi sessions only), and the applet is saved **waiting for approval**. Its page is `/apps/<slug>` (inside the app this is `#app=<slug>`). The grid icon below the message box lists every applet. An amber dot on the icon means one is waiting for you to approve it.
+An applet is a reusable form or dashboard. It can launch an agent for a task such as document translation, or save and display data without an agent. Start with **Applets → Add Todo Dump**, or ask the agent to build one. It calls its `propose_applet` tool (`server/extensions/applets.mjs`, pi sessions only), and the applet is saved **waiting for approval**. Its page is `/apps/<slug>` (inside the app this is `#app=<slug>`). The grid icon below the message box lists every applet. An amber dot on the icon means one is waiting for you to approve it.
 
 Applets are declarative. The agent picks fields from a fixed set, and the server validates them (`appletSpec` in `server/src/applets.ts`). No code the agent writes runs in the browser.
 
@@ -37,6 +37,33 @@ Applets are declarative. The agent picks fields from a fixed set, and the server
   - `{ "id": "reset", "label": "Reset", "type": "reset_form" }` — restores the field defaults and clears file and folder selections.
   - These buttons don't require filled-in fields, start sessions, or create run history. Their payloads are not templates.
 
+## SQLite-backed applets
+
+**Todo Dump** is a built-in template. Open **Applets → Add Todo Dump**, review the proposal, then approve it. **Save entry** stores the original text immediately. **Categorize pending** is the only button that calls an agent: it reads up to 12 uncategorized entries, classifies them, and saves structured fields. The inbox, item counts, average days between dated purchases, and monthly chart all read directly from SQLite. “Buy coffee” is a task; only a completed purchase contributes to the purchase views. Undated purchases are excluded from the monthly chart and average gap. Corrections and deletion use the record ID from the inbox. The template never replaces an existing applet at that slug.
+
+Other applets use the same `data` block in `propose_applet`. For example, an expense applet can insert into `expenses`, group by month, and sum `amount`:
+
+```json
+{
+  "collections": [{ "id": "expenses", "columns": { "category": "text", "amount": "number" } }],
+  "writes": [{ "id": "addExpense", "collection": "expenses", "type": "insert", "columns": ["category", "amount"] }],
+  "reads": [{ "id": "monthly", "collection": "expenses", "type": "summary", "groupBy": "createdAt", "bucket": "month", "metrics": [{ "id": "total", "op": "sum", "column": "amount" }] }],
+  "views": [{ "id": "spending", "title": "Monthly spending", "type": "chart", "read": "monthly", "chart": "bar", "x": "createdAt", "y": "total", "label": "Spending", "unit": "€" }]
+}
+```
+
+With `category` and `amount` form fields, add this action to the applet's `actions`:
+
+```json
+{ "id": "save", "label": "Save expense", "type": "data_write", "write": "addExpense", "fields": { "category": "category", "amount": "amount" }, "reset": true }
+```
+
+- **Collections:** `text`, `number`, `boolean`, and `date` (`YYYY-MM-DD`) columns accept null. Every record gets a numeric `id` and a UTC `createdAt`; neither can be written. Approved collections can gain columns, but existing ones cannot be removed or retyped. Each collection holds up to 5,000 records per user, up to 32 KB each.
+- **Writes:** `insert`, `update`, or `delete`. Map write column IDs to scalar form field IDs, including `id` for update/delete. `reset: true` clears only those fields after success. `section` labels a collapsible group for secondary actions. An `ifEmpty` column lets an update skip records already filled, so agent classification does not overwrite manual edits.
+- **Reads:** `rows` projects specified columns and sorts by record ID (`newest` or `oldest`). `summary` groups non-null values, optionally by day/month for dates, and computes `count`, `sum`, `avg`, or `gapDays`. A `where` object adds exact-match filters; `null` matches missing or null fields. Charts take a numeric `y`; tables choose and label returned columns.
+- **Agent tools:** In private Pi sessions, `applet_data_read` runs approved named reads for the signed-in user. Prefer summaries; row reads return a bounded page and `nextOffset`. `applet_data_write` can run only writes explicitly marked `agent: true`. A prompt action with `noInputs: true` can start a batch without copying form inputs into the prompt. For recurring categorization, set up a private Pi scheduled prompt that reads and processes one pending batch; the template does not create a schedule automatically.
+- **Privacy:** Beezy scopes reads and writes to the tenant, applet, and current user. Users of the same applet do not see each other's records. SQLite lives in `DATA_DIR/applet-data.sqlite`; the browser and agent APIs cannot submit SQL. Private agent tool results may still be recorded in the session transcript, so don't share a session that read private records.
+
 ## Running
 
 A prompt button starts a **new session** in the applet's folder, which is the folder of the session that proposed it. The session belongs to the person who pressed the button and uses their default harness and model. It is named "🧩 title" and receives the filled-in prompt, headed with the applet and action name.
@@ -48,7 +75,7 @@ Run sessions don't appear in the chat list. They appear on the applet page under
 - Until it is approved, only its owner (the owner of the proposing session) and admins can see an applet. Either of them can approve it, after reviewing what its buttons do. After that, everyone in the tenant can use it, and each run acts as the person who pressed the button.
 - When an agent proposes an existing slug, that applet changes. Agents call `list_applets` to start from the current spec. If the applet is already approved, the change is kept as a draft: the owner sees a preview and can approve or discard it, and the approved version keeps working in the meantime.
 - A slug belongs to one applet per tenant. An agent working for someone else cannot take it over.
-- Only the owner or an admin can delete an applet. Deleting it also removes its run history, but not its sessions.
+- Only the owner or an admin can delete an applet. Deleting it permanently removes its run history and all users’ saved records for that applet, but not its sessions.
 
 ## API
 
@@ -59,5 +86,9 @@ Run sessions don't appear in the chat list. They appear on the applet page under
 | `POST /api/applets/:id/approve` `{version}` | Approve the applet or its draft; a stale `version` is refused |
 | `DELETE /api/applets/:id/draft` | Discard the waiting change |
 | `POST /api/applets/:id/run` `{action, values}` | Start a run |
+| `POST /api/applets/templates/todo-dump` | Create the Todo Dump proposal without an agent |
+| `GET /api/applets/:id/data/views` | Read dashboard views (`view` and `offset` for paging) |
+| `POST /api/applets/:id/data/write` `{action, values}` | Run an approved data button without a session |
+| `POST /api/applet-data-bridge/:key/read` and `/write` | Named operations via a private Pi session’s owner-bound credential |
 | `DELETE /api/applets/:id` | Delete |
 | `GET/POST /api/applet-bridge/:key` | The agent's tools, behind the session's bridge credential |

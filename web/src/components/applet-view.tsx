@@ -1,7 +1,8 @@
-import { ArrowUp, CheckCircle2, CircleSlash, Copy, ExternalLink, File, Folder, FolderOpen, LayoutGrid, Loader2, Play, RotateCcw, ShieldCheck, Trash2, Upload, X, XCircle } from "lucide-react"
+import { ArrowUp, CheckCircle2, CircleSlash, Copy, ExternalLink, File, Folder, FolderOpen, LayoutGrid, Loader2, Play, RotateCcw, Save, ShieldCheck, Trash2, Upload, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Markdown } from "@/components/markdown"
+import { AppletDataViews } from "@/components/applet-data-views"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -216,7 +217,7 @@ function FieldInput({ field, value, folder, disabled, onChange }: { field: Input
 }
 
 /** The applet's form; `onRun` is left out to show it as a preview. */
-function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string; onRun?: (action: string, values: Values) => Promise<void> }) {
+function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string; onRun?: (action: string, values: Values) => Promise<boolean> }) {
   const [values, setValues] = useState(() => initialValues(spec))
   const [busy, setBusy] = useState<string>()
   const disabled = !onRun || Boolean(busy)
@@ -227,15 +228,38 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
     if (!onRun) return
     setBusy(action)
     try {
-      await onRun(action, values)
+      const selected = spec.actions.find((a) => a.id === action)
+      if (selected && "type" in selected && selected.type === "data_write") {
+        const op = spec.data?.writes.find((w) => w.id === selected.write)
+        if (op?.type === "delete" && !window.confirm("Delete this record permanently?")) return
+        const fields = Object.values(selected.fields)
+        const saved = await onRun(action, Object.fromEntries(fields.map((id) => [id, values[id]])))
+        if (saved && selected.reset) {
+          const defaults = initialValues(spec)
+          setValues((all) => ({ ...all, ...Object.fromEntries(fields.map((id) => [id, defaults[id]])) }))
+        }
+      } else await onRun(action, values)
     } finally {
       setBusy(undefined)
     }
   }
 
-  return (
-    <form className="grid grid-cols-1 gap-4" onSubmit={(e) => e.preventDefault()}>
-      {spec.fields.map((field, i) =>
+  const sections = new Map<string, typeof spec.actions>()
+  const main = spec.actions.filter((action) => {
+    if (!("type" in action) || action.type !== "data_write" || !action.section) return true
+    sections.set(action.section, [...(sections.get(action.section) ?? []), action])
+    return false
+  })
+  const sectionFields = new Map<string, string>()
+  if (!main.some((a) => "prompt" in a && !a.noInputs)) {
+    const mainFields = new Set(main.flatMap((a) => "type" in a && a.type === "data_write" ? Object.values(a.fields) : []))
+    for (const [section, actions] of sections) for (const action of actions) {
+      if ("type" in action && action.type === "data_write") for (const id of Object.values(action.fields)) {
+        if (!mainFields.has(id) && !sectionFields.has(id)) sectionFields.set(id, section)
+      }
+    }
+  }
+  const renderFields = (section?: string) => spec.fields.filter((f) => ("id" in f ? sectionFields.get(f.id) : undefined) === section).map((field, i) =>
         field.type === "markdown" ? (
           <Markdown key={i} text={field.text} className="text-sm text-muted-foreground" />
         ) : field.type === "checkbox" ? (
@@ -256,15 +280,20 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
             {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
           </div>
         ),
-      )}
+      )
+  const renderActions = (actions: typeof spec.actions) => (
       <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-        {spec.actions.map((action, i) => {
+        {actions.map((action, i) => {
           const variant = i === 0 ? "default" : "outline"
-          if ("prompt" in action) return (
-            <Button key={action.id} type="button" variant={variant} disabled={disabled || missing.length > 0} onClick={() => void run(action.id)} title={missing.length ? `Fill in: ${missing.map((f) => f.label).join(", ")}` : undefined}>
-              {busy === action.id ? <Loader2 className="animate-spin" /> : <Play />} {action.label}
-            </Button>
-          )
+          if ("prompt" in action || action.type === "data_write") {
+            const unmet = "prompt" in action ? (action.noInputs ? [] : missing) : missing.filter((f) => Object.values(action.fields).includes(f.id))
+            const Icon = "prompt" in action ? Play : spec.data?.writes.find((w) => w.id === action.write)?.type === "delete" ? Trash2 : Save
+            return (
+              <Button key={action.id} type="button" variant={variant} disabled={disabled || unmet.length > 0} onClick={() => void run(action.id)} title={unmet.length ? `Fill in: ${unmet.map((f) => f.label).join(", ")}` : undefined}>
+                {busy === action.id ? <Loader2 className="animate-spin" /> : <Icon />} {action.label}
+              </Button>
+            )
+          }
           if (action.type === "open_url" && onRun) return (
             <Button key={action.id} asChild variant={variant}>
               <a href={action.url} target="_blank" rel="noopener noreferrer"><ExternalLink /> {action.label}</a>
@@ -280,8 +309,19 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
             </Button>
           )
         })}
-        {onRun && spec.actions.some((action) => "prompt" in action) && missing.length > 0 && <span className="text-xs text-muted-foreground">Fill in {missing.map((f) => f.label).join(", ")}</span>}
+        {onRun && spec.actions.some((action) => "prompt" in action && !action.noInputs) && missing.length > 0 && <span className="text-xs text-muted-foreground">Fill in {missing.map((f) => f.label).join(", ")}</span>}
       </div>
+  )
+  return (
+    <form className="grid grid-cols-1 gap-4" onSubmit={(e) => e.preventDefault()}>
+      {renderFields()}
+      {main.length > 0 && renderActions(main)}
+      {[...sections].map(([section, actions]) => (
+        <details key={section} className="rounded-md border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">{section}</summary>
+          <div className="mt-3 grid gap-4">{renderFields(section)}{renderActions(actions)}</div>
+        </details>
+      ))}
     </form>
   )
 }
@@ -327,6 +367,7 @@ function ActionPreview({ spec }: { spec: AppletSpec }) {
         const [description, payload] = "prompt" in a ? ["starts an agent session with:", a.prompt]
           : a.type === "open_url" ? ["opens this link in a new tab:", a.url]
           : a.type === "copy_text" ? ["copies this text to the clipboard:", a.text]
+          : a.type === "data_write" ? [`runs the private data write “${a.write}” without an agent:`, JSON.stringify(a.fields)]
           : ["restores the form defaults."]
         return (
           <div key={a.id} className="grid gap-1">
@@ -335,6 +376,10 @@ function ActionPreview({ spec }: { spec: AppletSpec }) {
           </div>
         )
       })}
+      {spec.data && <details className="text-xs">
+        <summary className="cursor-pointer">Review data collections, reads and writes</summary>
+        <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-muted p-2 text-[11px]">{JSON.stringify(spec.data, null, 2)}</pre>
+      </details>}
     </div>
   )
 }
@@ -344,6 +389,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
   const nav = useNav()
   const [applet, setApplet] = useState<Applet & { spec: AppletSpec }>()
   const [runs, setRuns] = useState<AppletRun[]>([])
+  const [dataRevision, setDataRevision] = useState(0)
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -360,6 +406,13 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
     void load()
     return subscribeUserEvents((event) => (event.type === "applets" || event.type === "stream_open") && void load())
   }, [load])
+  const appletId = applet?.id
+  useEffect(() => {
+    if (!appletId) return
+    return subscribeUserEvents((event) => {
+      if (event.type === "stream_open" || (event.type === "applet_data" && event.appletId === appletId)) setDataRevision((n) => n + 1)
+    })
+  }, [appletId])
 
   const act = async (action: () => Promise<unknown>) => {
     setBusy(true)
@@ -374,11 +427,21 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
   }
 
   const run = async (action: string, values: Values) => {
+    if (!applet) return false
     try {
-      const { run } = await api.runApplet(applet!.id, action, values)
-      setRuns((all) => [run, ...all])
+      const selected = applet.spec.actions.find((a) => a.id === action)
+      if (selected && "type" in selected && selected.type === "data_write") {
+        const result = await api.writeAppletData(applet.id, action, values)
+        setDataRevision((n) => n + 1)
+        toast.success(result.changed ? "Updated saved data" : "No change")
+      } else {
+        const { run } = await api.runApplet(applet.id, action, values)
+        setRuns((all) => all.some((item) => item.id === run.id) ? all : [run, ...all])
+      }
+      return true
     } catch (e) {
       toast.error((e as Error).message)
+      return false
     }
   }
 
@@ -400,7 +463,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
         </div>
         {applet?.canManage && (
           <Button size="sm" variant={confirmDelete ? "destructive" : "ghost"} onClick={() => (confirmDelete ? void remove() : setConfirmDelete(true))} onBlur={() => setConfirmDelete(false)} disabled={busy}>
-            <Trash2 /> {confirmDelete ? "Delete for good" : <span className="sr-only sm:not-sr-only">Delete</span>}
+            <Trash2 /> {confirmDelete ? (applet.spec.data ? "Delete applet and all saved data" : "Delete for good") : <span className="sr-only sm:not-sr-only">Delete</span>}
           </Button>
         )}
       </div>
@@ -453,6 +516,9 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
               <section className="rounded-lg border bg-card p-4">
                 <AppletForm key={`${applet.id}-${applet.approvedAt}`} spec={applet.spec} folder={applet.folder} onRun={applet.approved ? run : undefined} />
               </section>
+              {applet.approved && Boolean(applet.spec.data?.views.length) && (
+                <AppletDataViews key={`${applet.id}-${applet.approvedAt}`} applet={applet.id} views={applet.spec.data!.views} revision={dataRevision} />
+              )}
               {runs.length > 0 && (
                 <section className="grid grid-cols-1 gap-2">
                   <h3 className="text-sm font-medium">Your runs</h3>

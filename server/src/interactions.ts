@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Request, Router } from "express";
 import { z } from "zod";
@@ -33,12 +34,25 @@ export interface Interaction {
 // Credentials live only for this server lifetime, are scoped to one session, and never reach browsers.
 const secret = randomBytes(32);
 const tokenFor = (key: string) => createHmac("sha256", secret).update(key).digest("hex");
+const appletDataKey = (key: string, owner: string, tenant: string) => JSON.stringify(["applet-data", key, owner, tenant]);
+export const appletDataCredentialValid = (key: string, owner: string, tenant: string, authorization?: string) =>
+  bridgeCredentialValid(appletDataKey(key, owner, tenant), authorization);
+
+// A new agent process starts before its generated session key is saved in the store.
+const creatingSession = new AsyncLocalStorage<{ ownerId: string; tenantId: string }>();
+export const withNewSessionOwner = <T>(ownerId: string, tenantId: string, create: () => T) => creatingSession.run({ ownerId, tenantId }, create);
+
 export function interactionEnvironment(key: string) {
+  const meta = store.session(key) ?? creatingSession.getStore();
   const base = `http://${config.host === "::1" ? "[::1]" : "127.0.0.1"}:${config.port}/api`;
   return {
     BEEZY_INTERACTION_URL: `${base}/interaction-bridge/${encodeURIComponent(key)}`,
     BEEZY_JOBS_URL: `${base}/job-bridge/${encodeURIComponent(key)}`,
     BEEZY_APPLETS_URL: `${base}/applet-bridge/${encodeURIComponent(key)}`,
+    ...(meta?.ownerId ? {
+      BEEZY_APPLET_DATA_URL: `${base}/applet-data-bridge/${encodeURIComponent(key)}`,
+      BEEZY_APPLET_DATA_TOKEN: tokenFor(appletDataKey(key, meta.ownerId, meta.tenantId ?? "work")),
+    } : {}),
     BEEZY_BROWSER_URL: `${base}/browser-bridge/${encodeURIComponent(key)}`,
     BEEZY_ASSISTANCE_URL: `${base}/assistance-bridge/${encodeURIComponent(key)}`,
     BEEZY_CONTEXT_URL: `${base}/context-bridge/${encodeURIComponent(key)}`,

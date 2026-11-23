@@ -12,7 +12,7 @@ import { lithosVaultProfile } from "./lithos-vault.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
 import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
-import { mountInteractions } from "./interactions.js";
+import { mountInteractions, withNewSessionOwner } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountWatches } from "./watches.js";
 import { mountApplets } from "./applets.js";
@@ -327,7 +327,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (usesLithos && !profile) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
 		if (profile && adapter.id !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
 		if (explicit && !availablePreferredModel(await adapter.listModels(profile), explicit)) throw new HttpError(400, "This model is not available to your account");
-		const live = await adapter.create(input.cwd, { ...(profile && !explicit ? {} : creationOptions(input, user.sessionDefaults)), name: input.name, authProfile: profile });
+		const live = await withNewSessionOwner(user.id, tenantId(), () => adapter.create(input.cwd, {
+			...(profile && !explicit ? {} : creationOptions(input, user.sessionDefaults)), name: input.name, authProfile: profile,
+		}));
 		const meta = store.upsertSession({
 			key: `${adapter.id}:${live.id}`,
 			harness: adapter.id,

@@ -436,14 +436,23 @@ export interface AppletSpec {
   description: string
   fields: AppletField[]
   actions: ({ id: string; label: string } & (
-    | { prompt: string }
+    | { prompt: string; noInputs?: boolean }
+    | { type: "data_write"; write: string; fields: Record<string, string>; reset?: boolean; section?: string }
     | { type: "open_url"; url: string }
     | { type: "copy_text"; text: string }
     | { type: "reset_form" }
   ))[]
+  data?: { views: AppletDataView[]; writes: { id: string; type: "insert" | "update" | "delete" }[] }
 }
 
-/** A form an agent designed: each button starts a new session with its filled-in prompt, once approved. */
+export type AppletDataValue = string | number | boolean | null
+export type AppletDataPage = { rows: Record<string, AppletDataValue>[]; nextOffset: number | null }
+export type AppletDataView = { id: string; title: string; read: string } & (
+  | { type: "table"; columns: { key: string; label: string }[] }
+  | { type: "chart"; chart: "bar" | "line"; x: string; y: string; label: string; unit?: string }
+)
+
+/** A form an agent designed, or a template, with approved buttons and optional data views. */
 export interface Applet {
   id: string
   slug: string
@@ -639,6 +648,9 @@ export const api = {
   approveApplet: (id: string, version: number) => request<{ applet: Applet }>("POST", `/api/applets/${enc(id)}/approve`, { version }),
   discardAppletDraft: (id: string) => request<{ applet: Applet }>("DELETE", `/api/applets/${enc(id)}/draft`),
   runApplet: (id: string, action: string, values: Record<string, unknown>) => request<{ run: AppletRun }>("POST", `/api/applets/${enc(id)}/run`, { action, values }),
+  installTodoDump: () => request<{ applet: Applet }>("POST", "/api/applets/templates/todo-dump"),
+  appletDataViews: (id: string, view?: string, offset = 0) => request<{ views: Record<string, AppletDataPage> }>("GET", `/api/applets/${enc(id)}/data/views${view ? `?view=${enc(view)}&offset=${offset}` : ""}`),
+  writeAppletData: (id: string, action: string, values: Record<string, unknown>) => request<{ id: number; changed: boolean }>("POST", `/api/applets/${enc(id)}/data/write`, { action, values }),
   deleteApplet: (id: string) => request("DELETE", `/api/applets/${enc(id)}`),
   deleteSessions: (keys: string[]) => request<{ deleted: string[]; skipped: { key: string; reason: string }[] }>("POST", "/api/sessions/batch-delete", { keys }),
   session: (key: string) => request<{ session: SessionSummary }>("GET", `/api/sessions/${enc(key)}`),

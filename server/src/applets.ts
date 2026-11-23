@@ -5,12 +5,15 @@ import type { Request, Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
-import { bridgeCredentialValid } from "./interactions.js";
+import { appletDataCredentialValid, bridgeCredentialValid } from "./interactions.js";
+import { dataAction, dataId, dataSpec, checkDataUpgrade, deleteAppletData, readAppletData, readAppletViews, readPage, validateDataSpec, writeAppletData, writeInputs } from "./applet-data.js";
+import { todoDump } from "./applet-templates.js";
+import { chatOfSession } from "./chats.js";
 import { pushToUser } from "./push.js";
 import type { RunOutcome } from "./sessions.js";
 import { saveNow, type SessionMeta, store, type User } from "./store.js";
 import { tenantAccess, isTenantMember, tenantOf } from "./tenants.js";
-import { inTenant } from "./tenant-context.js";
+import { inTenant, tenantId } from "./tenant-context.js";
 
 /*
  * Applets: small forms an agent designs from a closed set of fields, saved for good and opened from
@@ -45,7 +48,8 @@ type InputField = Exclude<AppletField, { type: "markdown" }>;
 
 const button = { id: fieldId, label: text(60) };
 const actionSchema = z.union([
-	z.object({ ...button, prompt: text(20_000) }).strict(),
+	z.object({ ...button, prompt: text(20_000), noInputs: z.boolean().optional() }).strict(),
+	z.object({ ...button, ...dataAction }).strict(),
 	z.object({ ...button, type: z.literal("open_url"), url: text(2000).pipe(z.url({ protocol: /^https?$/ })).refine((url) => /^https?:\/\//i.test(url), "Use an absolute HTTP(S) URL") }).strict(),
 	z.object({ ...button, type: z.literal("copy_text"), text: z.string().min(1).max(20_000) }).strict(),
 	z.object({ ...button, type: z.literal("reset_form") }).strict(),
@@ -60,6 +64,7 @@ export const appletSpec = z
 		description: z.string().trim().max(300).default(""),
 		fields: z.array(fieldSchema).max(25),
 		actions: z.array(actionSchema).min(1).max(5),
+		data: dataSpec.optional(),
 	})
 	.strict()
 	.superRefine((spec, ctx) => {
@@ -67,9 +72,21 @@ export const appletSpec = z
 		const ids = new Set(inputs.map((f) => f.id));
 		if (ids.size !== inputs.length) ctx.addIssue({ code: "custom", message: "Field IDs must be unique" });
 		if (new Set(spec.actions.map((a) => a.id)).size !== spec.actions.length) ctx.addIssue({ code: "custom", message: "Action IDs must be unique" });
+		const issue = (message: string) => ctx.addIssue({ code: "custom", message });
+		if (spec.data) validateDataSpec(spec.data, issue);
 		for (const action of spec.actions) {
-			if (!("prompt" in action)) continue;
+			if (!("prompt" in action)) {
+				if (action.type !== "data_write") continue;
+				const op = spec.data?.writes.find((w) => w.id === action.write && !w.agent);
+				if (!op || Object.keys(action.fields).length !== writeInputs(op).length || writeInputs(op).some((k) => !Object.hasOwn(action.fields, k))) issue(`Action ${action.id} needs a browser write and an exact field mapping`);
+				for (const id of Object.values(action.fields)) {
+					const input = inputs.find((f) => f.id === id);
+					if (!input || input.type === "file" || input.type === "folder" || (input.type === "select" && input.multiple)) issue(`Action ${action.id} needs a scalar form field for ${id}`);
+				}
+				continue;
+			}
 			const used = [...action.prompt.matchAll(SECTION)].map((m) => m[2]).concat([...action.prompt.replace(SECTION, "$3").matchAll(VARIABLE)].map((m) => m[1]));
+			if (action.noInputs && used.length) issue(`Action ${action.id} cannot use template fields with noInputs`);
 			for (const id of used) if (!ids.has(id)) ctx.addIssue({ code: "custom", message: `Action “${action.label}” uses {{${id}}}, which is not a field` });
 		}
 		for (const field of inputs) {
@@ -291,7 +308,7 @@ export function mountApplets(router: Router, deps: AppletDeps) {
 		const meta = store.session(key);
 		if (!meta || meta.deleted) throw new HttpError(404, "Session not found");
 		const owner = meta.ownerId ? store.userById(meta.ownerId) : undefined;
-		if (!owner) throw new HttpError(400, "This session has no owner to approve an applet");
+		if (!owner || !isTenantMember(owner.id, meta.tenantId ?? "work")) throw new HttpError(403, "This session has no owner in the tenant");
 		return { meta, owner };
 	};
 
@@ -314,6 +331,7 @@ export function mountApplets(router: Router, deps: AppletDeps) {
 		let applet = store.data.applets.find((a) => a.spec.slug === spec.slug && (a.tenantId ?? "work") === tenant);
 		if (applet && !canManage(owner, applet)) throw new HttpError(409, `The slug “${spec.slug}” belongs to ${store.userById(applet.ownerId)?.username ?? "someone else"}'s applet; pick another`);
 		if (applet) {
+			checkDataUpgrade(applet.spec.data, spec.data);
 			if (approved(applet)) applet.draft = spec;
 			else applet.spec = spec;
 			Object.assign(applet, { version: applet.version + 1, proposedIn: key, note: reason, updatedAt: at });
@@ -335,7 +353,79 @@ export function mountApplets(router: Router, deps: AppletDeps) {
 		});
 	});
 
+	const dataScope = (applet: Applet, user: User) => ({ tenant: applet.tenantId ?? "work", applet: applet.id, user: user.id });
+	const availableData = (applet: Applet) => {
+		if (!approved(applet)) throw new HttpError(409, "Approve the applet before using its data");
+		if (!applet.spec.data) throw new HttpError(404, "This applet has no data store");
+		return applet.spec.data;
+	};
+	const valuesSchema = z.record(z.string(), z.unknown());
+	const notifyData = (applet: Applet, user: User) => deps.sendTo(user.id, { type: "applet_data", tenantId: applet.tenantId ?? "work", appletId: applet.id });
+	const bridgeData = (req: Request, ref: string) => {
+		const key = String(req.params.key);
+		const { meta, owner } = bridgeOwner(key);
+		const tenant = meta.tenantId ?? "work";
+		if (!appletDataCredentialValid(key, owner.id, tenant, req.headers.authorization)) throw new HttpError(403, "Invalid applet data credential");
+		if (meta.visibility !== "private" || chatOfSession(key) || meta.memory) throw new HttpError(403, "Use a private agent session for personal applet data");
+		const applet = store.data.applets.find((a) => (a.tenantId ?? "work") === tenant && (a.id === ref || a.spec.slug === ref) && (approved(a) || canManage(owner, a)));
+		if (!applet) throw new HttpError(404, "Applet not found");
+		return { applet, owner, meta, data: availableData(applet) };
+	};
+	router.post("/applet-data-bridge/:key/read", (req, res) => {
+		const body = readPage.extend({ applet: z.string().min(1).max(48), read: dataId }).strict().parse(req.body);
+		const { applet, owner, meta, data } = bridgeData(req, body.applet);
+		const result = readAppletData(dataScope(applet, owner), data, body.read, body.limit, body.offset);
+		// Tool results can be recorded in the transcript. Do not consolidate this session into project memory.
+		if (!meta.memoryPrivate) store.upsertSession({ ...meta, memoryPrivate: true });
+		res.set("Cache-Control", "no-store").json(result);
+	});
+	router.post("/applet-data-bridge/:key/write", (req, res) => {
+		const body = z.object({ applet: z.string().min(1).max(48), write: dataId, values: valuesSchema }).strict().parse(req.body);
+		const { applet, owner, data } = bridgeData(req, body.applet);
+		const op = data.writes.find((w) => w.id === body.write && w.agent);
+		if (!op) throw new HttpError(404, "Unknown agent write");
+		const result = writeAppletData(dataScope(applet, owner), data, op, body.values);
+		if (result.changed) notifyData(applet, owner);
+		res.set("Cache-Control", "no-store").json(result);
+	});
+
 	router.use("/applets", requireAuth);
+
+	router.post("/applets/templates/todo-dump", (req, res) => {
+		const user = req.user!;
+		const tenant = tenantId();
+		if (store.data.applets.some((a) => (a.tenantId ?? "work") === tenant && a.spec.slug === todoDump.slug)) throw new HttpError(409, "An applet already uses /apps/todo-dump; it was not changed");
+		if (store.data.applets.filter((a) => a.ownerId === user.id).length >= MAX_APPLETS_PER_OWNER) throw new HttpError(429, "You have reached your applet limit");
+		const at = new Date().toISOString();
+		const applet: Applet = { tenantId: tenant, id: randomUUID(), ownerId: user.id, cwd: resolveSafe(""), spec: appletSpec.parse(todoDump), version: 1, createdAt: at, updatedAt: at };
+		store.data.applets.push(applet);
+		saveNow();
+		changed(applet);
+		res.json({ applet: view(applet, user, true) });
+	});
+
+	router.get("/applets/:id/data/views", (req, res) => {
+		const applet = find(req);
+		const data = availableData(applet);
+		const query = z.object({ view: dataId.optional(), offset: z.coerce.number().int().min(0).max(5000).default(0) }).strict().parse(req.query);
+		res.set("Cache-Control", "no-store").json({ views: readAppletViews(dataScope(applet, req.user!), data, query.view, query.offset) });
+	});
+
+	router.post("/applets/:id/data/write", (req, res) => {
+		const applet = find(req);
+		const data = availableData(applet);
+		const body = z.object({ action: dataId, values: valuesSchema }).strict().parse(req.body);
+		const action = applet.spec.actions.find((a) => a.id === body.action);
+		if (!action || !("type" in action) || action.type !== "data_write") throw new HttpError(404, "Unknown data action");
+		const op = data.writes.find((w) => w.id === action.write && !w.agent)!;
+		const fields = new Set(Object.values(action.fields));
+		const raw = Object.fromEntries(Object.entries(body.values).filter(([id]) => fields.has(id)));
+		const values = checkValues({ ...applet.spec, fields: applet.spec.fields.filter((f) => "id" in f && fields.has(f.id)) }, raw);
+		const patch = Object.fromEntries(Object.entries(action.fields).map(([key, id]) => [key, values[id] === "" ? null : values[id]]));
+		const result = writeAppletData(dataScope(applet, req.user!), data, op, patch);
+		if (result.changed) notifyData(applet, req.user!);
+		res.set("Cache-Control", "no-store").json(result);
+	});
 
 	router.get("/applets", (req, res) => {
 		const user = req.user!;
@@ -383,11 +473,11 @@ export function mountApplets(router: Router, deps: AppletDeps) {
 		if (!action) throw new HttpError(400, "Unknown action");
 		if (!("prompt" in action)) throw new HttpError(400, "This action runs in the browser, not in an agent session");
 		if (!statSync(applet.cwd, { throwIfNoEntry: false })?.isDirectory()) throw new HttpError(409, "The applet's folder is gone");
-		const values = checkValues(applet.spec, body.values);
+		const values = action.noInputs ? {} : checkValues(applet.spec, body.values);
 		const root = resolveSafe("");
 		const prompt = renderPrompt(applet.spec, action.prompt, values, applet.cwd, root);
 		const meta = await deps.createSession(user, { harness: await deps.harnessFor(user), cwd: applet.cwd, name: `🧩 ${applet.spec.title}` });
-		store.upsertSession({ ...store.session(meta.key)!, applet: applet.id });
+		store.upsertSession({ ...store.session(meta.key)!, applet: applet.id, ...(applet.spec.data ? { memoryPrivate: true } : {}) });
 		const run: AppletRun = { tenantId: applet.tenantId ?? "work", id: randomUUID(), appletId: applet.id, userId: user.id, action: action.label, values, sessionKey: meta.key, status: "running", startedAt: new Date().toISOString() };
 		store.data.appletRuns.push(run);
 		const mine = store.data.appletRuns.filter((r) => r.appletId === applet.id && r.userId === user.id);
@@ -408,6 +498,7 @@ export function mountApplets(router: Router, deps: AppletDeps) {
 	router.delete("/applets/:id", (req, res) => {
 		const applet = find(req);
 		if (!canManage(req.user!, applet)) throw new HttpError(403, "Only its owner or an admin can delete an applet");
+		if (applet.spec.data) deleteAppletData(applet.tenantId ?? "work", applet.id);
 		store.data.applets = store.data.applets.filter((a) => a !== applet);
 		store.data.appletRuns = store.data.appletRuns.filter((r) => r.appletId !== applet.id);
 		saveNow();
