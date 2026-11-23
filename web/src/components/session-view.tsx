@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { GitStatusIndicator } from "@/components/git-status"
 import { toast } from "sonner"
 import { PiAvatar } from "@/components/mention-composer"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -581,13 +582,14 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
             <div className="truncate text-sm font-medium" title={title}>
               {title}
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className={cn("inline-block size-1.5 rounded-full", running ? "animate-pulse bg-green-500" : state?.live ? "bg-sky-500" : "bg-muted-foreground/40")} />
-              {running ? "running" : state?.live ? "idle" : "stopped"}
-              {summary && <span>· {summary.harness}</span>}
-              {summary?.pinned && <Pin className="size-3" />}
-              {summary?.visibility === "shared" && <Share2 className="size-3" />}
-              {reconnecting && <span className="text-amber-600">· reconnecting…</span>}
+            <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className={cn("inline-block size-1.5 shrink-0 rounded-full", running ? "animate-pulse bg-green-500" : state?.live ? "bg-sky-500" : "bg-muted-foreground/40")} />
+              <span className="shrink-0">{running ? "running" : state?.live ? "idle" : "stopped"}</span>
+              <GitStatusIndicator sessionKey={sessionKey} running={Boolean(running)} activity={state?.messages.length ?? 0} />
+              {summary && <span className="shrink-0">· {summary.harness}</span>}
+              {summary?.pinned && <Pin className="size-3 shrink-0" />}
+              {summary?.visibility === "shared" && <Share2 className="size-3 shrink-0" />}
+              {reconnecting && <span className="shrink-0 text-amber-600">· reconnecting…</span>}
             </div>
           </div>
           {summary && (

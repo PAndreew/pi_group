@@ -494,6 +494,18 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return data as T
 }
 
+/** A session folder's git state (server/src/git-status.ts). */
+export interface GitStatus {
+  branch: string
+  detached: boolean
+  files: number
+  upstream?: string
+  ahead: number
+  behind: number
+  fetchedAt?: number
+  fetchFailed?: boolean
+}
+
 /** A session's shared browser, as the server reports it. */
 export interface BrowserStatus {
   open: boolean
@@ -630,6 +642,7 @@ export const api = {
     request<{ session: SessionSummary }>("POST", "/api/sessions", body),
   eventsUrl: (key: string) => tenantUrl(`/api/sessions/${enc(key)}/events`),
   tools: (key: string) => request<SessionTools>("GET", `/api/sessions/${enc(key)}/tools`),
+  git: (key: string) => request<{ git: GitStatus | null }>("GET", `/api/sessions/${enc(key)}/git`),
   mcp: (key: string) => request<{ servers: McpServer[]; live: boolean; note?: string }>("GET", `/api/sessions/${enc(key)}/mcp`),
   /** A session's folder, or a plain folder when there is no session yet. */
   terminalUrl: (target: { key?: string; path?: string }, cols: number, rows: number) =>

@@ -6,6 +6,7 @@ import express, { type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "./auth.js";
 import { generateSessionTitle } from "./session-title.js";
+import { gitStatus } from "./git-status.js";
 import { creationOptions } from "./preferences.js";
 import { availablePreferredModel, piProfile } from "./pi-profiles.js";
 import { lithosVaultProfile } from "./lithos-vault.js";
@@ -892,6 +893,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			};
 			send(res, { type: "state", state: hub.state(key, state) });
 		}
+	});
+
+	/** The session folder's git state (null outside a repository), shown under the session title. */
+	router.get("/sessions/:key/git", async (req, res) => {
+		const { meta } = load(req);
+		res.setHeader("Cache-Control", "no-store");
+		res.json({ git: await gitStatus(meta.cwd) });
 	});
 
 	/** Tools, commands and installed pi resources (extensions, skills, prompts, packages) of a session. */
