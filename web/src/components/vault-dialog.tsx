@@ -95,7 +95,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         <DialogHeader>
           <DialogTitle>Secret vault</DialogTitle>
           <DialogDescription>
-            Personal secrets are yours alone. Project secrets are shared with everyone who can open the project, and agents in its sessions can read them. Agents see ordinary secret keys and descriptions and can read their values by key. Reserved server credentials, such as the configured Cloudflare assistance key, are hidden from agent tools. Values an agent reads become part of that session’s history, which everyone it is shared with can see.
+            Personal secrets are yours alone. Project secrets are shared with everyone who can open the project, and agents in its sessions can read them. Agents see ordinary secret keys and descriptions and can read their values by key. Values an agent reads become part of that session’s history, which everyone it is shared with can see.
           </DialogDescription>
         </DialogHeader>
 

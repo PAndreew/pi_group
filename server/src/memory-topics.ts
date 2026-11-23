@@ -4,12 +4,14 @@ import path from "node:path";
 
 /*
  * Project memory as topics: one Markdown file per category in `memory/topics/<slug>.md`, created, merged and
- * deleted as the project evolves (by the consolidation worker or by people). `MEMORY.md` is an index the
- * server generates from the topic headers; agents get only the index and read topics with project_memory.
+ * deleted as the project evolves (by agents at the end of a working stretch, or by people). `memory/overview.md`
+ * holds a few orienting sentences. `MEMORY.md` is the master the server generates from the overview and the
+ * topic headers; agents get only that and read topics with project_memory.
  */
 
 export const MAX_TOPICS = 10;
 export const TOPIC_MAX = 8000;
+export const OVERVIEW_MAX = 1500;
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const GENERATED = "<!-- Generated from memory/topics; edit the topics, not this file. -->";
 
@@ -17,6 +19,16 @@ export interface Topic { slug: string; title: string; description: string; body:
 
 export const topicsDir = (projectDir: string) => path.join(projectDir, "memory", "topics");
 const indexFile = (projectDir: string) => path.join(projectDir, "MEMORY.md");
+export const overviewFile = (projectDir: string) => path.join(projectDir, "memory", "overview.md");
+export const readOverview = (projectDir: string) => existsSync(overviewFile(projectDir)) ? readFileSync(overviewFile(projectDir), "utf8").trim() : "";
+
+/** Atomic write, so readers never see half a file. */
+export function writeAtomic(file: string, text: string) {
+	mkdirSync(path.dirname(file), { recursive: true });
+	const temp = `${file}.${randomUUID()}.tmp`;
+	writeFileSync(temp, text);
+	renameSync(temp, file);
+}
 
 export function parseTopic(slug: string, text: string, updatedAt = new Date().toISOString()): Topic {
 	const match = text.replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
@@ -33,28 +45,15 @@ export function readTopics(dir: string): Topic[] {
 		.map((f) => parseTopic(f.slice(0, -3), readFileSync(path.join(dir, f), "utf8"), statSync(path.join(dir, f)).mtime.toISOString()));
 }
 
-/** Why a set of topic files is not acceptable as project memory, or undefined when it is. */
-export function invalidTopics(dir: string): string | undefined {
-	if (!existsSync(dir)) return;
-	const files = readdirSync(dir);
-	const stray = files.find((f) => !f.endsWith(".md") || !SLUG.test(f.slice(0, -3)));
-	if (stray) return `"${stray}" is not a topic file (<slug>.md, lowercase letters, digits and dashes)`;
-	if (files.length > MAX_TOPICS) return `${files.length} topics; at most ${MAX_TOPICS}`;
-	for (const t of readTopics(dir)) {
-		if (!t.description) return `Topic "${t.slug}" has no description`;
-		if (!t.body) return `Topic "${t.slug}" is empty`;
-		if (t.body.length > TOPIC_MAX) return `Topic "${t.slug}" has ${t.body.length} characters; at most ${TOPIC_MAX}`;
-	}
-}
-
-/** The index agents get in front of their first prompt: just the topic list. Empty without topics. */
-export function renderIndex(topics: Topic[]) {
-	if (!topics.length) return "";
+/** The master agents get in front of their first prompt: the overview and the topic list. Empty without either. */
+export function renderIndex(topics: Topic[], overview = "") {
+	if (!topics.length && !overview) return "";
 	return [
 		GENERATED,
 		"# Project memory",
 		"",
-		"Topics of this project's memory. Read the ones relevant to your current task with the project_memory tool (and only those); skip it when none are.",
+		...(overview ? [overview, ""] : []),
+		topics.length ? "Topics of this project's memory. Read the ones relevant to your current task with the project_memory tool (and only those); skip it when none are." : "No topics yet.",
 		"",
 		...topics.map((t) => `- \`${t.slug}\` — ${t.title}: ${t.description} (updated ${t.updatedAt.slice(0, 10)})`),
 		"",
@@ -82,25 +81,7 @@ export function legacyMaster(projectDir: string) {
 
 export function writeIndex(projectDir: string) {
 	adoptLegacy(projectDir);
-	writeFileSync(indexFile(projectDir), renderIndex(readTopics(topicsDir(projectDir))));
-}
-
-export function copyTopics(from: string, to: string) {
-	rmSync(to, { recursive: true, force: true });
-	mkdirSync(to, { recursive: true });
-	for (const t of readTopics(from)) writeFileSync(path.join(to, `${t.slug}.md`), formatTopic(t));
-}
-
-/** Replace the live topics with a validated staging copy; topics missing from it are deleted. */
-export function replaceTopics(staging: string, live: string) {
-	mkdirSync(live, { recursive: true });
-	const keep = new Set(readdirSync(staging));
-	for (const f of keep) {
-		const temp = path.join(live, `.${randomUUID()}.tmp`);
-		writeFileSync(temp, readFileSync(path.join(staging, f)));
-		renameSync(temp, path.join(live, f));
-	}
-	for (const f of readdirSync(live)) if (!keep.has(f)) rmSync(path.join(live, f), { force: true });
+	writeFileSync(indexFile(projectDir), renderIndex(readTopics(topicsDir(projectDir)), readOverview(projectDir)));
 }
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)} …[${text.length - max} more chars]` : text);

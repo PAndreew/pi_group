@@ -1,6 +1,6 @@
 import type { Applet, AppletRun } from "./applets.js";
 import { config } from "./config.js";
-import type { AssistanceSettings, SessionDefaults } from "./preferences.js";
+import type { SessionDefaults } from "./preferences.js";
 import type { Authorship } from "./authorship.js";
 import type { Interaction } from "./interactions.js";
 import type { Job } from "./jobs.js";
@@ -17,10 +17,7 @@ export interface User {
 	username: string;
 	passwordHash: string;
 	sessionDefaults?: SessionDefaults;
-	assistance?: AssistanceSettings;
 	/** Reserved before dispatch; failed/unknown calls remain conservatively charged. */
-	assistanceMeter?: { day: string; cost: number; calls: number };
-	assistanceRecords?: { runId: string; sessionKey: string; model: string; purpose: string; timestamp: string; inputTokens?: number; cost: number; latencyMs: number; status: string }[];
 	avatar?: string;
 	role: Role;
 	createdAt: string;
@@ -100,6 +97,8 @@ export interface PushSubscriptionRecord {
 
 interface Data {
 	sharedPiFallbacks?: Record<string, { provider: string; id: string }>;
+	/** Prompt-cache lifetime per model provider, in minutes; memory updates run just before it expires. */
+	memoryCacheMinutes?: Record<string, number>;
 	tenants: Tenant[];
 	users: User[];
 	logins: LoginSession[];

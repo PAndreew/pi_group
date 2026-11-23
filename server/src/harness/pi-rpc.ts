@@ -6,8 +6,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import { agentEnvironment } from "../assistance.js";
 import { config } from "../config.js";
+
+/** The server environment minus credentials agents must not inherit. */
+const agentEnvironment = (): NodeJS.ProcessEnv => ({ ...process.env });
 import { platform, type SandboxProcess } from "../ports/index.js";
 import { expireInteractions, interactionEnvironment } from "../interactions.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
@@ -81,7 +83,7 @@ class RpcProcess {
 
 	constructor(args: string[], cwd: string, sessionKey?: string, readonly authProfile?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
-		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs"), ...extension("cloudflare-assistance.mjs")];
+		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		const base = agentEnvironment();
 		delete base.BEEZY_GATEWAY_TOKEN_FILE;
@@ -316,9 +318,6 @@ class PiLiveSession extends LiveSessionBase {
 				break;
 			case "extension_error":
 				this.notice("warn", `Extension error: ${record.error}`);
-				// Pi normally logs extension exceptions and continues. A failed context
-				// guard must not silently send the unfiltered result to the provider.
-				if (String(record.extensionPath ?? "").endsWith("cloudflare-assistance.mjs")) this.rpc.write({ type: "abort" });
 				break;
 		}
 	}
@@ -351,11 +350,6 @@ class PiLiveSession extends LiveSessionBase {
 	answerDialog(id: string, answer: { value?: string; confirmed?: boolean; cancelled?: boolean }) {
 		this.rpc.write({ type: "extension_ui_response", id, ...answer });
 		this.dropDialog(id);
-	}
-
-	async verifyAssistance() {
-		const { commands } = await this.rpc.send({ type: "get_commands" });
-		if (!commands?.some((c: Any) => c.name === "beezy-assistance-ready")) throw new Error("Cloudflare runtime extension is unavailable. Reopen the session with a compatible pi version.");
 	}
 
 	async prompt(input: PromptInput) {

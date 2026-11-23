@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import fs from "node:fs/promises";
 import path from "node:path";
 import { applyContextPolicy, CONTEXT_DEFAULTS, type ContextPolicy, epochTracker, historyPage, HISTORY_TOOL } from "../../extensions/lib/context-policy.mjs";
-import { MEMORY_TOOL } from "../../extensions/lib/project-memory.mjs";
+import { MEMORY_TOOL, MEMORY_UPDATE_TOOL } from "../../extensions/lib/project-memory.mjs";
 import { WATCH_TOOL, watchInput } from "../../extensions/lib/process-watch.mjs";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
@@ -303,6 +303,7 @@ export class PiDurableAdapter implements HarnessAdapter {
 		contextPolicy: (key: string) => ContextPolicy = () => CONTEXT_DEFAULTS,
 		private projectMemory: (key: string, args: { topics?: string[]; query?: string }) => string = () => "Project memory is not available in this session.",
 		private processWatch: (key: string, args: Record<string, unknown>) => Promise<string> = async () => "Process watches are not available in this session.",
+		private memoryUpdate: (key: string, args: Record<string, unknown>) => string = () => "Project memory is not available in this session.",
 	) {
 		this.cutoffs = epochTracker(contextPolicy);
 	}
@@ -369,6 +370,20 @@ export class PiDurableAdapter implements HarnessAdapter {
 							}),
 							replay: "safe",
 							execute: async (args: Any, api: Any) => ({ output: [{ type: "text", text: this.projectMemory(`${this.id}:${api.conversationId}`, args) }] }),
+						}),
+						durable.defineTool({
+							name: MEMORY_UPDATE_TOOL.name,
+							label: MEMORY_UPDATE_TOOL.label,
+							description: MEMORY_UPDATE_TOOL.description,
+							parameters: Type.Object({
+								action: Type.Union([Type.Literal("write"), Type.Literal("delete"), Type.Literal("overview")]),
+								topic: Type.Optional(Type.String({ maxLength: 40, description: 'write/delete: the topic slug, e.g. "design".' })),
+								title: Type.Optional(Type.String({ maxLength: 80, description: "write: short title." })),
+								description: Type.Optional(Type.String({ maxLength: 300, description: "write: one line saying what the topic covers." })),
+								body: Type.Optional(Type.String({ maxLength: 8000, description: "write: the topic's full content; overview: the overview text." })),
+							}),
+							replay: "safe",
+							execute: async (args: Any, api: Any) => ({ output: [{ type: "text", text: this.memoryUpdate(`${this.id}:${api.conversationId}`, args) }] }),
 						}),
 						durable.defineTool({
 							name: WATCH_TOOL.name,

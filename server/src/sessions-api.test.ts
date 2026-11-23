@@ -63,14 +63,16 @@ test("batch deletion removes eligible sessions and protects running, viewed and 
 		store.upsertSession({ ...base, key: "fake:viewed", id: "viewed", ownerId: owner.id });
 		const memoryCwd = path.join(dir, "project");
 		mkdirSync(memoryCwd);
-		store.upsertSession({ ...base, cwd: memoryCwd, key: "fake:memory", id: "memory", ownerId: owner.id, projectId: "memory" });
+		// An old one-on-one session with up-to-date memory: the archiver reads its history.
+		store.upsertSession({ ...base, cwd: memoryCwd, key: "fake:memory", id: "memory", ownerId: owner.id, projectId: "memory", updatedAt: "2020-01-01T00:00:00.000Z", consolidatedAt: "2020-01-02T00:00:00.000Z", authorship: { authors: { x: { id: owner.id, username: owner.username } }, pending: [] } });
 		store.data.projects.push({ id: "memory", name: "Memory", cwd: memoryCwd, tenantId: "work", createdBy: owner.id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-		// Hold the source's history read open so it is included in a real consolidation run.
+		// Hold the history read open, so the session is busy with memory while deletion is attempted.
 		adapter.readSession = async (id) => id === "memory" ? history : { messages: [] };
-		assert.equal((await call(ownerCookie, "POST", "/memory/memory/consolidate")).status, 200);
+		const { memoryControls } = await import("./memory.js");
+		const archiving = memoryControls.archiveNow();
 		const events = await call(ownerCookie, "GET", "/sessions/fake%3Aviewed/events", { signal: stream.signal });
 		assert.equal(events.status, 200);
-		for (const [id, reason] of [["running", "The agent is running"], ["viewed", "Someone is viewing this session"], ["memory", "Memory consolidation is in progress"]]) {
+		for (const [id, reason] of [["running", "The agent is running"], ["viewed", "Someone is viewing this session"], ["memory", "Project memory is being updated"]]) {
 			const { session } = await (await call(ownerCookie, "GET", `/sessions/fake%3A${id}`)).json();
 			assert.equal(session.deleteBlockedReason, reason);
 			assert.equal((await call(ownerCookie, "DELETE", `/sessions/fake%3A${id}`)).status, 409);
@@ -81,10 +83,11 @@ test("batch deletion removes eligible sessions and protects running, viewed and 
 			skipped: [
 				{ key: "fake:running", reason: "The agent is running" },
 				{ key: "fake:viewed", reason: "Someone is viewing this session" },
-				{ key: "fake:memory", reason: "Memory consolidation is in progress" },
+				{ key: "fake:memory", reason: "Project memory is being updated" },
 			],
 		});
 		finishRead();
+		await archiving;
 		assert.equal(store.session("fake:a"), undefined);
 		assert.equal(store.session("fake:b")?.deleted, true);
 		assert.equal((await call(ownerCookie, "GET", "/sessions/fake%3Ab")).status, 404);

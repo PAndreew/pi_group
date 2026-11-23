@@ -37,7 +37,6 @@ import { imageRefs, uploadDir } from "@/lib/attachments"
 import { BrowserPanel, type BrowserAskProps } from "@/components/browser-panel"
 import { type ElementRef, refImageFile, refLabel, refsPrompt } from "@/lib/element-refs"
 import { MessageBody } from "@/components/message-body"
-import { MemoryRunChip } from "@/components/memory-run-chip"
 import { ProjectMemoryPill } from "@/components/project-memory-pill"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
@@ -581,7 +580,6 @@ export function SessionView({ sessionKey, header, onDeleted, onSelectSessions }:
               {summary && <span>· {summary.harness}</span>}
               {summary?.pinned && <Pin className="size-3" />}
               {summary?.visibility === "shared" && <Share2 className="size-3" />}
-              <MemoryRunChip sessionKey={sessionKey} initial={summary?.memoryRun} />
               {!connected && <span className="text-amber-600">· reconnecting…</span>}
             </div>
           </div>

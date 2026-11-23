@@ -77,8 +77,8 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
   if (area === 'tenants' && method === 'GET') return json({ active: 'demo', tenants: [{ id: 'demo', name: 'Demo workspace', canShare: false }] })
   if (area === 'harnesses') return json(id ? { models } : { harnesses: [{ id: 'pi', label: 'pi', ok: true, durable: false, description: 'pi coding agent' }] })
   if (area === 'projects' && method === 'GET') return json(action === 'links' ? { links: [] } : id === 'moves' ? { moves: [] } : { projects: [project] })
-  if (area === 'memory' && method === 'GET') return json(action === 'archives' ? { sessions: [] } : { intervalHours: 24, context: { trimHours: 24, windowHours: 168 }, running: false, batch: 0, batches: 0, sources: [], topics: [], maxTopics: 12, topicMax: 10000, legacy: false })
-  if (area === 'memory-models') return json({ harness: 'pi', models })
+  if (area === 'memory' && method === 'GET') return json(action === 'archives' ? { sessions: [] } : { context: { trimHours: 24, windowHours: 168 }, updating: [], overview: '', overviewMax: 1500, topics: [], maxTopics: 10, topicMax: 8000, legacy: false })
+  if (area === 'memory-cache') return json(method === 'GET' ? { longRetention: false, chatIdleMinutes: 15, providers: [{ provider: 'anthropic', minutes: 5, defaultMinutes: 5, custom: false }] } : { ok: true })
   if (area === 'sessions') {
     if (!id && method === 'POST') return json({ session: createSession(body.name || 'New demo session', body.path || folder, undefined, body.model) })
     if (!id || id === 'active' || id === 'recent') return json({ path: q.get('path') || '', sessions: all.filter(s => !q.get('path') || s.path === q.get('path')) })
@@ -172,7 +172,6 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
   if (area === 'jobs' && !id) return json({ jobs: [] })
   if (area === 'vault' && id === 'status') return json({ configured: false, reachable: false })
   if (area === 'lipread') return json({ enabled: false })
-  if (area === 'assistance') return json({ configured: false, supportedHarnesses: [], settings: { injectionChecks: false, contextExtraction: false, toolSelection: false, dailyBudgetUsd: 0, maxCallsPerRun: 0 }, records: [] })
   return unsupported()
 }
 

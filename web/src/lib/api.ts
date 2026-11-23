@@ -11,30 +11,12 @@ export interface SessionDefaults {
   fallbackModel?: { provider: string; id: string }
 }
 
-export interface AssistanceSettings {
-  injectionChecks: boolean
-  contextExtraction: boolean
-  toolSelection: boolean
-  dailyBudgetUsd: number
-  maxCallsPerRun: number
-}
-export interface AssistanceStatus {
-  configured: boolean
-  credentialSource?: "environment" | "vault" | "none"
-  vaultKey?: string
-  supportedHarnesses: string[]
-  settings: AssistanceSettings
-  meter?: { day: string; cost: number; calls: number }
-  records: { runId: string; sessionKey: string; model: string; purpose: string; timestamp: string; inputTokens?: number; cost: number; latencyMs: number; status: string }[]
-}
-
 export interface User {
   id: string
   username: string
   role: Role
   createdAt: string
   sessionDefaults?: SessionDefaults
-  assistance?: AssistanceSettings
 }
 
 export interface Harness {
@@ -83,8 +65,6 @@ export interface SessionSummary {
   keepLive?: boolean
   archivedAt?: string
   deleteBlockedReason?: string
-  /** Memory extraction running for this session, with the worker to watch. */
-  memoryRun?: { worker?: string; part: number; parts: number }
   owner?: string
   visibility: "private" | "shared"
   shares: { userId: string; username: string; access: Access }[]
@@ -92,42 +72,35 @@ export interface SessionSummary {
   access?: EffectiveAccess
 }
 
-export interface MemorySource {
-  id: string
-  title: string
-  status: "queued" | "extracting" | "done" | "failed"
-  part: number
-  parts: number
-  worker?: string
-  error?: string
-}
-
 export interface ContextPolicy {
   trimHours: number
   windowHours: number
 }
 
+export interface MemoryCacheSettings {
+  /** PI_CACHE_RETENTION=long: providers keep prompts cached longer. */
+  longRetention: boolean
+  /** Chats without pi wait this long after their last message. */
+  chatIdleMinutes: number
+  providers: { provider: string; minutes: number; defaultMinutes: number; custom: boolean }[]
+}
+
 export interface ProjectMemoryStatus {
-  intervalHours: number
-  /** Model for memory workers; absent uses the consolidating person's defaults. */
-  model?: { provider: string; id: string }
-  thinkingLevel?: string
   /** What agents see of long conversations: old turns trimmed after `trimHours`, older than `windowHours` left out (0 = off). */
   context: ContextPolicy
+  /** When a session last finished updating memory. */
   lastRun?: string
-  running: boolean
-  phase?: "consolidate" | "done"
-  /** Batch n of m of the current run; each batch is one worker. */
-  batch: number
-  batches: number
-  /** The current run's sources, or the last run's. */
-  sources: MemorySource[]
+  /** Sessions (the caller can open) updating memory right now. */
+  updating: { key: string; title: string }[]
   error?: string
+  /** A few orienting sentences at the top of the master. */
+  overview: string
+  overviewMax: number
   topics: MemoryTopicInfo[]
   maxTopics: number
   /** Characters per topic. */
   topicMax: number
-  /** A master from before topics still waits to be split into topics by the next run. */
+  /** A master from before topics still waits to be split into topics by the next update. */
   legacy: boolean
 }
 
@@ -536,8 +509,6 @@ export const api = {
   cancelWatch: (key: string, id: string) => request<{ watch: ProcessWatch }>("DELETE", `/api/sessions/${enc(key)}/watches/${enc(id)}`),
   interactions: (key: string) => request<{ interactions: Interaction[] }>("GET", `/api/sessions/${enc(key)}/interactions`),
   answerInteraction: (key: string, id: string, answer: { selected?: string[]; cancelled?: boolean }) => request<Interaction>("POST", `/api/sessions/${enc(key)}/interactions/${enc(id)}`, answer),
-  assistanceStatus: () => request<AssistanceStatus>("GET", "/api/assistance/status"),
-  saveAssistance: (settings: AssistanceSettings) => request<{ user: User }>("PUT", "/api/auth/assistance", settings),
   piProfile: () => request<{ connected: boolean }>("GET", "/api/auth/pi-profile"),
   savePiProfile: (provider: string, key: string) => request("PUT", "/api/auth/pi-profile", { provider, key }),
   sharedPiModels: () => request<{ models: ModelInfo[] }>("GET", "/api/harnesses/pi/shared-models"),
@@ -606,14 +577,14 @@ export const api = {
   answerMove: (id: string, approve: boolean) => request<{ moved: boolean }>("POST", `/api/projects/moves/${enc(id)}`, { approve }),
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
   projectMemory: (id: string) => request<ProjectMemoryStatus>("GET", `/api/memory/${enc(id)}`),
-  /** `model: null` goes back to the consolidating person's defaults. */
-  setMemorySettings: (id: string, body: { intervalHours?: number; context?: ContextPolicy; model?: { provider: string; id: string; thinkingLevel?: string } | null }) => request("PATCH", `/api/memory/${enc(id)}`, body),
-  /** Provider models memory workers can use, from the runtime they run on (pi-durable when available). */
-  memoryModels: () => request<{ harness: string; models: ModelInfo[] }>("GET", "/api/memory-models"),
+  setMemorySettings: (id: string, body: { context?: ContextPolicy }) => request("PATCH", `/api/memory/${enc(id)}`, body),
+  memoryCache: () => request<MemoryCacheSettings>("GET", "/api/memory-cache"),
+  /** Minutes per provider; null returns a provider to its default. Admins only. */
+  saveMemoryCache: (minutes: Record<string, number | null>) => request("PUT", "/api/memory-cache", minutes),
+  saveMemoryOverview: (id: string, body: string) => request("PUT", `/api/memory/${enc(id)}/overview`, { body }),
   memoryTopic: (id: string, slug: string) => request<MemoryTopic>("GET", `/api/memory/${enc(id)}/topics/${enc(slug)}`),
   saveMemoryTopic: (id: string, slug: string, body: { title: string; description: string; body: string }) => request("PUT", `/api/memory/${enc(id)}/topics/${enc(slug)}`, body),
   deleteMemoryTopic: (id: string, slug: string) => request("DELETE", `/api/memory/${enc(id)}/topics/${enc(slug)}`),
-  consolidateMemory: (id: string) => request<{ started: boolean }>("POST", `/api/memory/${enc(id)}/consolidate`, {}),
   memoryArchives: (id: string) => request<{ sessions: { key: string; title: string; archivedAt: string }[] }>("GET", `/api/memory/${enc(id)}/archives`),
   sessionRetention: (key: string, body: { memoryPrivate?: boolean; keepLive?: boolean; archived?: false }) => request("PATCH", `/api/sessions/${enc(key)}/retention`, body),
   chat: (id: string) => request<{ chat: Chat; messages: ChatMessage[] }>("GET", `/api/chats/${enc(id)}`),

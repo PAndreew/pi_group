@@ -11,13 +11,12 @@ import { availablePreferredModel, piProfile } from "./pi-profiles.js";
 import { lithosVaultProfile } from "./lithos-vault.js";
 import { getChat, mountChats } from "./chats.js";
 import { mcpReport, piResources } from "./inventory.js";
-import { guardPrompt, mountAssistance, prepareAssistance } from "./assistance.js";
 import { mountInteractions, withNewSessionOwner } from "./interactions.js";
 import { mountJobs } from "./jobs.js";
 import { mountWatches } from "./watches.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
-import { extractionOf, isConsolidating, mountMemory, projectMemory } from "./memory.js";
+import { isConsolidating, mountMemory, noteSessionActivity, projectMemory } from "./memory.js";
 import { mountLinks } from "./links.js";
 import { wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
 import { platform } from "./ports/index.js";
@@ -302,7 +301,6 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const load = (req: Request) => loadSession(String(req.params.key), req.user!);
 
 	mountInteractions(router, load);
-	mountAssistance(router, (user, meta) => canWrite(accessOf(user, meta)));
 
 	const ensureLive = async (meta: SessionMeta, adapter: HarnessAdapter) => {
 		const live = await adapter.open(meta.id, meta.cwd);
@@ -376,7 +374,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	});
 
 	const loadedMemory = new WeakMap<object, string>();
-	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput) => {
+	/** `background` prompts (memory updates) neither title the session nor move it up the list. */
+	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput, options: { background?: boolean } = {}) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const adapter = adapterOf(meta.harness);
 		const picked = meta.harness === "pi" ? pickedModels.get(modelPickKey(meta, user)) : undefined;
@@ -406,19 +405,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		} else if (profile) throw new HttpError(400, "Save your Pi RPC model defaults before sending with your profile");
 		const live = await adapter.open(meta.id, meta.cwd, useShared ? null : profile ?? null);
 		hub.attach(meta.key, live);
-		const run = prepareAssistance(meta, user, live.state.running);
-		if (run.settings.injectionChecks || run.settings.contextExtraction || run.settings.toolSelection) {
-			if (!live.verifyAssistance) throw new HttpError(400, "This runtime does not support Cloudflare assistance");
-			await live.verifyAssistance();
-		}
-		await guardPrompt(run, body.text, Boolean(body.images?.length));
 		if (meta.archivedAt) throw new HttpError(409, "Restore this archived session before sending messages");
 		const memory = meta.memory ? "" : projectMemory(meta, user);
 		const injectMemory = Boolean(memory && loadedMemory.get(live) !== memory);
 		const input = { ...body, text: injectMemory ? wrapProjectMemory(memory) + body.text : body.text, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
-		const autoTitle = user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
+		const autoTitle = !options.background && user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
 		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
 		saveNow();
 		try {
@@ -431,12 +424,13 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			save();
 			throw error;
 		}
-		store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
+		if (!options.background) store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
+		noteSessionActivity(meta.key, body.text);
 		if (!profile && autoTitle) void titleSession(store.session(meta.key)!, input.text).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
 
-	// Serialize admission (including asynchronous Clef checks), otherwise two shared
+	// Serialize admission (including asynchronous model checks), otherwise two shared
 	// submissions could replace one another's initiating user/settings before acceptance.
 	const submissions = new Map<string, Promise<void>>();
 	const serializeSessionChange = (meta: SessionMeta, action: () => Promise<void>) => {
@@ -447,9 +441,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return next;
 	};
 
-	const promptSession = (meta: SessionMeta, user: User, body: PromptInput) => {
+	const promptSession = (meta: SessionMeta, user: User, body: PromptInput, options?: { background?: boolean }) => {
 		if (deleting.has(meta.key)) return Promise.reject(new HttpError(409, "This session is being deleted"));
-		return serializeSessionChange(meta, () => submitPrompt(meta, user, body));
+		return serializeSessionChange(meta, () => submitPrompt(meta, user, body, options));
 	};
 
 	const isRunning = (key?: string) => {
@@ -620,7 +614,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (deleting.has(meta.key)) return "This session is being deleted";
 		if (byId.get(meta.harness)?.live(meta.id)?.state.running || submissions.has(meta.key)) return "The agent is running";
 		if (hub.count(meta.key) > 0) return "Someone is viewing this session";
-		if (isConsolidating(meta.key)) return "Memory consolidation is in progress";
+		if (isConsolidating(meta.key)) return "Project memory is being updated";
 	};
 
 	const summary = (meta: SessionMeta, user: User, listing?: SessionListing) => {
@@ -644,8 +638,6 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			memoryPrivate: Boolean(meta.memoryPrivate),
 			keepLive: Boolean(meta.keepLive),
 			archivedAt: meta.archivedAt,
-			/** Memory extraction in progress for this session, with the worker to watch. */
-			memoryRun: extractionOf(meta.key),
 			shares: meta.shares.map((s) => ({ ...s, username: store.userById(s.userId)?.username ?? "unknown" })),
 			access: accessOf(user, meta),
 			projectId: projectIdOf(meta.cwd, meta.projectId, meta.tenantId ?? "work"),
@@ -1097,10 +1089,15 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		deleteFromSession,
 		readMessages: async (meta: SessionMeta) => (await adapterOf(meta.harness).readSession(meta.id, meta.cwd))?.messages ?? [],
 		listModels: (harness: string) => adapterOf(harness).listModels(),
-		workerHarness: async (user: User) => (byId.has("pi-durable") && (await byId.get("pi-durable")!.available()).ok ? "pi-durable" : harnessFor(user)),
 	};
 	chats = mountChats(router, chatDeps);
-	mountMemory(router, { ...chatDeps, isDeleting: (key) => deleting.has(key) });
+	mountMemory(router, {
+		...chatDeps,
+		isDeleting: (key) => deleting.has(key),
+		sessionProvider: (meta) => byId.get(meta.harness)?.live(meta.id)?.state.model?.provider ?? store.userById(meta.ownerId ?? "")?.sessionDefaults?.model.provider,
+		providers: async (user) => [...new Set((await adapterOf(await harnessFor(user)).listModels()).map((m) => m.provider))],
+		chatTurn: (chatId, since, run) => chats.memoryTurn(chatId, since, run),
+	});
 	mountJobs(router, {
 		...chatDeps,
 		isRunning,

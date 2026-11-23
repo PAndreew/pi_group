@@ -1,15 +1,5 @@
 import { z } from "zod";
 
-export const assistanceSettingsSchema = z.object({
-	injectionChecks: z.boolean().default(false),
-	contextExtraction: z.boolean().default(false),
-	toolSelection: z.boolean().default(false),
-	dailyBudgetUsd: z.number().min(0).max(10).default(1),
-	maxCallsPerRun: z.number().int().min(1).max(100).default(40),
-}).strict();
-export type AssistanceSettings = z.infer<typeof assistanceSettingsSchema>;
-export const assistanceDefaults = assistanceSettingsSchema.parse({});
-
 export const sessionDefaultsSchema = z.object({
 	autoTitle: z.boolean().optional(),
 	useModelPerMessage: z.boolean().optional(),

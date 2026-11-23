@@ -17,3 +17,26 @@ export const MEMORY_TOOL = {
 		},
 	},
 };
+
+// Changes one part of the project's memory; agents use it when a session goes quiet (see docs/project-memory.md).
+export const MEMORY_UPDATE_TOOL = {
+	name: "project_memory_update",
+	label: "Update project memory",
+	description: [
+		"Change this project's memory. action=write creates or replaces a whole topic (`topic` slug: lowercase letters, digits, dashes; plus `title`, a one-line `description` and the full Markdown `body`); read the topic first and keep what still holds.",
+		"action=delete removes a topic (after merging what is worth keeping elsewhere). action=overview replaces the master overview: a few sentences that orient someone new to the project (`body`).",
+		"Topics follow the nature of the project (e.g. architecture, design, marketing, business; or itinerary, budget). Add one only for substantial material that fits none of the existing ones.",
+	].join(" "),
+	parameters: {
+		type: "object",
+		additionalProperties: false,
+		required: ["action"],
+		properties: {
+			action: { type: "string", enum: ["write", "delete", "overview"] },
+			topic: { type: "string", maxLength: 40, description: "write/delete: the topic slug, e.g. \"design\"." },
+			title: { type: "string", maxLength: 80, description: "write: short title." },
+			description: { type: "string", maxLength: 300, description: "write: one line saying what the topic covers." },
+			body: { type: "string", maxLength: 8000, description: "write: the topic's full content; overview: the overview text." },
+		},
+	},
+};

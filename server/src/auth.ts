@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response, Router } from "express";
 import express from "express";
 import { z } from "zod";
 import { piProfile, savePiKey } from "./pi-profiles.js";
-import { assistanceSettingsSchema, sessionDefaultsSchema } from "./preferences.js";
+import { sessionDefaultsSchema } from "./preferences.js";
 import { config } from "./config.js";
 import { type Role, save, store, type User, type LoginSession } from "./store.js";
 import { inTenant, tenantId } from "./tenant-context.js";
@@ -36,7 +36,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
-export const publicUser = (user: User) => ({ id: user.id, username: user.username, role: user.role, createdAt: user.createdAt, sessionDefaults: user.sessionDefaults, assistance: user.assistance });
+export const publicUser = (user: User) => ({ id: user.id, username: user.username, role: user.role, createdAt: user.createdAt, sessionDefaults: user.sessionDefaults });
 
 export function createUser(username: string, password: string, role: Role): User {
 	if (store.userByName(username)) throw new Error(`User ${username} already exists`);
@@ -181,12 +181,6 @@ export function authRoutes(): Router {
 		res.setHeader("Content-Type", "image/png");
 		res.setHeader("X-Content-Type-Options", "nosniff");
 		res.send(Buffer.from(avatar.split(",")[1], "base64"));
-	});
-
-	router.put("/auth/assistance", requireAuth, (req, res) => {
-		req.user!.assistance = assistanceSettingsSchema.parse(req.body);
-		save();
-		res.json({ user: publicUser(req.user!) });
 	});
 
 	router.put("/auth/defaults", requireAuth, (req, res) => {

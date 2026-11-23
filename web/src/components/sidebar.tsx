@@ -64,7 +64,7 @@ export function Breadcrumb({ rootName, folder, onFolder }: { rootName: string; f
 
 type Count = { total: number; running: number }
 
-const blockedReason = (s: SessionSummary) => s.deleteBlockedReason || (s.running ? "The agent is running" : s.memoryRun ? "Memory consolidation is in progress" : !canDelete(s) ? "Only the owner or an admin can delete this session" : undefined)
+const blockedReason = (s: SessionSummary) => s.deleteBlockedReason || (s.running ? "The agent is running" : !canDelete(s) ? "Only the owner or an admin can delete this session" : undefined)
 
 function SessionRow({ s, selected, onOpen, deletion, indent }: { s: SessionSummary; selected?: string; onOpen: (key: string) => void; deletion: SessionDeletion; indent?: boolean }) {
   return (

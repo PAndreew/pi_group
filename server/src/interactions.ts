@@ -54,7 +54,6 @@ export function interactionEnvironment(key: string) {
       BEEZY_APPLET_DATA_TOKEN: tokenFor(appletDataKey(key, meta.ownerId, meta.tenantId ?? "work")),
     } : {}),
     BEEZY_BROWSER_URL: `${base}/browser-bridge/${encodeURIComponent(key)}`,
-    BEEZY_ASSISTANCE_URL: `${base}/assistance-bridge/${encodeURIComponent(key)}`,
     BEEZY_CONTEXT_URL: `${base}/context-bridge/${encodeURIComponent(key)}`,
     BEEZY_WATCH_URL: `${base}/watch-bridge/${encodeURIComponent(key)}`,
     BEEZY_MEMORY_URL: `${base}/memory-bridge/${encodeURIComponent(key)}`,

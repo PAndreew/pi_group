@@ -9,7 +9,7 @@ Beezy has one open-source codebase with two deployment targets: self-hosted (one
                                        │ HTTPS + live streams;  GET /api/capabilities
 ┌──────────────────────────────────────▼───────────────────────────────────────────────┐
 │ CONTROL PLANE: accounts, tenants, access, chats, sessions, jobs, vault, usage        │
-│   later: event pipeline (emit → queue → Clairic extraction → items → Clef triage)    │
+│   later: event pipeline (emit → queue → extraction → items → triage)    │
 │                                                                                      │
 │ PORTS: DocumentStore · SqlDatabase · WorkspaceStorage · Realtime · Sandbox ·         │
 │        Scheduler · Secrets · Models            (later: Queue · Billing)              │
@@ -43,11 +43,11 @@ All ports are defined in [`server/src/ports/index.ts`](../server/src/ports/index
 | `WorkspaceStorage` | filesystem under `FS_ROOT` (tenant root), symlink-safe | file browser, editor, uploads, previews |
 | `Realtime` | in-memory topics, delivered over SSE | session viewers, per-user notification streams |
 | `Sandbox` | `child_process` (process groups for tree kills) | pi RPC processes, `pi` CLI calls, job scripts |
-| `Scheduler` | `setTimeout` / `setInterval`, never keeping the process alive | jobs, memory consolidation, session housekeeping |
+| `Scheduler` | `setTimeout` / `setInterval`, never keeping the process alive | jobs, quiet-session memory updates, archiving, session housekeeping |
 | `Secrets` | the [vault service](vault.md) over HTTP | vault routes, agent vault tools |
 | `Models` | every capability `none` | `GET /api/capabilities` |
 
-The `Models` port is where the optional models plug in: `triage` (Clef), `extract` (Clairic), `stt`, `tts` and `embed`. Each one is `none`, `local` or `api`. With all of them `none`, the app behaves exactly as without them, and the web app reads `/api/capabilities` to decide which features to show.
+The `Models` port is where the optional models plug in: `triage`, `extract`, `stt`, `tts` and `embed`. Each one is `none`, `local` or `api`. With all of them `none`, the app behaves exactly as without them, and the web app reads `/api/capabilities` to decide which features to show.
 
 Some parts still use Node directly, because they belong to the future agent host, or because an object-storage adapter will need its own routes:
 - the terminal's pty
@@ -59,7 +59,7 @@ Some parts still use Node directly, because they belong to the future agent host
 ## Next steps
 
 1. Split out the agent host behind a protocol, still running in-process when self-hosted.
-2. Event pipeline and capability adapters: Clairic extraction, then Clef triage, all off by default.
+2. Event pipeline and capability adapters: extraction, then triage, all off by default.
 3. Cloudflare adapters: a Worker, a Durable Object per chat and session, D1, R2 with workspace snapshots, and a container per user's agent host.
 4. Metering and billing from the usage records, container time and storage.
 5. Speech-to-text and text-to-speech through the same capability registry.

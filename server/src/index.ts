@@ -21,7 +21,7 @@ import { pushRoutes } from "./push.js";
 import { expireInteractions } from "./interactions.js";
 import { sessionRoutes } from "./sessions.js";
 import { attachTerminal } from "./terminal.js";
-import { projectMemoryTool } from "./memory.js";
+import { memoryUpdateSchema, projectMemoryTool, projectMemoryUpdate } from "./memory.js";
 import { watchTool } from "./watches.js";
 import { contextPolicyOf } from "./projects.js";
 import { loadStore, saveNow, store } from "./store.js";
@@ -34,7 +34,7 @@ loadStore();
 expireInteractions();
 ensureAdmin();
 
-const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter((key) => contextPolicyOf(store.session(key)), (key, args) => projectMemoryTool(store.session(key), args), watchTool)];
+const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter((key) => contextPolicyOf(store.session(key)), (key, args) => projectMemoryTool(store.session(key), args), watchTool, (key, args) => { try { return projectMemoryUpdate(store.session(key), memoryUpdateSchema.parse(args)); } catch (error) { return `Not changed: ${(error as Error).message}`; } })];
 
 const app = express();
 app.disable("x-powered-by");

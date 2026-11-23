@@ -10,7 +10,7 @@ import express from "express";
 const dir = mkdtempSync(path.join(os.tmpdir(), "pi-group-projects-"));
 process.env.DATA_DIR = dir;
 process.env.FS_ROOT = dir;
-for (const folder of ["apps/beezy/server", "apps/clairic", "holiday"]) mkdirSync(path.join(dir, folder), { recursive: true });
+for (const folder of ["apps/beezy/server", "apps/notes", "holiday"]) mkdirSync(path.join(dir, folder), { recursive: true });
 
 test("projects sort sessions in, move them, and ask the people in them first", async () => {
 	const { authenticate, authRoutes, createUser } = await import("./auth.js");
@@ -69,7 +69,7 @@ test("projects sort sessions in, move them, and ask the people in them first", a
 		const holidayNow = (await asOwner("POST", "/projects", { name: "Holiday 2027" })).body.project;
 		assert.equal(holidayNow.folder, "projects/holiday-2027-3");
 		assert.equal(projectIdOf(path.join(dir, "apps/beezy/server")), beezy.id);
-		assert.equal(projectIdOf(path.join(dir, "apps/clairic")), apps.id);
+		assert.equal(projectIdOf(path.join(dir, "apps/notes")), apps.id);
 		assert.equal(projectIdOf(path.join(dir, "holiday")), general);
 		projects = (await asOwner("GET", "/projects")).body.projects;
 		assert.deepEqual(projects.map((p: { name: string }) => p.name), ["General", "Apps", "Beezy", "Holiday 2027"]);

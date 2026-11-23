@@ -31,11 +31,12 @@ function fakeHarness() {
 			prompt: async (input: PromptInput) => {
 				assert.equal(state.running, false, "chat prompts must wait for the active turn");
 				prompts.push({ id, cwd, text: input.text });
-				if (input.text.startsWith("Update project memory")) {
-					const dir = input.text.match(/Markdown files directly in (.+?); /)![1];
-					const sources = [...input.text.matchAll(/<conversation source="([^"]+)"/g)].map(m => m[1]);
-					const file = path.join(dir, "deploy.md");
-					appendFileSync(file, existsSync(file) ? `\nAlso from ${sources.join(", ")}` : `---\ntitle: Deploy\ndescription: Deploy decisions\n---\nDeploy decisions are recorded here, from ${sources.join(", ")}.`);
+				if (input.text.includes("[beezy: project memory update]")) {
+					// The agent updates memory through its tool, from its own (cached) conversation.
+					const { projectMemoryUpdate } = await import("./memory.js");
+					const meta = (await import("./store.js")).store.session(`pi:${id}`);
+					projectMemoryUpdate(meta, { action: "write", topic: "deploy", title: "Deploy", description: "Deploy decisions", body: `Deploy decisions are recorded here, from ${meta!.key}.` });
+					projectMemoryUpdate(meta, { action: "overview", body: "Beezy API server; deploys go through the deploy topic." });
 				}
 				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }] });
 				state.running = true;
@@ -235,9 +236,6 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		store.upsertSession({ ...soloMeta, updatedAt: "2020-01-01T00:00:00.000Z" });
 		Object.defineProperty(adapter.live(soloMeta.id)!, "lastActivity", { value: Date.parse("2020-01-01T00:00:00.000Z"), writable: true });
 		const endpoint = "/memory/general-work";
-		assert.equal((await call("anna", "POST", `${endpoint}/consolidate`, {})).status, 403);
-		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 24 })).status, 200);
-		assert.equal((await call("chat-admin", "GET", endpoint)).body.intervalHours, 24);
 		// Context trimming is a project setting; the session's pi extension reads it over its bridge.
 		assert.deepEqual((await call("chat-admin", "GET", endpoint)).body.context, { trimHours: 12, windowHours: 168 });
 		assert.equal((await call("anna", "PATCH", endpoint, { context: { trimHours: 6, windowHours: 0 } })).status, 403);
@@ -246,21 +244,25 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		const contextBridge = (token: string) => fetch(`${base}/context-bridge/${encodeURIComponent(soloMeta.key)}`, { headers: { Authorization: `Bearer ${token}` } });
 		assert.equal((await contextBridge("wrong")).status, 403);
 		assert.deepEqual(await (await contextBridge(interactionEnvironment(soloMeta.key).BEEZY_INTERACTION_TOKEN)).json(), { trimHours: 6, windowHours: 0 });
-		assert.equal((await call("chat-admin", "POST", `${endpoint}/consolidate`, {})).body.started, true);
-		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "consolidation");
+
+		// Sessions worked in since the server started update memory themselves once quiet; old ones never do.
+		const { memoryControls, MEMORY_UPDATE_TAG } = await import("./memory.js");
+		assert.ok(memoryControls.pending(soloMeta.key), "a session with activity waits for its quiet period");
+		const updates = () => prompts.filter(p => p.text.includes(MEMORY_UPDATE_TAG));
+		await memoryControls.updateNow(privateSession.key);
+		assert.equal(updates().length, 0, "private sessions do not update memory");
+		await memoryControls.updateNow(soloMeta.key);
+		assert.deepEqual(updates().map(p => p.id), [soloMeta.id], "the update runs in the session itself");
+		assert.ok(!memoryControls.pending(soloMeta.key), "the update prompt is not activity");
+		assert.equal(store.session(soloMeta.key)!.updatedAt, "2020-01-01T00:00:00.000Z", "a background update does not move the session up");
 		const status = (await call("chat-admin", "GET", endpoint)).body;
 		assert.equal(status.error, undefined);
 		assert.ok(status.lastRun);
+		assert.equal(status.overview, "Beezy API server; deploys go through the deploy topic.");
 		assert.deepEqual(status.topics.map((t: any) => [t.slug, t.title, t.description]), [["deploy", "Deploy", "Deploy decisions"]]);
-		assert.match(readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8"), /`deploy` — Deploy: Deploy decisions/, "MEMORY.md is the generated index");
-		assert.ok(status.sources.length > 0 && status.sources.every((s: any) => s.status === "done"), JSON.stringify(status.sources));
-		const consolidatedPrompts = prompts.filter(p => p.text.startsWith("Update project memory"));
-		assert.ok(consolidatedPrompts.filter(p => p.text.includes(`<conversation source="${soloMeta.key}"`)).length >= 2, "a long source is spread over batches");
-		assert.equal(new Set(consolidatedPrompts.map(p => p.id)).size, consolidatedPrompts.length, "every batch gets a fresh worker");
-		assert.ok(!consolidatedPrompts.some(p => p.text.includes("<project-memory>")), "injected memory is not consolidated again");
-		assert.ok(!consolidatedPrompts.some(p => p.text.includes("private-secret-not-for-memory")));
-		assert.ok(consolidatedPrompts.some(p => p.text.includes("early-important-fact")));
-		assert.ok(consolidatedPrompts.some(p => p.text.includes("late-important-fact")));
+		const master = readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8");
+		assert.match(master, /Beezy API server[\s\S]*`deploy` — Deploy: Deploy decisions/, "MEMORY.md is the generated master: overview, then topics");
+		await memoryControls.archiveNow();
 		const { archiveEligible } = await import("./memory.js");
 		assert.equal(archiveEligible({ ...soloMeta, keepLive: true }), false);
 		assert.equal(archiveEligible({ ...soloMeta, memoryPrivate: true }), false);
@@ -279,12 +281,21 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(store.session(soloMeta.key)!.archivedAt, undefined);
 		assert.equal(store.session(soloMeta.key)!.keepLive, true);
 		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "read public context" });
-		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>") && p.text.includes("`deploy` — Deploy")), "sessions get the topic index");
-		// The pi extension reads topics over the session's bridge, with the owner's access.
-		const memoryBridge = (token: string, body: object) => fetch(`${base}/memory-bridge/${encodeURIComponent(privateSession.key)}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-		assert.equal((await memoryBridge("wrong", {})).status, 403);
-		assert.match((await (await memoryBridge(interactionEnvironment(privateSession.key).BEEZY_INTERACTION_TOKEN, { topics: ["deploy"] })).json()).text, /Deploy decisions are recorded here/);
-		// People edit topics: create, update, delete; at most ten; the index follows.
+		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>") && p.text.includes("`deploy` — Deploy") && p.text.includes("Beezy API server")), "sessions get the master");
+		// The pi extension reads and updates topics over the session's bridge, with the owner's access.
+		const memoryBridge = (key: string, token: string, body: object, route = "") => fetch(`${base}/memory-bridge/${encodeURIComponent(key)}${route}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+		const token = (key: string) => interactionEnvironment(key).BEEZY_INTERACTION_TOKEN;
+		assert.equal((await memoryBridge(privateSession.key, "wrong", {})).status, 403);
+		assert.match((await (await memoryBridge(privateSession.key, token(privateSession.key), { topics: ["deploy"] })).json()).text, /Deploy decisions are recorded here/);
+		const privateWrite = await memoryBridge(privateSession.key, token(privateSession.key), { action: "write", topic: "x", title: "X", description: "x", body: "x" }, "/update");
+		assert.equal(privateWrite.status, 400);
+		assert.match((await privateWrite.json()).text, /private/);
+		const write = (body: object) => memoryBridge(soloMeta.key, token(soloMeta.key), body, "/update");
+		assert.match((await (await write({ action: "write", topic: "Bad Name", title: "x", description: "y", body: "z" })).json()).text, /^Not changed: `topic` must be a slug/);
+		assert.match((await (await write({ action: "write", topic: "design", title: "Design", description: "Look and feel", body: "Dark mode first." })).json()).text, /saved/);
+		assert.match((await (await write({ action: "overview", body: "x".repeat(2000) })).json()).text, /at most 1500/);
+		assert.match((await (await write({ action: "delete", topic: "design" })).json()).text, /deleted/);
+		// People edit topics and the overview: create, update, delete; at most ten; the master follows.
 		assert.equal((await call("anna", "PUT", `${endpoint}/topics/Bad%20Name`, { title: "x", description: "y", body: "z" })).status, 400);
 		assert.equal((await call("anna", "PUT", `${endpoint}/topics/marketing`, { title: "Marketing", description: "Launch plans", body: "Launch in spring." })).status, 200);
 		assert.equal((await call("anna", "GET", `${endpoint}/topics/marketing`)).body.body, "Launch in spring.");
@@ -294,17 +305,37 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		for (let i = 0; i < 8; i++) await call("anna", "DELETE", `${endpoint}/topics/t${i}`);
 		assert.equal((await call("anna", "DELETE", `${endpoint}/topics/marketing`)).status, 200);
 		assert.deepEqual((await call("anna", "GET", endpoint)).body.topics.map((t: any) => t.slug), ["deploy"]);
+		assert.equal((await call("anna", "PUT", `${endpoint}/overview`, { body: "Edited by a person." })).status, 200);
+		assert.equal((await call("anna", "GET", endpoint)).body.overview, "Edited by a person.");
 		assert.equal(store.session(privateSession.key)!.consolidatedAt, undefined);
-		const consolidations = () => prompts.filter(p => p.text.startsWith("Update project memory"));
-		const count = consolidations().length;
-		await call("chat-admin", "POST", `${endpoint}/consolidate`, {});
-		await until(async () => !(await call("chat-admin", "GET", endpoint)).body.running, "repeat consolidation");
-		assert.equal(consolidations().length, count, JSON.stringify(consolidations().slice(count).map(p => [...p.text.matchAll(/<conversation source="([^"]+)"/g)].map(m => m[1]))));
-		assert.equal((await call("chat-admin", "PATCH", endpoint, { model: { provider: "test", id: "cheap", thinkingLevel: "low" } })).status, 200);
-		assert.deepEqual((await call("chat-admin", "GET", endpoint)).body.model, { provider: "test", id: "cheap" });
-		assert.equal((await call("chat-admin", "GET", "/memory-models")).body.harness, "pi", "workers fall back to the default runtime without pi-durable");
-		assert.equal((await call("anna", "PATCH", endpoint, { model: null })).status, 403);
-		assert.equal((await call("chat-admin", "PATCH", endpoint, { intervalHours: 0 })).status, 200);
+
+		// Group chats update memory too: in their pi session, with what people said since pi's last turn.
+		assert.ok(memoryControls.pending(`chat:${chatId}`), "a chat with new messages waits for its quiet period");
+		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "we settled on blue-green deploys" });
+		const before = updates().length;
+		await memoryControls.updateChatNow(chatId);
+		const chatUpdate = updates().slice(before);
+		const chatSession = (await import("./chats.js")).getChat(chatId)!.sessionKey!;
+		assert.deepEqual(chatUpdate.map(p => `pi:${p.id}`), [chatSession], "the chat's own pi session updates memory");
+		assert.match(chatUpdate[0].text, /anna: we settled on blue-green deploys/);
+		assert.ok((await import("./chats.js")).getChat(chatId)!.consolidatedAt);
+		assert.ok(!(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.message.role === "assistant" && /reply to/.test(JSON.stringify(m.message)) && m.status === "working"), "no chat reply is posted for the update");
+		// A people-only chat has no cache to catch: a short-lived worker reads its messages.
+		const plain = (await call("anna", "POST", "/chats", { text: "the logo stays orange", userIds: [bob.id] })).body.chat;
+		const workerCount = updates().length;
+		await memoryControls.updateChatNow(plain);
+		const workerPrompt = updates().slice(workerCount);
+		assert.equal(workerPrompt.length, 1);
+		assert.match(workerPrompt[0].text, /<chat>\nanna: the logo stays orange\n<\/chat>/);
+		assert.equal(store.session(`pi:${workerPrompt[0].id}`)!.deleted, true, "the worker is removed");
+
+		// Cache lifetime per provider decides how long a session waits; admins change it.
+		const cache = (await call("anna", "GET", "/memory-cache")).body;
+		assert.deepEqual(cache.providers.find((p: any) => p.provider === "test"), { provider: "test", minutes: 5, defaultMinutes: 5, custom: false });
+		assert.equal((await call("anna", "PUT", "/memory-cache", { test: 10 })).status, 403);
+		assert.equal((await call("chat-admin", "PUT", "/memory-cache", { test: 10 })).status, 200);
+		assert.equal((await call("anna", "GET", "/memory-cache")).body.providers.find((p: any) => p.provider === "test").minutes, 10);
+		assert.equal((await call("chat-admin", "PUT", "/memory-cache", { test: null })).status, 200);
 
 		// Deleting a chat removes it for the one deleting; it is gone once the last member deletes it.
 		const doomed = (await call("anna", "POST", "/chats", { text: "temporary", userIds: [bob.id] })).body.chat;

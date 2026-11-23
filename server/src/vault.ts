@@ -4,7 +4,7 @@ import { requireAuth } from "./auth.js";
 import { config } from "./config.js";
 import { HttpError } from "./files.js";
 import { bridgeCredentialValid } from "./interactions.js";
-import { platform, type SecretInfo } from "./ports/index.js";
+import { platform } from "./ports/index.js";
 import { canAccessProject, isProjectMember, projectIdOf, tenantProjects } from "./projects.js";
 import { store } from "./store.js";
 import { tenantId } from "./tenant-context.js";
@@ -96,18 +96,16 @@ export function vaultRoutes(): Router {
 		const project = tenantProjects(tenant).find((p) => p.id === projectId);
 		return { personal: namespaceOf(tenant, meta.ownerId), project: project && isProjectMember(meta.ownerId, project) ? projectNamespaceOf(tenant, project.id) : undefined };
 	};
-	const agentVisible = (secret: SecretInfo) => secret.key !== config.cloudflareVaultKey;
 
 	router.get("/vault-bridge/:key", async (req, res) => {
 		const { personal, project } = agentNamespaces(String(req.params.key), req.headers.authorization);
 		const [own, shared] = await Promise.all([platform().secrets.list(personal), project ? platform().secrets.list(project) : []]);
-		res.json({ secrets: [...own.map((s) => ({ ...s, scope: "personal" })), ...shared.map((s) => ({ ...s, scope: "project" }))].filter(agentVisible) });
+		res.json({ secrets: [...own.map((s) => ({ ...s, scope: "personal" })), ...shared.map((s) => ({ ...s, scope: "project" }))] });
 	});
 	/** One value; personal first unless `?scope=project` asks for the project's. */
 	router.get("/vault-bridge/:key/:secret", async (req, res) => {
 		const { personal, project } = agentNamespaces(String(req.params.key), req.headers.authorization);
 		const requested = keySchema.parse(req.params.secret);
-		if (requested === config.cloudflareVaultKey) throw new HttpError(403, "This credential is reserved for server-side Cloudflare assistance");
 		const wanted = z.enum(["personal", "project"]).optional().parse(req.query.scope);
 		const order = [wanted !== "project" && personal, wanted !== "personal" && project].filter((ns): ns is string => Boolean(ns));
 		if (!order.length) throw new HttpError(404, "This session's project has no secrets you could read");

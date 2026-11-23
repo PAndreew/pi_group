@@ -59,11 +59,6 @@ export const config = {
 	/** Separately deployed secret vault (vault/); both must be set for the vault UI and agent tools. */
 	vaultUrl: process.env.VAULT_URL ?? (process.env.VAULT_TOKEN ? "http://127.0.0.1:8790" : ""),
 	vaultToken: process.env.VAULT_TOKEN ?? "",
-	/** Auxiliary models share one server-only Workers AI credential. */
-	cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
-	cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN ?? "",
-	/** Optional key reference in the initiating user's per-tenant vault; never a token value. */
-	cloudflareVaultKey: process.env.CLOUDFLARE_VAULT_KEY ?? "",
 	webDist: path.resolve(env("WEB_DIST", path.join(import.meta.dirname, "..", "..", "web", "dist"))),
 };
 
@@ -81,5 +76,3 @@ delete process.env.LIPREAD_SERVICE_TOKEN;
 delete process.env.LIPREAD_LLM_API_KEY;
 delete process.env.VAULT_TOKEN;
 delete process.env.VAULT_MASTER_KEY;
-delete process.env.CLOUDFLARE_API_TOKEN;
-delete process.env.CLOUDFLARE_ACCOUNT_ID;

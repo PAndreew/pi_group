@@ -117,12 +117,12 @@ export interface CapabilityInfo {
 	model?: string;
 }
 
-/** Clef: sort an incoming item into one of `labels`, with confidences. */
+/** Sort an incoming item into one of `labels`, with confidences. */
 export interface Triage {
 	classify(item: { kind: string; text: string }, labels: string[]): Promise<{ label: string; confidence: number }[]>;
 }
 
-/** Clairic: metadata of a text or image item. */
+/** Metadata of a text or image item. */
 export interface Extract {
 	extract(item: { kind: string; text?: string; image?: { data: Uint8Array; mimeType: string } }): Promise<{ title?: string; summary?: string; tags?: string[]; entities?: string[] }>;
 }
