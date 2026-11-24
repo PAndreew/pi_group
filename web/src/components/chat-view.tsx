@@ -64,19 +64,19 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
             </button>
           )}
         </div>
-        <div className={cn("grid min-w-0 gap-1", m.status !== "working" && "agent-message agent-bubble rounded-3xl rounded-tl-md px-3 py-2")}>
-        {m.status === "working" ? null : m.status === "error" ? (
-          <span className="flex items-start gap-1.5 text-sm text-destructive">
-            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {text || "The run failed."}
-          </span>
-        ) : m.status === "aborted" ? (
-          <span className="text-sm text-muted-foreground">Stopped.</span>
-        ) : (
-          <Markdown text={text} className="text-sm" base={folder} />
-        )}
-        {children}
+        <div className={cn("grid min-w-0 gap-1", m.status !== "working" && "agent-message agent-bubble rounded-3xl rounded-tl-md px-4 py-2.5")}>
+          {m.status === "working" ? null : m.status === "error" ? (
+            <span className="flex items-start gap-1.5 text-sm text-destructive">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {text || "The run failed."}
+            </span>
+          ) : m.status === "aborted" ? (
+            <span className="text-sm text-muted-foreground">Stopped.</span>
+          ) : (
+            <Markdown text={text} className="text-sm" base={folder} />
+          )}
+          {children}
+        </div>
         {m.status !== "working" && <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />}
-      </div>
       {actions}
       <StepsDialog steps={shownSteps} open={details !== null} index={details?.index ?? null} onIndex={(index) => setDetails((value) => value && { ...value, index })} onClose={() => setDetails(null)} />
       </div>
@@ -93,10 +93,10 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
         <ReplyStack text={text} align="end" className="max-w-[85%]" header={<div className="mb-1 flex min-h-8 items-center justify-end gap-2 text-xs font-medium">{author?.username}{author && <AuthorAvatar id={author.id} name={author.username} />}</div>}>
           {(body) => (
             <div className="min-w-0">
-              <div className="rounded-3xl rounded-tr-md bg-blue-50 px-3 py-2 text-sm text-black">
+              <div className="rounded-3xl rounded-tr-md bg-blue-50 px-4 py-2.5 text-sm text-black">
                 <MessageBody text={body} folder={folder} />
-                <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />
               </div>
+              <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />
             </div>
           )}
         </ReplyStack>
@@ -108,10 +108,10 @@ function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boole
       <ReplyStack text={text} className="max-w-[85%]" header={(showName || Boolean(parseReply(text))) && <div className="mb-1 flex min-h-8 items-center text-xs font-medium">{author?.username}</div>}>
         {(body) => (
           <div className="min-w-0">
-            <div className="rounded-3xl rounded-tl-md bg-muted px-3 py-2 text-sm">
+            <div className="rounded-3xl rounded-tl-md bg-muted px-4 py-2.5 text-sm">
               <MessageBody text={body} folder={folder} />
-              <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} className="text-muted-foreground opacity-100" />
             </div>
+            <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />
           </div>
         )}
       </ReplyStack>

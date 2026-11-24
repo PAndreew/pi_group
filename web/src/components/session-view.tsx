@@ -84,12 +84,12 @@ function UserBubble({ message, text, memory, onRemoveMemory, folder }: { message
       <ReplyStack text={text} align="end" className="max-w-[88%]" header={<div className="mb-1 text-right text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>}>
         {(body) => (
           <div className="min-w-0">
-            <div className="rounded-3xl rounded-br-md bg-blue-50 px-3.5 py-2 text-sm text-black">
+            <div className="rounded-3xl rounded-br-md bg-blue-50 px-4 py-2.5 text-sm text-black">
               {memory !== undefined && <ProjectMemoryPill memory={memory} onRemove={onRemoveMemory} />}
               {isWatchResult(body) ? <WatchResultPill text={body} /> : <MessageBody text={body} folder={folder} />}
               <ImageGallery images={images} />
-              <MessageTime at={message.timestamp} />
             </div>
+            <MessageTime at={message.timestamp} />
           </div>
         )}
       </ReplyStack>
@@ -198,30 +198,34 @@ function AgentBubble({
             {run.running ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}
           </button>
         </div>
-      {(run.running || run.answer || question || answered.length > 0 || interactions) && <div className="agent-message agent-bubble rounded-3xl rounded-bl-md px-3.5 py-2 text-sm">
-        {run.running && !run.answer?.trim() && !question && !interactions && (
-          <div role="status" aria-label="Beezy is working" className="py-2 text-black">
-            <pre aria-hidden="true" className="ascii-bee m-0 font-mono text-xs leading-tight">
-              <span className="ascii-bee-wing-left" />{"(oo)"}<span className="ascii-bee-wing-right" />
-            </pre>
-          </div>
+        {(run.running || run.answer || question || answered.length > 0 || interactions) && (
+          <>
+            <div className="agent-message agent-bubble rounded-3xl rounded-bl-md px-4 py-2.5 text-sm">
+              {run.running && !run.answer?.trim() && !question && !interactions && (
+                <div role="status" aria-label="Beezy is working" className="py-2 text-black">
+                  <pre aria-hidden="true" className="ascii-bee m-0 font-mono text-xs leading-tight">
+                    <span className="ascii-bee-wing-left" />{"(oo)"}<span className="ascii-bee-wing-right" />
+                  </pre>
+                </div>
+              )}
+              {run.answer && (
+                <div>
+                  <Markdown text={run.answer} base={folder} />
+                  {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current align-middle" />}
+                </div>
+              )}
+              {answered.map((a) => (
+                <div key={a.dialog.id} className="mt-2 rounded-lg bg-current/10 px-2.5 py-1.5 text-xs">
+                  <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
+                  <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
+                </div>
+              ))}
+              {interactions}
+              {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
+            </div>
+            {!run.running && <MessageTime at={run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp} />}
+          </>
         )}
-        {run.answer && (
-          <div>
-            <Markdown text={run.answer} base={folder} />
-            {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current align-middle" />}
-          </div>
-        )}
-        {answered.map((a) => (
-          <div key={a.dialog.id} className="mt-2 rounded-lg bg-current/10 px-2.5 py-1.5 text-xs">
-            <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
-            <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
-          </div>
-        ))}
-        {interactions}
-        {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
-        {!run.running && <MessageTime at={run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp} />}
-      </div>}
       </div>
     </div>
   )

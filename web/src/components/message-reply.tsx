@@ -64,7 +64,7 @@ export function ReplyStack({ text, align = "start", className, header, children 
           <span className="line-clamp-3 whitespace-pre-wrap break-words">{reply.quote}</span>
         </button>
       )}
-      <div className={cn("relative z-10 max-w-full", reply && "w-full [&>div]:rounded-t-none [&>div>div:last-child]:rounded-t-none")}>{children(reply ? reply.body : text)}</div>
+      <div className={cn("relative z-10 max-w-full", reply && "w-full [&>div]:rounded-t-none [&>div>div:first-child]:rounded-t-none")}>{children(reply ? reply.body : text)}</div>
     </div>
   )
 }

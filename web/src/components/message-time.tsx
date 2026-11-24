@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 
-/** When a message was sent, small and narrow in its card's bottom-right corner; the date too unless it is today. */
+/** Right-aligned send time, with the date included for messages sent before today. */
 export function MessageTime({ at, edited, className }: { at?: string | number; edited?: boolean; className?: string }) {
   if (at === undefined) return null
   const date = new Date(at)
