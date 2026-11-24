@@ -386,7 +386,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** When this runtime last got project memory (also before the prompt shows up in its messages). */
 	const loadedMemory = new WeakMap<object, number>();
 	/** `background` prompts (memory updates) neither title the session nor move it up the list. */
-	const submitPrompt = async (meta: SessionMeta, user: User, body: PromptInput, options: { background?: boolean } = {}) => {
+	const submitPrompt = async (meta: SessionMeta, user: User, { fromBrowser, ...body }: PromptInput & { fromBrowser?: boolean }, options: { background?: boolean } = {}) => {
 		if (!canWrite(accessOf(user, meta))) throw new HttpError(403, "Session unavailable in this tenant");
 		const adapter = adapterOf(meta.harness);
 		const picked = meta.harness === "pi" ? pickedModels.get(modelPickKey(meta, user)) : undefined;
@@ -427,7 +427,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
 		const autoTitle = !options.background && user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
-		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username });
+		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username }, fromBrowser);
 		saveNow();
 		try {
 			if (selectedModel && (live.state.model?.provider !== selectedModel.provider || live.state.model?.id !== selectedModel.id)) await live.setModel(selectedModel.provider, selectedModel.id);
@@ -456,7 +456,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		return next;
 	};
 
-	const promptSession = (meta: SessionMeta, user: User, body: PromptInput, options?: { background?: boolean }) => {
+	const promptSession = (meta: SessionMeta, user: User, body: PromptInput & { fromBrowser?: boolean }, options?: { background?: boolean }) => {
 		if (deleting.has(meta.key)) return Promise.reject(new HttpError(409, "This session is being deleted"));
 		return serializeSessionChange(meta, () => submitPrompt(meta, user, body, options));
 	};
@@ -952,6 +952,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 				text: z.string().min(1).max(200_000),
 				images: z.array(z.object({ data: z.string(), mimeType: z.string().regex(/^image\//) })).max(10).optional(),
 				mode: z.enum(["steer", "followUp"]).optional(),
+				fromBrowser: z.boolean().optional(),
 			})
 			.parse(req.body);
 		await promptSession(meta, req.user!, body);

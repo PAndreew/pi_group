@@ -117,7 +117,7 @@ export interface MemoryTopic extends Omit<MemoryTopicInfo, "size"> {
 }
 
 /** A pi AgentMessage; loose on purpose, harnesses may add roles. */
-export type AgentMessage = { role: string; timestamp?: number; author?: { id: string; username: string }; [key: string]: any }
+export type AgentMessage = { role: string; timestamp?: number; author?: { id: string; username: string }; browserQuestionId?: string; [key: string]: any }
 
 export interface ExtensionDialog {
   id: string
@@ -669,7 +669,7 @@ export const api = {
     tenantUrl(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal?${q({ ...(target.key ? { key: target.key } : { path: target.path ?? "" }), cols: String(cols), rows: String(rows) })}`),
   browserUrl: (key: string) => tenantUrl(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/browser?${q({ key })}`),
   browserStatus: (key: string) => request<BrowserStatus>("GET", `/api/sessions/${enc(key)}/browser`),
-  prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp" }) =>
+  prompt: (key: string, body: { text: string; images?: { data: string; mimeType: string }[]; mode?: "steer" | "followUp"; fromBrowser?: boolean }) =>
     request("POST", `/api/sessions/${enc(key)}/prompt`, body),
   /** Edit a message of a session whose agent is not running; `expect` is its current text. */
   deleteMessage: (key: string, target: { index: number; timestamp?: number; expect: string }) => request<{ queued: boolean }>("POST", `/api/sessions/${enc(key)}/messages/delete`, target),

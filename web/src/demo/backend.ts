@@ -105,7 +105,7 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
     if (!action && method === 'GET') return json({ session })
     if (!action && method === 'DELETE') { sessions.delete(id); states.delete(id); emit(id, { type: 'deleted', by: alice.username }); return json({ ok: true }) }
     if (action === 'prompt') {
-      state.messages.push(text('user', body.text || '', alice), reply()); session.messageCount = state.messages.length; snapshot(id); return json({ ok: true })
+      state.messages.push({ ...text('user', body.text || '', alice), ...(body.fromBrowser ? { browserQuestionId: `browser-${state.messages.length}` } : {}) }, reply()); session.messageCount = state.messages.length; snapshot(id); return json({ ok: true })
     }
     if (action === 'name' || action === 'generate-title') { session.name = state.name = body.name || session.name || 'Demo session'; snapshot(id); return json({ name: state.name }) }
     if (action === 'model') state.model = { provider: body.provider, id: body.id }

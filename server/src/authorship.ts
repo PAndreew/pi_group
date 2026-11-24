@@ -2,9 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AgentMessage, PromptInput } from "./harness/types.js";
 
 export interface Author { id: string; username: string }
+type PromptAttribution = Author & { browserQuestionId?: string };
 export interface Authorship {
-	authors: Record<string, Author>;
-	pending: { id: string; content: string; author: Author; existing: string[] }[];
+	authors: Record<string, PromptAttribution>;
+	pending: { id: string; content: string; author: PromptAttribution; existing: string[] }[];
 }
 
 /** Summary/custom harness messages may legitimately have no content. Preserve existing hashes for defined values. */
@@ -29,10 +30,10 @@ function messageKeys(messages: AgentMessage[]) {
 	});
 }
 
-export function registerPrompt(ledger: Authorship, messages: AgentMessage[], input: PromptInput, author: Author) {
+export function registerPrompt(ledger: Authorship, messages: AgentMessage[], input: PromptInput, author: Author, fromBrowser = false) {
 	const id = randomUUID();
 	const content = [{ type: "text", text: input.text }, ...(input.images ?? []).map((image) => ({ type: "image", ...image }))];
-	ledger.pending.push({ id, content: contentKey(content), author, existing: messageKeys(messages) });
+	ledger.pending.push({ id, content: contentKey(content), author: fromBrowser ? { ...author, browserQuestionId: id } : author, existing: messageKeys(messages) });
 	return id;
 }
 
@@ -52,7 +53,10 @@ export function attributeMessages(ledger: Authorship, messages: AgentMessage[]) 
 				ledger.pending = ledger.pending.filter((p) => !candidates.includes(p));
 			}
 		}
-		return { ...message, author: ledger.authors[key] };
+		const attribution = ledger.authors[key];
+		if (!attribution) return { ...message, author: undefined };
+		const { browserQuestionId, ...author } = attribution;
+		return { ...message, author, ...(browserQuestionId ? { browserQuestionId } : {}) };
 	});
 }
 

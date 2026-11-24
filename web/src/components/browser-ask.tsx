@@ -7,7 +7,7 @@ import { type ElementRef, refLabel } from "@/lib/element-refs"
 import { cn } from "@/lib/utils"
 
 /** The agent's answer to the last question asked from the browser. */
-export type BrowserAnswer = { id: string; question: string; text?: string; running: boolean; at?: number }
+export type BrowserAnswer = { id: string; question: string; text?: string; error?: string; running: boolean; at?: number }
 
 /**
  * A round button floating over the browser page that opens a small ask box: the question, the
@@ -73,7 +73,7 @@ export function BrowserAsk({
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-20 z-10 flex flex-col items-center gap-2 px-3">
       {answer && (
-        <div className="pointer-events-auto flex max-h-[40vh] min-h-0 w-full max-w-xl flex-col rounded-2xl border bg-background shadow-lg">
+        <section aria-label="Browser answer" className="pointer-events-auto flex max-h-[40vh] min-h-0 w-full max-w-xl flex-col rounded-2xl border bg-background shadow-lg">
           <div className="flex items-center gap-2 px-3.5 pt-2 text-xs">
             <span className="font-semibold text-gray-500 dark:text-gray-300">Beezy</span>
             {answer.running && <span className="running-shimmer">Running…</span>}
@@ -83,10 +83,11 @@ export function BrowserAsk({
           </div>
           <div ref={body} className="min-h-0 overflow-y-auto px-3.5 pb-2 text-sm">
             <p className="mb-2 whitespace-pre-wrap break-words text-muted-foreground">{answer.question}</p>
-            {answer.text ? <Markdown text={answer.text} base={folder} /> : answer.running ? <Loader2 className="my-1 size-4 animate-spin text-muted-foreground" /> : <p>No text reply.</p>}
+            {answer.text ? <Markdown text={answer.text} base={folder} /> : answer.running ? <Loader2 className="my-1 size-4 animate-spin text-muted-foreground" /> : !answer.error && <p>No text reply.</p>}
+            {answer.error && <p className="text-destructive">{answer.error}</p>}
             {!answer.running && <MessageTime at={answer.at} />}
           </div>
-        </div>
+        </section>
       )}
       {replies.length > 0 && (
         <div aria-label="Browser conversation history" role="group" className="pointer-events-auto flex max-w-full gap-1.5 overflow-x-auto rounded-full bg-background/95 p-1 shadow">

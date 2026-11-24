@@ -39,7 +39,7 @@ import { ImageGallery } from "@/components/image-gallery"
 import { EditPreview, MessageActions } from "@/components/message-actions"
 import { imageRefs, uploadDir } from "@/lib/attachments"
 import { BrowserPanel, type BrowserAskProps } from "@/components/browser-panel"
-import { type ElementRef, refImageFile, refLabel, refsPrompt } from "@/lib/element-refs"
+import { type ElementRef, refImageFile, refLabel, refsPrompt, splitBrowserRefs } from "@/lib/element-refs"
 import { MessageBody } from "@/components/message-body"
 import { ProjectMemoryPill } from "@/components/project-memory-pill"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
@@ -484,12 +484,12 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
     }
   }
 
-  /** Send a prompt with its files and picks (as text, plus their screenshots as attachments); returns the prompt text sent. */
-  const submit = async (summary: SessionSummary, body: string, files: File[], refs: ElementRef[], reply?: ReplyTarget) => {
+  /** Send a prompt with its files and picks (as text, plus their screenshots as attachments). */
+  const submit = async (summary: SessionSummary, body: string, files: File[], refs: ElementRef[], options: { reply?: ReplyTarget; fromBrowser?: boolean } = {}) => {
     const shots = refs.map(refImageFile)
     const attached = [...files, ...shots.filter((f): f is File => Boolean(f))]
     const picked = refs.length ? refsPrompt(refs, shots.map((f) => f?.name)) : ""
-    const message = [replyPrompt(body, reply), picked].filter(Boolean).join("\n\n")
+    const message = [replyPrompt(body, options.reply), picked].filter(Boolean).join("\n\n")
     let prompt = message
     let images: { data: string; mimeType: string }[] | undefined
     if (attached.length) {
@@ -504,10 +504,9 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
         if (imgs.length) images = await Promise.all(imgs.map(async (f) => ({ data: await readBase64(f), mimeType: f.type })))
       }
     }
-    await api.prompt(sessionKey, { text: prompt, images, mode: running ? mode : undefined })
+    await api.prompt(sessionKey, { text: prompt, images, mode: running ? mode : undefined, fromBrowser: options.fromBrowser })
     stick.current = true
     if (!summary.live) refresh()
-    return prompt
   }
 
   const send = async () => {
@@ -516,7 +515,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
     if ((!body && files.length === 0 && refs.length === 0) || !summary) return
     setSending(true)
     try {
-      await submit(summary, body, files, refs, reply)
+      await submit(summary, body, files, refs, { reply })
       setText("")
       setPaths([])
       setFiles([])
@@ -529,21 +528,26 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
     }
   }
 
-  const [browserQuestions, setBrowserQuestions] = useState<{ session: string; id: string; question: string; prompt: string; occurrence: number }[]>([])
-  const browserReplies = browserQuestions.filter((entry) => entry.session === sessionKey).map((entry) => {
-    const run = runs.filter((r) => r.user && messageText(r.user.content).trim() === entry.prompt)[entry.occurrence]
-    const answerStep = run?.steps.findLast((step) => step.kind === "text" && step.message?.role === "assistant" && step.text)
-    return { id: entry.id, question: entry.question, text: run?.answer ?? answerStep?.text, running: run?.running ?? true, at: answerStep?.timestamp }
-  })
+  // Use the same runs as the main thread, including after an SSE reconnect or page reload.
+  const browserReplies = useMemo(() => runs.flatMap((run) => {
+    if (!run.user) return []
+    const { body } = splitProjectMemory(messageText(run.user.content))
+    // Older questions without picks ended with this page note before origin was stored separately.
+    const pageNote = /(?:^|\n\n)\(Asked about the page open in the shared browser: https?:\/\/[^\n]+\)$/.exec(body)
+    const id = run.user.browserQuestionId ?? (pageNote ? `legacy-${run.key}` : undefined)
+    if (!id) return []
+    const question = splitBrowserRefs(body.slice(0, pageNote?.index ?? body.length)).text.split(/(?:^|\n\n)Attached files \(relative to the working directory\):\n/, 1)[0].trim()
+    const answer = run.steps.findLast((step) => step.kind === "text" && step.message?.role === "assistant" && step.text)
+    const error = !run.running ? run.steps.findLast((step) => step.kind === "error") : undefined
+    return [{ id, question: question || "Asked about picked elements", text: run.answer ?? answer?.text, error: error?.text, running: run.running, at: error?.timestamp ?? answer?.timestamp }]
+  }), [runs])
   const browserAsk: BrowserAskProps | undefined = canWrite && summary ? {
     onSend: async (body, picks, page) => {
       setSending(true)
       try {
         // With nothing picked, the agent still learns which page the question is about.
         const context = picks.length || !page.url || page.url === "about:blank" ? "" : `(Asked about the page open in the shared browser: ${page.url}${page.title ? ` (${page.title})` : ""})`
-        const prompt = (await submit(summary, [body, context].filter(Boolean).join("\n\n"), [], picks)).trim()
-        const occurrence = runs.filter((run) => run.user && messageText(run.user.content).trim() === prompt).length
-        setBrowserQuestions((history) => [...history, { session: sessionKey, id: `browser-question-${history.length}`, question: body.trim() || "Asked about picked elements", prompt, occurrence }])
+        await submit(summary, [body, context].filter(Boolean).join("\n\n"), [], picks, { fromBrowser: true })
       } catch (error) {
         toast.error((error as Error).message)
         throw error

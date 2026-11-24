@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { attributeMessages, registerPrompt, type Authorship } from "./authorship.js";
+import { attributeMessages, registerPrompt, rekeyAuthors, type Authorship } from "./authorship.js";
 
 const alice = { id: "a", username: "Alice" };
 const bob = { id: "b", username: "Bob" };
@@ -60,6 +60,22 @@ test("summary messages without content do not prevent subsequent prompts or lose
 	assert.deepEqual(attributeMessages(data, messages)[2].author, alice);
 	assert.deepEqual(attributeMessages(JSON.parse(JSON.stringify(data)), messages)[2].author, alice);
 	assert.deepEqual(messages.slice(0, 2), history);
+});
+
+test("browser origin stays attached to its specific prompt across reloads and edits", () => {
+	const data = ledger();
+	const earlier = message("What is on the page?");
+	const id = registerPrompt(data, [earlier], { text: "What is on the page?" }, alice, true);
+	const picked = message("What is on the page?", 2);
+	const history = [earlier, picked];
+	const attributed = attributeMessages(data, history);
+	assert.equal(attributed[0].browserQuestionId, undefined);
+	assert.equal(attributed[1].browserQuestionId, id);
+	assert.deepEqual(attributed[1].author, alice);
+	const persisted: Authorship = JSON.parse(JSON.stringify(data));
+	const edited = [earlier, message("What is new on the page?", 2)];
+	rekeyAuthors(persisted, history, edited);
+	assert.equal(attributeMessages(persisted, edited)[1].browserQuestionId, id);
 });
 
 test("string content and image prompts are supported", () => {
