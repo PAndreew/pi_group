@@ -4,7 +4,11 @@ const base = process.env.TEST_URL || 'http://127.0.0.1:15173'
 const browser = await chromium.launch({ headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  page.setDefaultTimeout(5000)
   const user = { id: 'u1', username: 'Tester', role: 'user' }
+  const people = [{ id: 'a', username: 'Alice' }, { id: 's', username: 'Sam' }]
+  let session = { key: 'test-session', access: 'owner', owner: user.username, path: '', live: true, harness: 'pi', name: 'Test session', visibility: 'private', shares: [] }
+  let invited
   const chat = { id: 'test', title: 'Test chat', folder: '', pi: true, members: [user] }
   const messages = Array.from({ length: 60 }, (_, i) => ({ id: i + 1, chatId: 'test', createdAt: new Date(1700000000000 + i * 1000).toISOString(), status: i % 2 ? 'done' : undefined, message: { role: i % 2 ? 'assistant' : 'user', author: user, content: [{ type: 'text', text: i % 2 ? `Assistant answer ${i}: @someone mentioned in history` : `User message ${i}` }] } }))
   let sent
@@ -15,7 +19,12 @@ try {
       const state = { messages: [messages[0].message, { role: 'assistant', content: [{ type: 'text', text: 'Session assistant answer' }] }], partial: null, toolOutputs: {}, runningTools: [], running: false, live: true, queue: { steering: [], followUp: [] }, dialogs: [], name: 'Test session' }
       return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ type: 'state', state })}\n\n` })
     }
-    if (path === '/api/sessions/test-session') body = { session: { key: 'test-session', access: 'owner', path: '', live: true, harness: 'pi', name: 'Test session' } }
+    if (path === '/api/sessions/test-session') body = { session }
+    else if (path === '/api/sessions/test-session/participants') {
+      invited = route.request().postDataJSON().userIds
+      session = { ...session, visibility: 'shared', shares: people.map(p => ({ userId: p.id, username: p.username, access: 'write' })) }
+      body = { session }
+    }
     else if (path === '/api/sessions/test-session/prompt') { sent = route.request().postDataJSON().text }
     else if (path === '/api/auth/me') body = { user }
     else if (path === '/api/tenants') body = { active: 'work', tenants: [{ id: 'work', name: 'Work' }] }
@@ -26,22 +35,34 @@ try {
     else if (path === '/api/chats/test/messages') body = { messages: [] }
     else if (path === '/api/jobs') body = { jobs: [{ id: 'job', name: 'Mobile job', owner: 'Tester', schedule: '@daily', folder: '', approved: false, enabled: true, canApprove: true, steps: [{ type: 'http', method: 'DELETE', url: 'https://example.com/' + 'a'.repeat(200), headers: {}, timeoutSec: 30 }], lastRun: { at: new Date().toISOString(), ok: false, ms: 10, output: 'x'.repeat(400) } }] }
     else if (path === '/api/chats') body = { chats: [] }
-    else if (path === '/api/users/directory') body = { users: [user] }
+    else if (path === '/api/users/directory') body = { users: [user, ...people] }
+    else if (path === '/api/projects') body = { projects: [] }
+    else if (path === '/api/projects/moves') body = { moves: [] }
+    else if (path === '/api/folders/search') body = { folders: [], chatFolder: 'pi-chat' }
+    else if (path === '/api/harnesses') body = { harnesses: [{ id: 'pi', ok: true }] }
+    else if (path.endsWith('/watches')) body = { watches: [] }
+    else if (path === '/api/applets') body = { applets: [] }
     else if (path.includes('/sessions/active')) body = { sessions: [] }
     else if (path.includes('/tools')) body = { tools: [], commands: [], resources: [] }
     else if (path.includes('/interactions')) body = { interactions: [] }
     else if (path.includes('/models')) body = { models: [] }
     await route.fulfill({ json: body })
   })
-  await page.goto(`${base}/#c=test`)
-  await page.getByText('Assistant answer 59:', { exact: false }).waitFor()
+  await page.goto(base)
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 })
+    await page.getByRole('button', { name: 'Open navigation' }).click()
     await page.getByRole('button', { name: /^Scheduled jobs/ }).click()
     await page.getByLabel('Method', { exact: true }).waitFor()
-    assert.equal(await page.getByRole('dialog').evaluate(el => [...el.querySelectorAll('*')].filter(e => e.clientWidth && getComputedStyle(e).overflowX === 'visible').every(e => e.scrollWidth <= e.clientWidth + 1)), true, 'job editor content fits mobile width')
-    await page.keyboard.press('Escape')
+    const jobs = page.getByRole('dialog', { name: 'Scheduled jobs' })
+    assert.equal(await jobs.evaluate(el => [...el.querySelectorAll('*')].filter(e => e.clientWidth && getComputedStyle(e).overflowX === 'visible').every(e => e.scrollWidth <= e.clientWidth + 1)), true, 'job editor content fits mobile width')
+    await jobs.getByRole('button', { name: 'Close', exact: true }).click()
+    await jobs.waitFor({ state: 'hidden' })
+    const navigation = page.getByRole('dialog', { name: 'Menu' })
+    if (await navigation.isVisible()) await navigation.getByRole('button', { name: 'Close', exact: true }).click()
   }
+  await page.goto(`${base}/#c=test`)
+  await page.getByText('Assistant answer 59:', { exact: false }).waitFor()
   const spacing = await page.locator('[data-composer-box] > div').last().evaluate(el => ({ top: getComputedStyle(el).paddingTop, bottom: getComputedStyle(el).paddingBottom }))
   assert.equal(spacing.top, spacing.bottom, 'send row has equal spacing above and below')
   const scroller = page.locator('div.overflow-y-auto').last()
@@ -72,6 +93,15 @@ try {
   assert.match(sent, /> Assistant answer 1/)
   assert.ok(sent.endsWith('My question'))
   assert.ok(!sent.includes('@someone'), 'quoted mentions must not invite participants')
+  const mention = page.getByRole('button', { name: 'Mention participants' })
+  for (const name of [/Alice/, /Sam/]) {
+    await mention.tap()
+    await page.getByRole('option', { name }).tap()
+  }
+  await editor.pressSequentially('Come chat')
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('[data-chat-composer] textarea')?.value === '')
+  assert.equal(sent, '@Alice @Sam Come chat', 'a group message only invokes Beezy when addressed')
   for (const height of [420, 844, 390]) {
     await page.setViewportSize({ width: 390, height })
     await editor.focus()
@@ -89,6 +119,7 @@ try {
   await page.waitForTimeout(150)
   assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--app-height')), '390px', 'unfocused resumed app ignores stale keyboard viewport')
   assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--app-top')), '0px')
+  await page.evaluate(() => { delete window.visualViewport.height })
   await page.goto(`${base}/#s=test-session`)
   await page.getByText('Session assistant answer', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Reply to message', exact: true }).last().click()
@@ -98,5 +129,24 @@ try {
   await page.waitForFunction(() => !document.querySelector('[aria-label="Reply preview"]'))
   assert.equal(sent, 'Replying to Beezy:\n> Session assistant answer\n\nSession follow-up')
   assert.equal(await page.evaluate(() => window.scrollY), 0)
-  console.log('PASS: group and session replies; cancel/send; quoted mention safety; mobile scroll/resize/focus')
+  for (const name of [/Beezy/, /Alice/, /Sam/]) {
+    await mention.tap()
+    await page.getByRole('option', { name }).tap()
+  }
+  await editor.pressSequentially('Join this session')
+  assert.equal(await editor.inputValue(), '@pi @Alice @Sam Join this session')
+  const verifyShare = (accept) => async (dialog) => {
+    assert.match(dialog.message(), /@Alice, @Sam.*read the entire session/)
+    await (accept ? dialog.accept() : dialog.dismiss())
+  }
+  page.once('dialog', verifyShare(false))
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  assert.equal(invited, undefined)
+  assert.equal(await editor.inputValue(), '@pi @Alice @Sam Join this session')
+  page.once('dialog', verifyShare(true))
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('[data-chat-composer] textarea')?.value === '')
+  assert.deepEqual(invited, ['a', 's'])
+  assert.equal(sent, '@pi @Alice @Sam Join this session')
+  console.log('PASS: group and session replies; quoted mention safety; confirmed session invitations; mobile scroll/resize/focus')
 } finally { await browser.close() }

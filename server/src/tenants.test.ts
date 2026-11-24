@@ -68,6 +68,20 @@ test("tenant boundaries cover direct URLs, chats, sessions, sharing, files, jobs
     const workKey = workSession.body.session.key;
     assert.equal(store.session(workKey)?.tenantId, "work");
     assert.equal((await call("andris", "PUT", `/sessions/${workKey}/acl`, { visibility: "shared", shares: [{ userId: wife.id, access: "write" }] })).status, 400);
+    const participants = `/sessions/${workKey}/participants`;
+    const alice = createUser("alice", "password123", "member");
+    const sam = createUser("sam", "password123", "member");
+    assert.equal((await call("andris", "POST", participants, { userIds: [alice.id, wife.id] })).status, 400);
+    assert.equal((await call("alice", "GET", `/sessions/${workKey}`)).status, 404, "a rejected invite must not add anyone");
+    assert.equal((await call("andris", "PUT", `/sessions/${workKey}/acl`, { visibility: "shared", shares: [{ userId: sam.id, access: "read" }] })).status, 200);
+    const invited = await call("andris", "POST", participants, { userIds: [alice.id, berci.id, alice.id] });
+    assert.equal(invited.status, 200);
+    assert.deepEqual(invited.body.session.shares.map((s: any) => [s.username, s.access]).sort(), [["alice", "write"], ["berci", "write"], ["sam", "read"]]);
+    assert.equal((await call("alice", "GET", `/sessions/${workKey}`)).body.session.access, "write");
+    assert.equal((await call("alice", "POST", participants, { userIds: [sam.id] })).status, 403, "can prompt does not imply can invite");
+    assert.equal((await call("andris", "PUT", `/sessions/${workKey}/acl`, { visibility: "private", shares: [{ userId: sam.id, access: "read" }] })).status, 200);
+    const reopened = await call("andris", "POST", participants, { userIds: [alice.id] });
+    assert.deepEqual(reopened.body.session.shares.map((s: any) => s.username), ["alice"], "reopening a private session does not restore old shares");
     const workChat = await call("andris", "POST", "/chats", { text: "Work discussion", userIds: [berci.id] });
     assert.equal(workChat.status, 200);
     assert.deepEqual((await call("berci", "GET", "/tenants")).body.tenants.map((t: any) => t.id), ["work"]);
@@ -109,7 +123,7 @@ test("tenant boundaries cover direct URLs, chats, sessions, sharing, files, jobs
     assert.equal((await call("andris", "GET", `/chats/${familyChat.body.chat}`)).status, 404);
     assert.equal((await call("andris", "GET", `/sessions/${familySession.body.session.key}`)).status, 404);
     assert.ok((await call("andris", "GET", "/chats")).body.chats.every((c: any) => c.id !== familyChat.body.chat));
-    assert.deepEqual((await call("andris", "GET", "/users/directory")).body.users.map((u: any) => u.username).sort(), ["andris", "berci"]);
+    assert.deepEqual((await call("andris", "GET", "/users/directory")).body.users.map((u: any) => u.username).sort(), ["alice", "andris", "berci", "sam"]);
     // Existing SSE connections stay bound to the tenant in which they opened.
     const abortWork = new AbortController();
     const workStream = await fetch(base + "/notifications", { headers: { Cookie: cookies.get("andris")! }, signal: abortWork.signal });

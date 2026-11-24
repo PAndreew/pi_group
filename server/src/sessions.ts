@@ -1113,6 +1113,21 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		res.json({ session: summary(next, req.user!) });
 	});
 
+	/** Add participants from the composer without replacing existing shares. */
+	router.post("/sessions/:key/participants", (req, res) => {
+		const { meta, access } = load(req);
+		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can add participants");
+		const { userIds } = z.object({ userIds: z.array(z.string()).min(1).max(100) }).parse(req.body);
+		if (userIds.some(id => !store.userById(id) || !isTenantMember(id, meta.tenantId ?? "work"))) throw new HttpError(400, "Participants must belong to this tenant");
+		// A private session may retain old share settings. Do not reactivate them implicitly.
+		const shares = meta.visibility === "shared" ? [...meta.shares] : [];
+		const existing = new Set([meta.ownerId, ...shares.map(s => s.userId)]);
+		for (const userId of new Set(userIds)) if (!existing.has(userId)) shares.push({ userId, access: "write" });
+		if (shares.length > 100) throw new HttpError(400, "A session can have at most 100 shares");
+		const next = shares.length ? store.upsertSession({ ...meta, visibility: "shared", shares }) : meta;
+		res.json({ session: summary(next, req.user!) });
+	});
+
 	/** Admins adopt sessions that were started outside the app, or reassign ownership. */
 	router.post("/sessions/:key/owner", async (req, res) => {
 		const { meta } = load(req);

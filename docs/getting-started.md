@@ -60,13 +60,13 @@ If you omit `ADMIN_PASSWORD`, the first start prints a generated password. If yo
 
 ## Start a chat
 
-Use the message box on the home screen:
+On the home screen, a message with no people mentioned goes to Beezy. Tap **@** in the message box (or type `@`) to pick Beezy or a person. Repeat to mention more people.
 
-- **With the agent:** `@pi Help me build a small website.`
-- **With a person:** `@Sam What should we work on?`
-- **Together:** `@Sam @pi #weekend-planner Let’s plan something together.`
+- **With the agent:** `Help me build a small website.`
+- **With people:** `@Sam @Alice What should we work on?`
+- **Together:** `@Sam @pi /weekend-planner Let’s plan something together.`
 
-`#folder` picks where the agent works; without it, Beezy uses the shared chat folder. In a group chat, mention `@pi` when you want the agent to respond. Add accounts from your user menu → **Manage users**.
+`/folder` picks where the agent works; otherwise Beezy uses the project's folder or, in General, the shared chat folder. In a group chat, mention `@pi` when you want the agent to respond. In an agent session, owners and admins can mention new people and confirm sharing the full session with them. Add accounts from your user menu → **Manage users**.
 
 ![Starting a chat with a person, the agent and a working folder](screenshots/start-chat.png)
 

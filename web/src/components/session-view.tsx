@@ -19,10 +19,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { GitStatusIndicator } from "@/components/git-status"
 import { toast } from "sonner"
-import { PiAvatar } from "@/components/mention-composer"
+import { MentionComposer, PiAvatar, type ParsedMessage, type Person } from "@/components/mention-composer"
 import { AuthorAvatar } from "@/components/author-avatar"
-import { ComposerBox } from "@/components/composer-box"
-import { AgentToggle, ComposerControls } from "@/components/composer-controls"
+import { ComposerControls } from "@/components/composer-controls"
 import { AttachmentPreview } from "@/components/attachment-preview"
 import { MessageTime } from "@/components/message-time"
 import { ComposerTools } from "@/components/composer-tools"
@@ -57,7 +56,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/use-auth"
 import { useSessionStream } from "@/hooks/use-session-stream"
-import { useSilentDictation } from "@/hooks/use-silent-dictation"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
 import { ConversationHeader } from "@/lib/nav-slot"
@@ -326,8 +324,6 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
   const [open, setOpen] = useState<{ run: number; step: number | null; failed?: boolean } | null>(null)
   const [authorFilter, setAuthorFilter] = useState("all")
   const [text, setText] = useState("")
-  const dictation = useSilentDictation(setText)
-  useEffect(() => () => dictation.cancel(), [sessionKey, dictation.cancel])
   const [reply, setReply] = useState<ReplyTarget>()
   const [editing, setEditing] = useState<EditTarget>()
   /** An agent answer being sent on to other sessions. */
@@ -423,7 +419,8 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
 
   const canWrite = summary?.access === "owner" || summary?.access === "admin" || summary?.access === "write"
   const running = Boolean(state?.running)
-  useEffect(() => { if (running || sending || editing) dictation.cancel() }, [running, sending, editing, dictation.cancel])
+  const canInvite = summary?.access === "owner" || summary?.access === "admin"
+  const isParticipant = (person: Person) => person.username === summary?.owner || (summary?.visibility === "shared" && summary.shares.some((share) => share.userId === person.id))
   const title = state?.name || summary?.name || summary?.firstMessage || "New session"
 
   const startEdit = (target: EditTarget) => {
@@ -513,12 +510,18 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
     if (!summary.live) refresh()
   }
 
-  const send = async () => {
+  const send = async (message: ParsedMessage) => {
     if (editing) return saveEdit(editing)
-    const body = [paths.map((p) => `\`${p}\``).join(" "), text.trim()].filter(Boolean).join(" ")
+    const body = [paths.map((p) => `\`${p}\``).join(" "), message.raw].filter(Boolean).join(" ")
     if ((!body && files.length === 0 && refs.length === 0) || !summary) return
+    const invited = canInvite ? message.people.filter((person) => !isParticipant(person)) : []
+    if (invited.length && !window.confirm(`Share this session with ${invited.map((p) => `@${p.username}`).join(", ")}? They’ll be able to read the entire session and send prompts.`)) return
     setSending(true)
     try {
+      if (invited.length) {
+        const { session } = await api.addSessionParticipants(sessionKey, invited.map((p) => p.id))
+        setSummary(session)
+      }
       await submit(summary, body, files, refs, { reply })
       setText("")
       setPaths([])
@@ -567,14 +570,6 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
   const addRef = (ref: ElementRef) => {
     if (!canWrite) return void toast.info("You have view-only access, so picks cannot be sent.")
     setRefs((list) => [...list, ref])
-  }
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const coarse = window.matchMedia("(pointer: coarse)").matches
-    if (e.key === "Enter" && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
-      e.preventDefault()
-      void send()
-    }
   }
 
   const openRun = open ? runs[open.run] : undefined
@@ -757,16 +752,19 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     }}
                   />
                   <div className="min-w-0 flex-1">
-                  <ComposerBox
-                    agent={<AgentToggle checked disabled />}
+                  <MentionComposer
+                    hash="session"
+                    value={text}
+                    onChange={setText}
+                    placeholder={editing ? "Edit message…" : "Message the agent… ($ files, # machines)"}
+                    selfId={user?.id}
+                    eligiblePeople={canInvite && !editing ? undefined : isParticipant}
                     controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}
                     onFiles={(pasted) => setFiles((fs) => [...fs, ...pasted])}
-                    onSend={send}
-                    onDictate={editing ? undefined : dictation.click}
-                    dictationPhase={dictation.phase}
-                    dictationHint={text.trim() && dictation.phase === 'loading' ? undefined : dictation.hint}
-                    canSend={Boolean(text.trim()) || (!editing && (files.length > 0 || refs.length > 0 || paths.length > 0))}
-                    sending={sending}
+                    onSubmit={send}
+                    editing={Boolean(editing)}
+                    attachmentsReady={!editing && (files.length > 0 || refs.length > 0 || paths.length > 0)}
+                    busy={sending}
                     onStop={running ? () => act(() => api.abort(sessionKey)) : undefined}
                   >
                   <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
@@ -783,15 +781,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                       ))}
                     </div>
                   )}
-                  <Textarea
-                    value={text}
-                    onChange={(e) => { dictation.cancel(); setText(e.target.value) }}
-                    onKeyDown={onKeyDown}
-                    placeholder={editing ? "Edit message…" : "Message the agent… ($ files, # machines)"}
-                    className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
-                    rows={1}
-                  />
-                  </ComposerBox>
+                  </MentionComposer>
                   </div>
                 </div>
                 <ComposerTools sessionKey={sessionKey} folder={summary?.path ?? ""} onInsert={setText} />

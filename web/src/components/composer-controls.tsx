@@ -15,7 +15,7 @@ export interface BrowserToggle { live: boolean; shown: boolean; toggle: () => vo
 const iconButton = "composer-icon grid size-10 shrink-0 place-items-center rounded hover:bg-accent disabled:opacity-50 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]"
 
 /**
- * The message box's buttons after the Agent toggle: attach, shared browser, camera, and the model
+ * The message box's buttons after the mention picker: attach, shared browser, camera, and the model
  * below the box. A model switch affects only the linked session, never creation defaults; the
  * reasoning level is set in Settings.
  */
@@ -63,7 +63,7 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
   const model = models.find((m) => m.id === state?.model?.id && m.provider === state?.model?.provider)
   const level = state?.thinkingLevel ?? "off"
   const modelLabel = model?.name ?? state?.model?.id
-  // The toggle only decides whether a message goes to the agent; an existing session can always be reconfigured.
+  // An existing agent session can always be reconfigured.
   const locked = !agentEnabled && !sessionKey
   const change = async (action: () => Promise<unknown>) => {
     setBusy(true)
@@ -95,8 +95,4 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
     </button>
     <button type="button" disabled={disabled} className={iconButton} aria-label="Take photo" title="Take photo" onClick={() => camera.current?.click()}><Camera /></button>
   </>
-}
-
-export function AgentToggle({ checked, onChange, disabled }: { checked: boolean; onChange?: (value: boolean) => void; disabled?: boolean }) {
-  return <div className="flex shrink-0 items-center gap-2"><button type="button" role="switch" aria-checked={checked} aria-label="Send to agent too" disabled={disabled} onClick={() => onChange?.(!checked)} data-active={checked} className="composer-icon flex min-h-10 shrink-0 items-center gap-2 text-base font-medium lg:min-h-8 lg:gap-1.5 lg:text-sm"><span className={`inline-flex h-6 w-11 items-center rounded-full p-0.5 lg:h-5 lg:w-9 ${checked ? "bg-blue-700 dark:bg-blue-300" : "bg-zinc-300 dark:bg-white"}`}><span className={`size-5 rounded-full bg-background transition-transform lg:size-4 ${checked ? "translate-x-5 lg:translate-x-4" : ""}`} /></span></button></div>
 }

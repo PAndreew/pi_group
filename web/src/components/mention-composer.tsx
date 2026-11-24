@@ -1,5 +1,6 @@
 import { File, Folder, Trash2, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { MachineOption } from "@/components/machine-dropup"
 import { ComposerBox } from "@/components/composer-box"
@@ -30,7 +31,7 @@ const MENTION = /(^|\s)@([\w.-]+)/g
 const FOLDER = /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)/g
 
 let directory: Promise<Person[]> | undefined
-const people = () => (directory ??= api.directory().then((d) => d.users, () => []))
+const people = () => (directory ??= api.directory().then((d) => d.users, () => { directory = undefined; return [] }))
 
 /** `raw` with its /folder mention (if any) replaced by `folder`, placed first. */
 export function withFolder(raw: string, folder: string): string {
@@ -79,10 +80,13 @@ export function MentionComposer({
   hash = "folder",
   folder = "",
   sessionKey,
-  agent,
   controls,
+  children,
   onFiles,
   onStop,
+  attachmentsReady,
+  editing,
+  eligiblePeople,
 }: {
   value: string
   onChange: (value: string) => void
@@ -93,13 +97,17 @@ export function MentionComposer({
   selfId?: string
   /**
    * What / offers: "folder" picks the folder for a new chat (/path token), "paths" mentions files and
-   * folders, inserted as `paths` relative to `folder` so pi can open them.
+   * folders, inserted as `paths` relative to `folder` so pi can open them. "session" only handles
+   * @, keeping the session's dedicated pickers and multiline Enter on touch screens.
    */
-  hash?: "folder" | "paths" | "off"
+  hash?: "folder" | "paths" | "off" | "session"
   folder?: string
   sessionKey?: string
-  agent?: React.ReactNode
   controls?: React.ReactNode
+  children?: React.ReactNode
+  attachmentsReady?: boolean
+  editing?: boolean
+  eligiblePeople?: (person: Person) => boolean
   /** Files or images pasted into the box. */
   onFiles?: (files: File[]) => void
 }) {
@@ -111,6 +119,7 @@ export function MentionComposer({
   const value = folderToken ? rawValue.slice(0, folderToken.index) + folderToken[1] + rawValue.slice(folderToken.index + folderToken[0].length) : rawValue
   const onChange = (next: string) => onRawChange(selectedFolder ? withFolder(next, selectedFolder) : next)
   const input = useRef<HTMLTextAreaElement>(null)
+  const submitting = useRef(false)
   // The folder pill sits over the start of the first line; only that line is indented, so text flows under it.
   const pill = useRef<HTMLDivElement>(null)
   const [indent, setIndent] = useState(0)
@@ -127,11 +136,15 @@ export function MentionComposer({
     onChange(text)
     requestAnimationFrame(() => input.current?.focus())
   })
-  useEffect(() => { if (busy || onStop) dictation.cancel() }, [busy, onStop, dictation.cancel])
+  useEffect(() => { if (busy || onStop || editing) dictation.cancel() }, [busy, onStop, editing, dictation.cancel])
   const [everyone, setEveryone] = useState<Person[]>([])
   const [token, setToken] = useState<ReturnType<typeof activeToken>>()
   const [options, setOptions] = useState<Suggestion[]>([])
   const [index, setIndex] = useState(0)
+  const tokenAt = (next: string, caret: number) => {
+    const found = activeToken(next, caret)
+    return hash === "session" && found?.trigger !== "@" ? undefined : found
+  }
 
   useEffect(() => {
     void people().then(setEveryone)
@@ -142,7 +155,8 @@ export function MentionComposer({
     const q = token.query.toLowerCase()
     if (token.trigger === "@") {
       const matches = everyone.filter((p) => p.id !== selfId && p.username.toLowerCase().includes(q)).map((person) => ({ kind: "person" as const, person }))
-      setOptions([...("pi".startsWith(q) ? [{ kind: "pi" as const }] : []), ...matches].slice(0, 8))
+      const agent = "pi".startsWith(q) || "beezy".startsWith(q)
+      setOptions([...(agent ? [{ kind: "pi" as const }] : []), ...matches])
       setIndex(0)
       return
     }
@@ -165,7 +179,7 @@ export function MentionComposer({
       }, () => { if (alive) setOptions([]) })
       return () => { alive = false }
     }
-    if (hash === "off") return setOptions([])
+    if (hash === "off" || hash === "session") return setOptions([])
     let alive = true
     const timer = setTimeout(() => {
       const query = token.query.replaceAll(NBSP, " ")
@@ -191,7 +205,19 @@ export function MentionComposer({
   const sync = (next: string, caret: number) => {
     dictation.cancel()
     onChange(next)
-    setToken(activeToken(next, caret))
+    setToken(tokenAt(next, caret))
+  }
+
+  const addMention = () => {
+    const el = input.current
+    if (!el) return
+    const left = value.slice(0, el.selectionStart)
+    const right = value.slice(el.selectionEnd)
+    const before = left + (left && !/\s$/.test(left) ? " " : "") + "@"
+    const next = before + (right && !/^\s/.test(right) ? " " : "") + right
+    el.focus({ preventScroll: true })
+    flushSync(() => sync(next, before.length))
+    el.setSelectionRange(before.length, before.length)
   }
 
   const pick = (s: Suggestion) => {
@@ -209,34 +235,56 @@ export function MentionComposer({
             : s.kind === "path"
               ? `\`${relativePath(folder, s.path)}${s.type === "dir" ? "/" : ""}\` `
               : `/${s.path.replaceAll(" ", NBSP)} `
-    const next = value.slice(0, token.start) + insert + value.slice(caret)
+    const suffix = value.slice(caret)
+    const next = value.slice(0, token.start) + insert + (token.trigger === "@" ? suffix.replace(/^ /, "") : suffix)
     const at = s.kind === "folder" ? token.start : token.start + insert.length
-    if (s.kind === "folder") {
-      setEditingFolder(false)
-      onRawChange(withFolder(value.slice(0, token.start) + value.slice(caret), s.path))
-    }
-    else onChange(next)
-    setToken(undefined)
-    // Keep mobile focus in the original user gesture, never blur/refocus on a later frame.
+    // Commit the new value before restoring the caret, within the original gesture.
     if (document.activeElement !== input.current) input.current?.focus({ preventScroll: true })
-    requestAnimationFrame(() => input.current?.setSelectionRange(at, at))
+    flushSync(() => {
+      if (s.kind === "folder") {
+        setEditingFolder(false)
+        onRawChange(withFolder(value.slice(0, token.start) + value.slice(caret), s.path))
+      } else onChange(next)
+      setToken(undefined)
+    })
+    input.current?.setSelectionRange(at, at)
   }
 
+  const canSend = Boolean(value.trim()) || Boolean(attachmentsReady)
   const submit = async () => {
-    if (busy || !value.trim()) return
-    await onSubmit(parseMessage(rawValue, everyone))
+    if (busy || !canSend || submitting.current) return
+    submitting.current = true
+    setToken(undefined)
+    try {
+      const directory = rawValue.includes("@") ? await people() : []
+      await onSubmit(parseMessage(rawValue, directory.filter((person) => person.id !== selfId)))
+    } finally {
+      submitting.current = false
+    }
   }
 
-  const open = Boolean(token) && options.length > 0
+  const suggestions = token?.trigger === "@" && eligiblePeople ? options.filter((s) => s.kind !== "person" || eligiblePeople(s.person)) : options
+  const open = Boolean(token) && suggestions.length > 0
 
   return (
-    <ComposerBox agent={agent} controls={controls} onDictate={dictation.click} dictationPhase={dictation.phase} dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint} onFiles={onFiles} onStop={onStop} onSend={() => void submit()} canSend={Boolean(value.trim())} sending={busy}>
+    <ComposerBox
+      onMention={addMention}
+      controls={controls}
+      onDictate={editing ? undefined : dictation.click}
+      dictationPhase={dictation.phase}
+      dictationHint={value.trim() && dictation.phase === 'loading' ? undefined : dictation.hint}
+      onFiles={onFiles}
+      onStop={onStop}
+      onSend={() => void submit()}
+      canSend={canSend}
+      sending={busy}
+    >
       {open && (
-        <div data-suggestions className="absolute bottom-full left-0 z-[100] mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md" onPointerDown={(e) => e.preventDefault()}>
+        <div data-suggestions className="absolute bottom-full left-0 z-[100] mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md" style={token?.trigger === "@" ? { maxHeight: "clamp(5rem, calc(var(--app-height, 100dvh) - 9rem), 16rem)" } : undefined} onPointerDown={(e) => e.preventDefault()}>
         <div className="flex shrink-0 justify-end px-1 pt-1"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1.5 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></div>
         {/* Rows scrolled past the edges fade out, like the chat list. */}
         <ul className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2" role="listbox">
-          {options.map((s, i) => (
+          {suggestions.map((s, i) => (
             <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : s.kind === "machine" ? `machine:${s.machine.id}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
               <button
                 type="button"
@@ -277,6 +325,7 @@ export function MentionComposer({
         </ul>
         </div>
       )}
+      {children}
       <div className="relative min-w-0 px-3">
       {selectedFolder && (
         <div ref={pill} className="absolute top-2 left-3 z-10 max-w-[50%]">
@@ -295,9 +344,10 @@ export function MentionComposer({
         style={indent ? { textIndent: indent } : undefined}
         className="max-h-48 min-h-12 w-full min-w-0 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
-        onSelect={(e) => setToken(activeToken(value, e.currentTarget.selectionStart))}
-        onBlur={() => setTimeout(() => setToken(undefined), 100)}
+        onSelect={(e) => setToken(tokenAt(e.currentTarget.value, e.currentTarget.selectionStart))}
+        onBlur={() => setToken(undefined)}
         onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return
           if (e.key === "Backspace" && selectedFolder && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
             e.preventDefault()
             const editable = `/${selectedFolder.replaceAll(" ", NBSP)}`.slice(0, -1)
@@ -313,12 +363,14 @@ export function MentionComposer({
           if (open) {
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault()
-              setIndex((i) => (i + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length)
+              const next = (index + (e.key === "ArrowDown" ? 1 : suggestions.length - 1)) % suggestions.length
+              setIndex(next)
+              e.currentTarget.closest("[data-composer-box]")?.querySelectorAll('[role="option"]')[next]?.scrollIntoView({ block: "nearest" })
               return
             }
             if (e.key === "Enter" || e.key === "Tab") {
               e.preventDefault()
-              pick(options[index])
+              pick(suggestions[index] ?? suggestions[0])
               return
             }
             if (e.key === "Escape") {
@@ -327,7 +379,7 @@ export function MentionComposer({
               return
             }
           }
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && !e.shiftKey && (hash !== "session" || !window.matchMedia("(pointer: coarse)").matches)) {
             e.preventDefault()
             void submit()
           }

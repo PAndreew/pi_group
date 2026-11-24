@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { UploadedPreviews } from "@/components/attachment-preview"
 import { ChatList } from "@/components/chat-list"
-import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
+import { ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
 import { MentionComposer, parseMessage, withFolder } from "@/components/mention-composer"
 import { useAuth } from "@/hooks/use-auth"
@@ -37,7 +37,6 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
       setBusy(false)
     }
   }
-  const [agent, setAgent] = useState(false)
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [chatFolder, setChatFolder] = useState("pi-chat")
 
@@ -96,20 +95,18 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder="Message: @someone, /folder, #machine"
-          agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
+          placeholder="Message Beezy or @mention people…"
           controls={
-            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || creatingSession} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()}
+            <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || creatingSession} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()}
               browser={{ live: false, shown: false, toggle: () => nav.newSession(folder, { ...composerConfig, browser: true }) }} />
           }
           onFiles={(files) => void attach(files)}
           onSubmit={async (message) => {
-            message.pi ||= agent
-            if (!message.pi && message.people.length === 0) return void toast.info("Mention @pi or at least one person to start a chat.")
+            const pi = message.pi || message.people.length === 0
             if (!message.text) return void toast.info("Write a message too.")
             setBusy(true)
             try {
-              const started = await api.startChat({ text: message.text, pi: message.pi, userIds: message.people.map((p) => p.id), folder: message.folder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(message.pi ? composerConfig : {}) })
+              const started = await api.startChat({ text: message.text, pi, userIds: message.people.map((p) => p.id), folder: message.folder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(pi ? composerConfig : {}) })
               setText("")
               if (started.chat) nav.openChat(started.chat)
               else if (started.session) nav.openSession(started.session, message.folder ?? base)

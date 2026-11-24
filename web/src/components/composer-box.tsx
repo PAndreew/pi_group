@@ -1,17 +1,17 @@
-import { AudioLines, LoaderCircle, Square, SendHorizontal, Pause } from "lucide-react"
+import { AtSign, AudioLines, LoaderCircle, Square, SendHorizontal, Pause } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { DictationPhase } from "@/hooks/use-silent-dictation"
 
 const ICON = "size-[22px] lg:size-[18px]"
 
 /**
- * The one message box every screen uses: the text area (`children`) above a row with the Agent
- * toggle at the left, send at the right (stop beside it while a run can be stopped), and the
+ * The one message box every screen uses: the text area (`children`) above a row with mentions
+ * at the left, send or pause at the right, and the
  * controls spread evenly between them. Files or images pasted anywhere in it go to `onFiles`.
  */
 export function ComposerBox({
   children,
-  agent,
+  onMention,
   controls,
   onSend,
   canSend,
@@ -23,7 +23,7 @@ export function ComposerBox({
   dictationHint,
 }: {
   children: React.ReactNode
-  agent?: React.ReactNode
+  onMention: () => void
   controls?: React.ReactNode
   onSend: () => void
   onDictate?: () => void
@@ -52,7 +52,9 @@ export function ComposerBox({
     >
       {children}
       <div className="flex items-center gap-1 p-2">
-        {agent}
+        <button type="button" className="composer-icon grid size-10 shrink-0 place-items-center rounded hover:bg-accent disabled:opacity-50 lg:size-8" aria-label="Mention participants" title="Mention participants" disabled={sending} onPointerDown={(e) => e.preventDefault()} onClick={onMention}>
+          <AtSign className={ICON} />
+        </button>
         <div className="flex min-w-0 flex-1 items-center justify-evenly">{controls}</div>
         <Button className={`${dictate ? recording ? "bg-transparent text-red-500 hover:bg-red-500/10 hover:text-red-500" : "bg-transparent text-blue-500 hover:bg-blue-500/10 hover:text-blue-500" : "composer-send"} size-10 shrink-0 disabled:opacity-35 lg:size-8 [&_svg]:size-[22px] lg:[&_svg]:size-[18px]`} size="icon" onClick={dictate ? onDictate : onStop ?? onSend} disabled={preparing || (!dictate && !onStop && (sending || !canSend))} aria-label={label} title={dictationHint || label} data-dictation-state={dictate ? dictationPhase : undefined}>
           {/* An explicit size: Button otherwise shrinks unsized icons below the other composer icons. */}

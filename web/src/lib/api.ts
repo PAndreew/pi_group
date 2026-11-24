@@ -683,6 +683,8 @@ export const api = {
     request("POST", `/api/sessions/${enc(key)}/dialog`, answer),
   pin: (key: string, pinned: boolean) => request<{ session: SessionSummary }>("POST", `/api/sessions/${enc(key)}/pin`, { pinned }),
   stop: (key: string) => request("POST", `/api/sessions/${enc(key)}/stop`),
+  addSessionParticipants: (key: string, userIds: string[]) =>
+    request<{ session: SessionSummary }>("POST", `/api/sessions/${enc(key)}/participants`, { userIds }),
   setAcl: (key: string, visibility: "private" | "shared", shares: { userId: string; access: Access }[]) =>
     request<{ session: SessionSummary }>("PUT", `/api/sessions/${enc(key)}/acl`, { visibility, shares }),
   setOwner: (key: string, userId: string) => request<{ session: SessionSummary }>("POST", `/api/sessions/${enc(key)}/owner`, { userId }),

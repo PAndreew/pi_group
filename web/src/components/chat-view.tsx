@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { BrowserPanel } from "@/components/browser-panel"
-import { AgentToggle, ComposerControls, type ComposerConfig } from "@/components/composer-controls"
+import { ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { UploadedPreviews } from "@/components/attachment-preview"
 import { ComposerTools } from "@/components/composer-tools"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
@@ -16,7 +16,7 @@ import { MoveDialog, type MoveTarget } from "@/components/project-move"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
 import { parseReply, replaceReplyBody, replyPrompt, type ReplyTarget } from "@/lib/reply"
-import { MentionComposer, PiAvatar } from "@/components/mention-composer"
+import { MentionComposer, parseMessage, PiAvatar, type ParsedMessage } from "@/components/mention-composer"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
@@ -142,7 +142,6 @@ export function ChatView({ chatId }: { chatId: string }) {
   const [editing, setEditing] = useState<{ id: number; text: string; assistant: boolean }>()
   /** A Beezy reply being sent on to other sessions. */
   const [forwarding, setForwarding] = useState<string>()
-  const [agent, setAgent] = useState(false)
   const [composerConfig, setComposerConfig] = useState<ComposerConfig>({})
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -221,10 +220,10 @@ export function ChatView({ chatId }: { chatId: string }) {
     if (lastId && document.visibilityState === "visible") void api.readChat(chatId, lastId).catch(() => {})
   }, [chatId, lastId, messages])
 
-  const send = async (raw: string) => {
+  const send = async ({ raw, pi }: ParsedMessage) => {
     setSending(true)
     try {
-      const { message } = await api.sendChat(chatId, replyPrompt(raw, reply, true), agent ? composerConfig : undefined)
+      const { message } = await api.sendChat(chatId, replyPrompt(raw, reply, true), pi || reply?.assistant ? composerConfig : undefined)
       setMessages((current) => mergeMessages(current, [message]))
       setText("")
       setReply(undefined)
@@ -400,10 +399,10 @@ export function ChatView({ chatId }: { chatId: string }) {
           selfId={user?.id}
           hash="paths"
           placeholder={editing ? "Edit message…" : "Message: @someone, $folder, #machine"}
-          agent={<AgentToggle checked={agent} onChange={setAgent} />}
-          controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={agent} />}
+          editing={Boolean(editing)}
+          controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={parseMessage(text, []).pi || reply?.assistant === true} />}
           onFiles={(files) => void attach(files)}
-          onSubmit={(message) => (editing ? saveEdit(message.raw) : send(agent && !message.pi ? `@pi ${message.raw}` : message.raw))}
+          onSubmit={(message) => (editing ? saveEdit(message.raw) : send(message))}
         />
         {chat && (
           <ComposerTools
