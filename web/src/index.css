@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/inter/wght-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -33,6 +35,8 @@
   --step-tool: oklch(0.6 0.13 240);
   --step-text: oklch(0.6 0.12 160);
   --step-error: oklch(0.6 0.2 27);
+  --scrollbar-thumb: oklch(0.145 0 0 / 18%);
+  --scrollbar-thumb-hover: oklch(0.145 0 0 / 32%);
 }
 
 .dark {
@@ -64,9 +68,14 @@
   --step-tool: oklch(0.72 0.12 240);
   --step-text: oklch(0.72 0.12 160);
   --step-error: oklch(0.7 0.19 27);
+  --scrollbar-thumb: oklch(1 0 0 / 18%);
+  --scrollbar-thumb-hover: oklch(1 0 0 / 32%);
 }
 
 @theme inline {
+  /* Same stack as OpenBot: system UI font on Apple, Inter Variable elsewhere. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", "Noto Sans Arabic", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -235,7 +244,26 @@ html[data-editing] body { padding-bottom: 0; }
 .dark .agent-bubble .hljs-title, .dark .agent-bubble .hljs-section, .dark .agent-bubble .hljs-function { color: #6f42c1; }
 .dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
 
-.scrollbar-thin { scrollbar-width: thin; }
+/* Custom scrollbars instead of the OS default: thin, rounded, transparent track.
+   WebKit/Blink use the pseudo-elements; Firefox falls back to scrollbar-color (setting it in
+   Chrome would disable the pseudo-elements, hence the @supports guard). */
+::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  min-height: 32px;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { border-width: 2px; }
 
 /* Soften content at the navbar and composer instead of drawing dividers. */
 .chat-scroll-fade {
