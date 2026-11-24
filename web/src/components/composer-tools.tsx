@@ -1,8 +1,9 @@
-import { Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, SquareTerminal, Vault } from "lucide-react"
+import { Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, Server, SquareTerminal, Vault } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { AppletsDialog } from "@/components/applets-dialog"
 import { JobsDialog } from "@/components/jobs-dialog"
 import { ModelSettingsDialog } from "@/components/model-settings-dialog"
+import { RemoteMachinesDialog } from "@/components/remote-machines-dialog"
 import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
 import { ToolsDialog } from "@/components/tools-dialog"
 import { VaultDialog } from "@/components/vault-dialog"
@@ -15,7 +16,7 @@ import { useNav } from "@/lib/nav"
 /** xterm.js is large; load it only when someone opens a terminal. */
 const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
-type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "vault" | "models"
+type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "vault" | "models" | "machines"
 
 /**
  * The tool icons, each opening its own modal: under every message box, or at the bottom of the
@@ -63,6 +64,7 @@ export function ComposerTools({
         {icon("applets", pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets", dot(pendingApplets > 0, <LayoutGrid />))}
         {icon("monitor", "Resource monitor", <Gauge />)}
         {icon("explorer", "Folders and files", <FolderOpen />)}
+        {icon("machines", "Remote machines", <Server />)}
         {icon("vault", "Secret vault", <Vault />)}
         {icon("models", "Model settings", <Cpu />)}
       </div>
@@ -84,6 +86,7 @@ export function ComposerTools({
       <ResourceMonitorDialog open={panel === "monitor"} onOpenChange={openChange("monitor")} onOpenSession={(s) => nav.openSession(s.key, s.path)} />
       <VaultDialog open={panel === "vault"} onOpenChange={openChange("vault")} />
       <ModelSettingsDialog open={panel === "models"} onOpenChange={openChange("models")} />
+      <RemoteMachinesDialog open={panel === "machines"} onOpenChange={openChange("machines")} />
       {panel === "terminal" && (
         <Suspense>
           <TerminalDialog sessionKey={sessionKey} path={folder} title={`/${folder}`} open onOpenChange={(o) => !o && setPanel(undefined)} />

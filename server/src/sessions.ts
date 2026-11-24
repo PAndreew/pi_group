@@ -20,6 +20,7 @@ import { checkProject, mountProjects, projectIdOf } from "./projects.js";
 import { isConsolidating, mountMemory, noteSessionActivity, projectMemory } from "./memory.js";
 import { mountLinks } from "./links.js";
 import { lastMemoryAt, wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
+import { remoteMachinesNote } from "./remote-machines.js";
 import { platform } from "./ports/index.js";
 import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
@@ -420,7 +421,9 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const memory = meta.memory || options.background ? "" : projectMemory(meta, user);
 		const lastInjected = Math.max(lastMemoryAt(live.state.messages) || 0, loadedMemory.get(live) ?? 0);
 		const injectMemory = Boolean(memory && Date.now() - lastInjected > MEMORY_REPEAT_MS);
-		const input = { ...body, text: injectMemory ? wrapProjectMemory(memory) + body.text : body.text, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
+		// #name mentions of remote machines get a note on how to reach them, hidden in the web like memory.
+		const machines = options.background ? "" : remoteMachinesNote(body.text);
+		const input = { ...body, text: (injectMemory ? wrapProjectMemory(memory) : "") + body.text + machines, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
 		const autoTitle = !options.background && user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;

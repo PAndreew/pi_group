@@ -96,6 +96,8 @@ export interface PushSubscriptionRecord {
 }
 
 interface Data {
+	/** SSH machines per tenant; see remote-machines.ts. */
+	remoteMachines?: Record<string, import("./remote-machines.js").RemoteMachine[]>;
 	sharedPiFallbacks?: Record<string, { provider: string; id: string }>;
 	/** Prompt-cache lifetime per model provider, in minutes; memory updates run just before it expires. */
 	memoryCacheMinutes?: Record<string, number>;

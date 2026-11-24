@@ -1,10 +1,12 @@
 import { File, Folder, Trash2, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AuthorAvatar } from "@/components/author-avatar"
+import { MachineOption } from "@/components/machine-dropup"
 import { ComposerBox } from "@/components/composer-box"
 import { useSilentDictation } from "@/hooks/use-silent-dictation"
 import { Textarea } from "@/components/ui/textarea"
-import { api } from "@/lib/api"
+import { api, type RemoteMachine } from "@/lib/api"
+import { matchMachines, remoteMachines } from "@/lib/remote-machines"
 import { cn, relativePath } from "@/lib/utils"
 
 export interface Person {
@@ -55,15 +57,16 @@ type Suggestion =
   | { kind: "folder"; path: string }
   | { kind: "path"; path: string; type: "dir" | "file" }
   | { kind: "skill"; name: string; description?: string }
+  | { kind: "machine"; machine: RemoteMachine }
 
 /** The token being typed at the caret, if it is a mention. */
 function activeToken(value: string, caret: number) {
-  const match = /(^|\s)([@/])((?:[^\s@]|\u00a0)*)$/.exec(value.slice(0, caret))
-  return match ? { trigger: match[2] as "@" | "/", query: match[3], start: caret - match[3].length - 1 } : undefined
+  const match = /(^|\s)([@/#])((?:[^\s@#]|\u00a0)*)$/.exec(value.slice(0, caret))
+  return match ? { trigger: match[2] as "@" | "/" | "#", query: match[3], start: caret - match[3].length - 1 } : undefined
 }
 
 /**
- * A message box with @ (pi and people), / (fuzzy folders or files) and /skill: (skills) suggestions.
+ * A message box with @ (pi and people), / (fuzzy folders or files), /skill: (skills) and # (remote machines) suggestions.
  * Enter sends, Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
  */
 export function MentionComposer({
@@ -143,6 +146,15 @@ export function MentionComposer({
       setIndex(0)
       return
     }
+    if (token.trigger === "#") {
+      let alive = true
+      void remoteMachines().then((list) => {
+        if (!alive) return
+        setOptions(matchMachines(list, token.query).map((machine) => ({ kind: "machine" as const, machine })))
+        setIndex(0)
+      })
+      return () => { alive = false }
+    }
     if (token.trigger === "/" && token.query.startsWith("skill:")) {
       let alive = true
       const request = sessionKey ? api.tools(sessionKey) : api.toolsAt(folder)
@@ -190,6 +202,8 @@ export function MentionComposer({
         ? "@pi "
         : s.kind === "person"
           ? `@${s.person.username} `
+          : s.kind === "machine"
+            ? `#${s.machine.name} `
           : s.kind === "skill"
             ? `/skill:${s.name} `
             : s.kind === "path"
@@ -223,7 +237,7 @@ export function MentionComposer({
         {/* Rows scrolled past the edges fade out, like the chat list. */}
         <ul className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2" role="listbox">
           {options.map((s, i) => (
-            <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
+            <li key={s.kind === "pi" ? "pi" : s.kind === "person" ? s.person.id : s.kind === "skill" ? `skill:${s.name}` : s.kind === "machine" ? `machine:${s.machine.id}` : `${s.kind}:${s.path}`} role="option" aria-selected={i === index}>
               <button
                 type="button"
                 className={cn("flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm", i === index && "bg-accent")}
@@ -244,6 +258,7 @@ export function MentionComposer({
                     {s.person.username}
                   </>
                 )}
+                {s.kind === "machine" && <MachineOption machine={s.machine} />}
                 {s.kind === "skill" && <span className="min-w-0 truncate" title={s.description}>/skill:{s.name}</span>}
                 {s.kind === "folder" && (
                   <>

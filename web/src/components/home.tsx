@@ -96,7 +96,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder="Message: @someone and /folder"
+          placeholder="Message: @someone, /folder, #machine"
           agent={<AgentToggle checked={agent} onChange={setAgent} disabled={busy} />}
           controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || creatingSession} agentEnabled={agent} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()}

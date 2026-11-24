@@ -26,6 +26,7 @@ import { AgentToggle, ComposerControls } from "@/components/composer-controls"
 import { AttachmentPreview } from "@/components/attachment-preview"
 import { MessageTime } from "@/components/message-time"
 import { ComposerTools } from "@/components/composer-tools"
+import { MachineDropup } from "@/components/machine-dropup"
 import { PathDropup } from "@/components/path-dropup"
 import { InteractionCards, useInteractions } from "@/components/interaction-cards"
 import { WatchPills } from "@/components/watch-pills"
@@ -472,7 +473,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
         index: state.messages.indexOf(target.message),
         timestamp: target.message.timestamp,
         expect: raw,
-        text: target.prompt ? splitProjectMemory(raw).prefix + replaceReplyBody(target.text, body) : body,
+        text: target.prompt ? splitProjectMemory(raw).prefix + replaceReplyBody(target.text, body) + splitProjectMemory(raw).suffix : body,
       })
       cancelEdit()
       refresh()
@@ -761,6 +762,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     onStop={running ? () => act(() => api.abort(sessionKey)) : undefined}
                   >
                   <SkillDropup value={text} sessionKey={sessionKey} onChange={setText} />
+                  <MachineDropup value={text} onChange={setText} />
                   <PathDropup value={text} folder={summary?.path ?? ""} onPick={(path, rest) => { setPaths((list) => list.includes(path) ? list : [...list, path]); setText(rest) }} />
                   {paths.length > 0 && !editing && (
                     <div className="flex flex-wrap gap-1 px-3 pt-2">
@@ -777,7 +779,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     value={text}
                     onChange={(e) => { dictation.cancel(); setText(e.target.value) }}
                     onKeyDown={onKeyDown}
-                    placeholder={editing ? "Edit message…" : "Message the agent…"}
+                    placeholder={editing ? "Edit message…" : "Message the agent… ($ files, # machines)"}
                     className={cn("max-h-48 min-h-12 resize-none border-0 shadow-none focus-visible:ring-0 py-3")}
                     rows={1}
                   />

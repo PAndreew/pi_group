@@ -146,6 +146,21 @@ export interface SessionState {
   pendingDeletes?: { timestamp?: number; text: string }[]
 }
 
+export interface RemoteMachine {
+  id: string
+  name: string
+  alias?: string
+  host?: string
+  user?: string
+  port?: number
+  identityFile?: string
+  source: "ssh-config" | "manual"
+  ssh: string
+  status: { state: "online" | "auth" | "offline" | "unknown"; checkedAt?: string; detail?: string }
+}
+
+export type RemoteMachineInput = { name: string; host: string; user?: string; port?: number; identityFile?: string }
+
 export interface VaultSecret {
   key: string
   description: string
@@ -561,6 +576,11 @@ export const api = {
   rawUrl: (path: string) => tenantUrl(`/api/fs/raw?${q({ path })}`),
   downloadUrl: (path: string) => tenantUrl(`/api/fs/download?${q({ path })}`),
 
+  remoteMachines: () => request<{ machines: RemoteMachine[]; keys: { path: string; type: string; comment?: string }[]; suggestions: string[]; canEdit: boolean }>("GET", "/api/remote-machines"),
+  checkRemoteMachines: (id?: string) => request<{ machines: RemoteMachine[] }>("POST", "/api/remote-machines/check", { id }),
+  addRemoteMachine: (machine: RemoteMachineInput) => request<{ machine: RemoteMachine }>("POST", "/api/remote-machines", machine),
+  updateRemoteMachine: (id: string, changes: Partial<RemoteMachineInput>) => request<{ machine: RemoteMachine }>("PATCH", `/api/remote-machines/${encodeURIComponent(id)}`, changes),
+  deleteRemoteMachine: (id: string) => request<{ ok: true }>("DELETE", `/api/remote-machines/${encodeURIComponent(id)}`),
   vaultStatus: () => request<{ configured: boolean; reachable: boolean }>("GET", "/api/vault/status"),
   /** `project` picks a project's shared secrets; without it, the caller's own. */
   vaultSecrets: (project?: string) => request<{ secrets: VaultSecret[] }>("GET", `/api/vault/secrets${project ? `?${q({ project })}` : ""}`),
