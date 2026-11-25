@@ -66,7 +66,6 @@ export function MentionComposer({
   value,
   onChange,
   onSubmit,
-  placeholder,
   busy,
   selfId,
   hash = "folder",
@@ -84,7 +83,6 @@ export function MentionComposer({
   value: string
   onChange: (value: string) => void
   onSubmit: (message: ParsedMessage) => void | Promise<void>
-  placeholder: string
   busy?: boolean
   onStop?: () => void
   selfId?: string
@@ -331,7 +329,7 @@ export function MentionComposer({
       <Textarea
         ref={input}
         value={value}
-        placeholder={selectedFolder ? "" : placeholder}
+        placeholder={selectedFolder ? "" : tr("composer.placeholder")}
         rows={1}
         style={indent ? { textIndent: indent } : undefined}
         className="max-h-48 min-h-12 w-full min-w-0 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"

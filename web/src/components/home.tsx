@@ -98,7 +98,6 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
           onChange={setText}
           busy={busy}
           selfId={user?.id}
-          placeholder={t("composer.home")}
           controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || creatingSession} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()}
               browser={{ live: false, shown: false, toggle: () => nav.newSession(folder, { ...composerConfig, browser: true }) }} />

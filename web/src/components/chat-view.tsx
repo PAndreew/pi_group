@@ -389,7 +389,6 @@ export function ChatView({ chatId }: { chatId: string }) {
           onStop={piWorking && chat?.sessionKey ? () => { void api.abort(chat.sessionKey!).catch((error) => toast.error(error.message)) } : undefined}
           selfId={user?.id}
           hash="paths"
-          placeholder={tr(editing ? "composer.edit" : "composer.chat")}
           editing={Boolean(editing)}
           controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={parseMessage(text, []).pi || reply?.assistant === true} />}
           onFiles={(files) => void attach(files)}

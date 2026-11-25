@@ -118,6 +118,8 @@ try {
     if (await navigation.isVisible()) await navigation.getByRole('button', { name: 'Close', exact: true }).click()
   }
   const editor = page.locator('[data-chat-composer] textarea')
+  const placeholder = 'Message Beezy… ($ files, @ participants)'
+  await page.getByPlaceholder(placeholder, { exact: true }).waitFor()
   const dropup = page.locator('[data-suggestions]')
   await editor.fill('$src')
   await dropup.getByText('Choose folder', { exact: true }).waitFor()
@@ -127,6 +129,7 @@ try {
   await page.getByText('Assistant answer 59:', { exact: false }).waitFor()
   assert.equal(started.folder, 'my project/src', 'chosen folder is sent separately from the text')
   assert.equal(started.text, 'Check /tmp and $50')
+  assert.equal(await editor.getAttribute('placeholder'), placeholder, 'group chat uses the same placeholder as home')
   await editor.fill('$src')
   await dropup.getByText('Choose folder', { exact: true }).waitFor()
   await dropup.getByRole('option', { name: '/my project/src' }).tap()
@@ -211,6 +214,7 @@ try {
   await page.evaluate(() => { delete window.visualViewport.height })
   await page.goto(`${base}/#s=test-session`)
   await page.getByText('Session assistant answer', { exact: true }).waitFor()
+  assert.equal(await editor.getAttribute('placeholder'), placeholder, 'session uses the same placeholder as home')
   await editor.fill('$src')
   await dropup.getByText('Choose folder', { exact: true }).waitFor()
   await dropup.getByRole('button', { name: '/my project/src' }).tap()
@@ -252,7 +256,7 @@ try {
   await page.getByRole('menuitemradio', { name: 'Magyar' }).tap()
   await page.getByRole('button', { name: 'Profil és beállítások' }).waitFor()
   assert.equal(await page.locator('html').getAttribute('lang'), 'hu')
-  await page.getByPlaceholder('Írj az ügynöknek… ($ fájlok, # gépek)').waitFor()
+  await page.getByPlaceholder('Írj Beezynek… ($ fájlok, @ résztvevők)', { exact: true }).waitFor()
   // Localized controls and dialogs update immediately, without translating conversation content.
   await page.getByRole('button', { name: 'Menü megnyitása' }).tap()
   const menu = page.getByRole('dialog', { name: 'Menü' })

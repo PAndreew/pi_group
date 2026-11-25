@@ -751,7 +751,6 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     hash="session"
                     value={text}
                     onChange={setText}
-                    placeholder={tr(editing ? "composer.edit" : "composer.session")}
                     selfId={user?.id}
                     eligiblePeople={canInvite && !editing ? undefined : isParticipant}
                     controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}

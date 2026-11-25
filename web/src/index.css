@@ -13,6 +13,7 @@
   --composer-icon: #374151;
   --composer-placeholder: #64748b;
   --composer-active: #1d4ed8;
+  --composer-glow: rgb(125 195 255 / 0.5);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -46,6 +47,7 @@
   --composer-icon: #fff;
   --composer-placeholder: #cbd5e1;
   --composer-active: #93c5fd;
+  --composer-glow: rgb(251 209 78 / 0.5);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -339,7 +341,7 @@ html[data-editing] body { padding-bottom: 0; }
     border-radius: inherit;
     padding: 2px;
     pointer-events: none;
-    background: conic-gradient(from var(--composer-glow-angle), transparent, rgb(251 209 78 / 0.5) 0.05turn, transparent 0.1turn);
+    background: conic-gradient(from var(--composer-glow-angle), transparent, var(--composer-glow) 0.05turn, transparent 0.1turn);
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     mask-composite: exclude;
     animation: composer-glow 10s linear infinite;

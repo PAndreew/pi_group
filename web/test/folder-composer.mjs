@@ -67,11 +67,15 @@ try {
   assert.equal(await input.inputValue(), '$folder hello', 'subsequent backspace deletes one more character')
   const composerBox = page.locator('[data-composer-box]')
   const glow = () => composerBox.evaluate(el => {
-    const { animationName, animationDuration, pointerEvents } = getComputedStyle(el, '::after')
-    return { animationName, animationDuration, pointerEvents }
+    const { animationName, animationDuration, pointerEvents, backgroundImage } = getComputedStyle(el, '::after')
+    return { animationName, animationDuration, pointerEvents, backgroundImage }
   })
   await page.emulateMedia({ reducedMotion: 'no-preference' })
-  assert.deepEqual(await glow(), { animationName: 'composer-glow', animationDuration: '10s', pointerEvents: 'none' })
+  const { backgroundImage, ...animation } = await glow()
+  assert.deepEqual(animation, { animationName: 'composer-glow', animationDuration: '10s', pointerEvents: 'none' })
+  assert.match(backgroundImage, /rgba\(125, 195, 255, 0\.5\)/, 'light mode has a blue glow')
+  await page.evaluate(() => document.documentElement.classList.add('dark'))
+  assert.match((await glow()).backgroundImage, /rgba\(251, 209, 78, 0\.5\)/, 'dark mode retains the yellow glow')
   await page.emulateMedia({ reducedMotion: 'reduce' })
   assert.equal((await glow()).animationName, 'none', 'reduced motion disables the glow')
   console.log('PASS: $ folders, @ mentions, mobile dropup placement, Backspace suggestions and reduced motion')
