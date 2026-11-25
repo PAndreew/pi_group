@@ -52,6 +52,14 @@ function ChartBlock({ source }: { source: string }) {
 }
 
 /** With `base` (the folder the text was written in), links to files open them in the app's preview. */
+/** The number of columns of a markdown table: the cells of its first row. */
+function tableColumns(node: unknown): number {
+  type El = { type?: string; tagName?: string; children?: El[] }
+  const elements = (el?: El) => (el?.children ?? []).filter((child) => child.type === "element")
+  const row = elements(node as El).flatMap((section) => (section.tagName === "tr" ? [section] : elements(section)))[0]
+  return elements(row).length
+}
+
 export const Markdown = memo(function Markdown({ text, className, base }: { text: string; className?: string; base?: string }) {
   const nav = useContext(NavContext)
   const files = base !== undefined && nav !== null
@@ -62,6 +70,9 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[[rehypeHighlight, { detect: false, ignoreMissing: true }]]}
         components={{
+          // A scroll box around the table so wide tables scroll sideways instead of stretching the bubble.
+          // At least ~8rem per column, so many columns scroll rather than squeeze into tall, narrow cells.
+          table: ({ node, style, ...props }) => <div className="md-table"><table {...props} style={{ ...style, minWidth: `${Math.min(tableColumns(node), 8) * 8}rem` }} /></div>,
           pre: ({ node, children, ...props }) => {
             const block = fence(node)
             if (block?.language === "chart") return <ChartBlock source={block.source} />
@@ -104,7 +115,7 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
                   nav!.openFile(file)
                 }}
               >
-                <FileIcon fileName={file.split("/").pop() ?? file} autoAssign width={18} height={18} className="shrink-0 self-center" aria-hidden="true" />
+                <FileIcon fileName={file.split("/").pop() ?? file} autoAssign width={18} height={18} className="shrink-0 self-center file-icon" aria-hidden="true" />
                 {children}
               </a>
             )

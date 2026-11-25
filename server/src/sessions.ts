@@ -17,7 +17,7 @@ import { mountJobs } from "./jobs.js";
 import { mountWatches } from "./watches.js";
 import { mountApplets } from "./applets.js";
 import { checkProject, mountProjects, projectIdOf } from "./projects.js";
-import { isConsolidating, mountMemory, noteSessionActivity, projectMemory } from "./memory.js";
+import { isConsolidating, mountMemory, projectMemory } from "./memory.js";
 import { mountLinks } from "./links.js";
 import { lastMemoryAt, wrapProjectMemory } from "../extensions/lib/context-policy.mjs";
 import { remoteMachinesNote } from "./remote-machines.js";
@@ -440,7 +440,6 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			throw error;
 		}
 		if (!options.background) store.upsertSession({ ...store.session(meta.key)!, firstMessage: current.firstMessage ?? firstLine(body.text), updatedAt: new Date().toISOString() });
-		noteSessionActivity(meta.key, body.text);
 		if (autoTitle) void titleSession(store.session(meta.key)!, user, { text: body.text, authProfile: live.authProfile }).catch(error => console.error("Auto title generation failed:", error));
 		hub.broadcast(meta.key, { type: "notify", level: "info", text: `${user.username}: ${input.mode ?? "prompt"}`, author: user.username, silent: true });
 	};
@@ -540,36 +539,6 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (message.role === "user" && stored.messages.findIndex((m) => m.role === "user") === target.index) {
 			const firstUser = messages.find((m) => m.role === "user");
 			current.firstMessage = firstUser ? firstLine(messageText(firstUser)) : undefined;
-		}
-		saveNow();
-		const state: SessionState = { messages, partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: false, name: current.name ?? stored.name };
-		hub.broadcast(meta.key, { type: "state", state: hub.state(meta.key, state) });
-		return true;
-	};
-
-	/**
-	 * Remove the last turn whose prompt contains `marker`: the prompt and everything the agent did for it, up to
-	 * the next prompt. False when the agent is running (try again later); harnesses that cannot delete keep it.
-	 */
-	const dropTurn = async (meta: SessionMeta, marker: string) => {
-		const adapter = adapterOf(meta.harness);
-		if (!adapter.deleteMessage) return true;
-		if (adapter.live(meta.id)?.state.running) return false;
-		const stored = await adapter.readSession(meta.id, meta.cwd);
-		if (!stored) return false;
-		const start = stored.messages.findLastIndex((m) => m.role === "user" && messageText(m).includes(marker));
-		if (start < 0) return true;
-		let end = stored.messages.findIndex((m, i) => i > start && m.role === "user");
-		if (end < 0) end = stored.messages.length;
-		if (adapter.live(meta.id)?.state.running) return false;
-		await adapter.live(meta.id)?.close();
-		for (let i = end - 1; i >= start; i--) await adapter.deleteMessage(meta.id, meta.cwd, i);
-		const current = store.session(meta.key)!;
-		const messages = stored.messages.filter((_, i) => i < start || i >= end);
-		let remaining = stored.messages;
-		for (let i = end - 1; i >= start; i--) {
-			if (current.authorship) dropAuthor(current.authorship, remaining, i);
-			remaining = remaining.filter((_, j) => j !== i);
 		}
 		saveNow();
 		const state: SessionState = { messages, partial: null, toolOutputs: {}, runningTools: [], running: false, queue: { steering: [], followUp: [] }, dialogs: [], live: false, name: current.name ?? stored.name };
@@ -1162,10 +1131,18 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	mountMemory(router, {
 		...chatDeps,
 		isDeleting: (key) => deleting.has(key),
-		sessionProvider: (meta) => byId.get(meta.harness)?.live(meta.id)?.state.model?.provider ?? store.userById(meta.ownerId ?? "")?.sessionDefaults?.model.provider,
-		providers: async (user) => [...new Set((await adapterOf(await harnessFor(user)).listModels()).map((m) => m.provider))],
-		chatTurn: (chatId, since, run) => chats.memoryTurn(chatId, since, run),
-		dropTurn,
+		isLive: (meta) => Boolean(byId.get(meta.harness)?.live(meta.id)),
+		modelsFor: async (user) => {
+			const harness = await harnessFor(user);
+			return adapterOf(harness).listModels(harness === "pi" ? await piProfile(user.id) : undefined);
+		},
+		purgeSession: async (meta) => {
+			const adapter = adapterOf(meta.harness);
+			await adapter.live(meta.id)?.close();
+			if (await adapter.deleteSession?.(meta.id, meta.cwd)) store.removeSession(meta.key);
+			else if (store.session(meta.key)) store.upsertSession({ ...store.session(meta.key)!, deleted: true });
+			saveNow();
+		},
 	});
 	mountJobs(router, {
 		...chatDeps,

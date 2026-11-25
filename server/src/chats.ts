@@ -167,9 +167,13 @@ export function resetChatConsolidation(tenant: string) {
 	database().prepare("UPDATE chats SET consolidated_at = NULL WHERE COALESCE(tenant_id, 'work') = ?").run(tenant);
 }
 
-/** Set by the memory module: someone wrote in a chat. */
-let noteChatActivity: (chatId: string) => void = () => {};
-export const onChatActivity = (listener: (chatId: string) => void) => { noteChatActivity = listener; };
+/** Finished messages of a tenant's chats created after `since` up to `until` (ISO), per chat. */
+export function chatMessagesBetween(tenant: string, since: string, until: string) {
+	const rows = database().prepare("SELECT m.* FROM messages m JOIN chats c ON c.id = m.chat_id WHERE COALESCE(c.tenant_id, 'work') = ? AND m.created_at > ? AND m.created_at <= ? AND (m.status IS NULL OR m.status <> 'working') ORDER BY m.chat_id, m.id").all(tenant, since, until) as Row[];
+	const byChat = new Map<string, ChatMessage[]>();
+	for (const row of rows) { const m = toMessage(row); byChat.set(m.chatId, [...(byChat.get(m.chatId) ?? []), m]); }
+	return [...byChat].map(([id, messages]) => ({ chat: getChat(id), messages })).filter((c): c is { chat: Chat; messages: ChatMessage[] } => Boolean(c.chat));
+}
 
 export function markChatConsolidated(id: string, at = new Date().toISOString()) {
 	database().prepare("UPDATE chats SET consolidated_at = ? WHERE id = ?").run(at, id);
@@ -478,7 +482,6 @@ export function mountChats(router: Router, deps: ChatDeps) {
 		database().prepare("UPDATE members SET last_read = ? WHERE chat_id = ? AND user_id = ?").run(message.id, chat.id, user.id);
 		chat = getChat(chat.id)!;
 		fanOut(chat, "chat_message", message, { author: user.username, text, except: user.id });
-		noteChatActivity(chat.id);
 		if (names.includes("pi")) void askPi(chat, user, message.id, options).catch((error) => console.error("chat: pi failed", error));
 		res.json({ message });
 	});
@@ -647,26 +650,6 @@ export function mountChats(router: Router, deps: ChatDeps) {
 			if (!chat || !isMember(chatId, user)) return;
 			const message = insert(chat.id, { role: "user", content: [{ type: "text", text }], timestamp: Date.now(), author: { id: user.id, username: user.username } });
 			fanOut(chat, "chat_message", message, { author: user.username, text, except: user.id });
-			noteChatActivity(chat.id);
-		},
-		/**
-		 * Run a memory update as one of the chat's turns, so an @pi asked meanwhile waits for it. `run` gets the
-		 * people's messages pi has not seen (marked seen now) and every message since `since`.
-		 */
-		memoryTurn: (chatId: string, since: string | undefined, run: (unseen: string, recent: ChatMessage[]) => Promise<void>) => {
-			const previous = turns.get(chatId) ?? Promise.resolve();
-			const turn = previous.catch(() => {}).then(async () => {
-				const chat = getChat(chatId);
-				if (!chat) return;
-				const latest = Number((database().prepare("SELECT MAX(id) AS id FROM messages WHERE chat_id = ?").get(chatId) as Row).id ?? 0);
-				const unseen = chat.sessionKey ? (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND id > ? ORDER BY id").all(chatId, chat.piCursor) as Row[]).map(toMessage).filter(m => m.message.role !== "assistant") : [];
-				const recent = (database().prepare("SELECT * FROM messages WHERE chat_id = ? AND created_at > ? ORDER BY id").all(chatId, since ?? "") as Row[]).map(toMessage);
-				await run(transcript(unseen), recent);
-				if (chat.sessionKey) database().prepare("UPDATE chats SET pi_cursor = MAX(pi_cursor, ?) WHERE id = ?").run(latest, chatId);
-			});
-			turns.set(chatId, turn);
-			void turn.finally(() => { if (turns.get(chatId) === turn) turns.delete(chatId); }).catch(() => {});
-			return turn;
 		},
 	};
 }

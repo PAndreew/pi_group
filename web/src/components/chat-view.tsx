@@ -11,7 +11,7 @@ import { Markdown } from "@/components/markdown"
 import { ForwardDialog } from "@/components/forward-dialog"
 import { EditPreview, MessageActions, Reactions } from "@/components/message-actions"
 import { MessageBody } from "@/components/message-body"
-import { MessageTime } from "@/components/message-time"
+import { MessageHeader } from "@/components/message-header"
 import { MoveDialog, type MoveTarget } from "@/components/project-move"
 import { JumpToBottom, useJumpToBottom } from "@/components/jump-to-bottom"
 import { focusComposer, ReplyPreview, ReplyStack, replySource, selectReply } from "@/components/message-reply"
@@ -50,8 +50,7 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
     <div className="flex items-start gap-2">
       <PiAvatar />
       <div className="min-w-0 max-w-[85%]">
-        <div className="mb-1 flex min-h-8 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="font-medium text-gray-500 dark:text-gray-300">Beezy</span>
+        <MessageHeader name="Beezy" at={m.status === "working" ? undefined : m.createdAt} edited={Boolean(m.editedAt)}>
           <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label="Open detailed steps" title="Open detailed steps"><List className="size-4" /></button>
           <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-300" title="Open all steps">
             {m.status === "working" ? <><Icon className="size-3.5" />{steps.length} steps</> : <>Total: {steps.length}</>}
@@ -59,12 +58,12 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
           <button type="button" onClick={() => setDetails({ failed: true, index: null })} className={failed.length ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300"} title="Open failed step details">{m.status === "working" ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}</button>
           {m.status === "working" && <span className="running-shimmer">Running…</span>}
           {onWatch && (
-            <button type="button" className="ml-auto flex items-center gap-1 hover:text-foreground" onClick={onWatch}>
+            <button type="button" className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground" onClick={onWatch}>
               {m.status === "working" ? "watch" : "session"} <ExternalLink className="size-3" />
             </button>
           )}
-        </div>
-        <div className={cn("grid min-w-0 gap-1", m.status !== "working" && "agent-message agent-bubble rounded-3xl rounded-tl-md px-4 py-2.5")}>
+        </MessageHeader>
+        <div className={cn("grid min-w-0 gap-1", m.status !== "working" && "agent-message agent-bubble rounded-3xl px-4 py-2.5")}>
           {m.status === "working" ? null : m.status === "error" ? (
             <span className="flex items-start gap-1.5 text-sm text-destructive">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {text || "The run failed."}
@@ -76,7 +75,6 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
           )}
           {children}
         </div>
-        {m.status !== "working" && <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />}
       {actions}
       <StepsDialog steps={shownSteps} open={details !== null} index={details?.index ?? null} onIndex={(index) => setDetails((value) => value && { ...value, index })} onClose={() => setDetails(null)} />
       </div>
@@ -84,34 +82,18 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
   )
 }
 
-function HumanMessage({ m, own, showName, folder }: { m: ChatMessage; own: boolean; showName: boolean; folder?: string }) {
+function HumanMessage({ m, own, folder }: { m: ChatMessage; own: boolean; folder?: string }) {
   const author = m.message.author as { id: string; username: string } | undefined
   const text = messageText(m.message.content)
-  if (own)
-    return (
-      <div className="flex justify-end">
-        <ReplyStack text={text} align="end" className="max-w-[85%]" header={<div className="mb-1 flex min-h-8 items-center justify-end gap-2 text-xs font-medium">{author?.username}{author && <AuthorAvatar id={author.id} name={author.username} />}</div>}>
-          {(body) => (
-            <div className="min-w-0">
-              <div className="rounded-3xl rounded-tr-md bg-blue-50 px-4 py-2.5 text-sm text-black">
-                <MessageBody text={body} folder={folder} />
-              </div>
-              <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />
-            </div>
-          )}
-        </ReplyStack>
-      </div>
-    )
   return (
     <div className="flex items-start gap-2">
-      {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8" />}
-      <ReplyStack text={text} className="max-w-[85%]" header={(showName || Boolean(parseReply(text))) && <div className="mb-1 flex min-h-8 items-center text-xs font-medium">{author?.username}</div>}>
+      {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8 shrink-0" />}
+      <ReplyStack text={text} className="max-w-[85%]" header={<MessageHeader name={author?.username ?? "Unknown author"} at={m.createdAt} edited={Boolean(m.editedAt)} />}>
         {(body) => (
           <div className="min-w-0">
-            <div className="rounded-3xl rounded-tl-md bg-muted px-4 py-2.5 text-sm">
+            <div className={cn("human-bubble rounded-3xl px-4 py-2.5 text-sm", own ? "own-bubble bg-blue-50 text-black" : "bg-muted")}>
               <MessageBody text={body} folder={folder} />
             </div>
-            <MessageTime at={m.createdAt} edited={Boolean(m.editedAt)} />
           </div>
         )}
       </ReplyStack>
@@ -348,17 +330,14 @@ export function ChatView({ chatId }: { chatId: string }) {
               return <div key={m.id} id={sourceId} {...replySource(content)}><PiMessage m={m} folder={chat?.folder} onWatch={watch} actions={actions}><InteractionCards cards={cards} canWrite={Boolean(chat?.members.some((member) => member.id === user?.id))} onResolved={interactions.onResolved} /></PiMessage></div>
             }
             const authorId = (m.message.author as { id?: string } | undefined)?.id
-            const previous = (messages[i - 1]?.message.author as { id?: string } | undefined)?.id
             const own = authorId === user?.id
-            const align = own ? "end" : "start"
             return (
               <div key={m.id} id={sourceId} {...replySource(content)}>
-                <HumanMessage m={m} own={own} showName={authorId !== previous} folder={chat?.folder} />
-                <div className={cn(!own && "pl-10")}>
-                  <Reactions reactions={m.reactions} selfId={user?.id} names={nameOf} align={align} onReact={(emoji) => void react(m, emoji)} />
+                <HumanMessage m={m} own={own} folder={chat?.folder} />
+                <div className="pl-10">
+                  <Reactions reactions={m.reactions} selfId={user?.id} names={nameOf} onReact={(emoji) => void react(m, emoji)} />
                   {content && (
                     <MessageActions
-                      align={align}
                       copy={parseReply(content)?.body ?? content}
                       onReply={onReply}
                       onEdit={() => startEdit(m, content)}

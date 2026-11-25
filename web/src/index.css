@@ -154,8 +154,16 @@ html[data-editing] body { padding-bottom: 0; }
 .prose-pi :where(blockquote) { @apply border-l-2 pl-3 text-muted-foreground; }
 .prose-pi :where(:not(pre) > code) { @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]; }
 .prose-pi :where(pre) { @apply overflow-x-auto rounded-md bg-muted p-3 text-xs; }
-.prose-pi :where(table) { @apply block overflow-x-auto text-xs; }
-.prose-pi :where(th, td) { @apply border px-2 py-1 text-left; }
+/* Tables: a rounded, sideways-scrolling box a few tones darker than what it sits on, with a bold
+   header row and only horizontal dividers. The tints mix the text colour, so they work on every bubble and theme. */
+.prose-pi .md-table {
+  @apply my-2 max-w-full overflow-x-auto rounded-xl text-xs;
+  background-color: color-mix(in oklch, currentColor 6%, transparent);
+}
+.prose-pi .md-table table { @apply m-0 w-full border-collapse; }
+.prose-pi .md-table :where(th, td) { @apply px-3 py-2 text-left align-top; }
+.prose-pi .md-table th { @apply font-semibold whitespace-nowrap; }
+.prose-pi .md-table tbody tr { border-top: 1px solid color-mix(in oklch, currentColor 14%, transparent); }
 .prose-pi :where(img) { @apply max-w-full; }
 .prose-pi > :first-child { @apply mt-0; }
 .prose-pi > :last-child { @apply mb-0; }
@@ -227,22 +235,31 @@ html[data-editing] body { padding-bottom: 0; }
 
 .agent-message { background-color: #f3f3f3; color: #20282c; border: none; }
 .agent-message :is(.text-muted-foreground, .text-foreground) { color: inherit; }
+/* Dark mode: agent and human cards are a dark green with white text; the current user's own
+   messages carry a very subtle amber tone. */
+.dark { --message-card: #0e1d15; --message-card-own: color-mix(in oklch, #0e1d15 86%, #f59e0b); }
+.dark :is(.agent-message, .human-bubble) { background-color: var(--message-card); color: #fff; }
+.dark .human-bubble.own-bubble { background-color: var(--message-card-own); }
+.dark .human-bubble :is(.text-muted-foreground, .text-foreground) { color: inherit; }
+/* File-type icons have fixed colours, some of them dark: give them a light tile on the dark cards. */
+.dark :is(.agent-message, .human-bubble) .file-icon { box-sizing: border-box; padding: 1px; border-radius: 4px; background-color: #e6ede8; }
 
 .agent-bubble .prose-pi :where(:not(pre) > code, pre) { background-color: color-mix(in oklch, currentColor 14%, transparent); }
 .agent-bubble .prose-pi :where(blockquote) { color: inherit; opacity: 0.8; }
-.agent-bubble .prose-pi :where(blockquote, th, td) { border-color: color-mix(in oklch, currentColor 30%, transparent); }
-.agent-bubble .hljs-comment, .agent-bubble .hljs-quote { color: #8b949e; }
-.agent-bubble .hljs-keyword, .agent-bubble .hljs-selector-tag, .agent-bubble .hljs-literal, .agent-bubble .hljs-type { color: #ff7b72; }
-.agent-bubble .hljs-string, .agent-bubble .hljs-regexp, .agent-bubble .hljs-addition { color: #a5d6ff; }
-.agent-bubble .hljs-number, .agent-bubble .hljs-built_in, .agent-bubble .hljs-symbol { color: #79c0ff; }
-.agent-bubble .hljs-title, .agent-bubble .hljs-section, .agent-bubble .hljs-function { color: #d2a8ff; }
-.agent-bubble .hljs-attr, .agent-bubble .hljs-attribute, .agent-bubble .hljs-variable, .agent-bubble .hljs-template-variable { color: #ffa657; }
-.dark .agent-bubble .hljs-comment, .dark .agent-bubble .hljs-quote { color: #6a737d; }
-.dark .agent-bubble .hljs-keyword, .dark .agent-bubble .hljs-selector-tag, .dark .agent-bubble .hljs-literal, .dark .agent-bubble .hljs-type { color: #d73a49; }
-.dark .agent-bubble .hljs-string, .dark .agent-bubble .hljs-regexp, .dark .agent-bubble .hljs-addition { color: #22863a; }
-.dark .agent-bubble .hljs-number, .dark .agent-bubble .hljs-built_in, .dark .agent-bubble .hljs-symbol { color: #005cc5; }
-.dark .agent-bubble .hljs-title, .dark .agent-bubble .hljs-section, .dark .agent-bubble .hljs-function { color: #6f42c1; }
-.dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #e36209; }
+.agent-bubble .prose-pi :where(blockquote) { border-color: color-mix(in oklch, currentColor 30%, transparent); }
+/* Code colours: light theme on the light agent card, dark theme on the dark-green one. */
+.agent-bubble .hljs-comment, .agent-bubble .hljs-quote { color: #6a737d; }
+.agent-bubble .hljs-keyword, .agent-bubble .hljs-selector-tag, .agent-bubble .hljs-literal, .agent-bubble .hljs-type { color: #d73a49; }
+.agent-bubble .hljs-string, .agent-bubble .hljs-regexp, .agent-bubble .hljs-addition { color: #22863a; }
+.agent-bubble .hljs-number, .agent-bubble .hljs-built_in, .agent-bubble .hljs-symbol { color: #005cc5; }
+.agent-bubble .hljs-title, .agent-bubble .hljs-section, .agent-bubble .hljs-function { color: #6f42c1; }
+.agent-bubble .hljs-attr, .agent-bubble .hljs-attribute, .agent-bubble .hljs-variable, .agent-bubble .hljs-template-variable { color: #e36209; }
+.dark .agent-bubble .hljs-comment, .dark .agent-bubble .hljs-quote { color: #8b949e; }
+.dark .agent-bubble .hljs-keyword, .dark .agent-bubble .hljs-selector-tag, .dark .agent-bubble .hljs-literal, .dark .agent-bubble .hljs-type { color: #ff7b72; }
+.dark .agent-bubble .hljs-string, .dark .agent-bubble .hljs-regexp, .dark .agent-bubble .hljs-addition { color: #a5d6ff; }
+.dark .agent-bubble .hljs-number, .dark .agent-bubble .hljs-built_in, .dark .agent-bubble .hljs-symbol { color: #79c0ff; }
+.dark .agent-bubble .hljs-title, .dark .agent-bubble .hljs-section, .dark .agent-bubble .hljs-function { color: #d2a8ff; }
+.dark .agent-bubble .hljs-attr, .dark .agent-bubble .hljs-attribute, .dark .agent-bubble .hljs-variable, .dark .agent-bubble .hljs-template-variable { color: #ffa657; }
 
 /* Custom scrollbars instead of the OS default: thin, rounded, transparent track.
    WebKit/Blink use the pseudo-elements; Firefox falls back to scrollbar-color (setting it in

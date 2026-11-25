@@ -23,7 +23,7 @@ import { MentionComposer, PiAvatar, type ParsedMessage, type Person } from "@/co
 import { AuthorAvatar } from "@/components/author-avatar"
 import { ComposerControls } from "@/components/composer-controls"
 import { AttachmentPreview } from "@/components/attachment-preview"
-import { MessageTime } from "@/components/message-time"
+import { MessageHeader } from "@/components/message-header"
 import { ComposerTools } from "@/components/composer-tools"
 import { MachineDropup } from "@/components/machine-dropup"
 import { PathDropup } from "@/components/path-dropup"
@@ -74,24 +74,23 @@ function readBase64(file: File) {
   })
 }
 
-function UserBubble({ message, text, memory, onRemoveMemory, folder }: { message: AgentMessage; text: string; memory?: string; onRemoveMemory?: () => void; folder?: string }) {
+function UserBubble({ message, text, memory, onRemoveMemory, folder, own }: { message: AgentMessage; text: string; memory?: string; onRemoveMemory?: () => void; folder?: string; own?: boolean }) {
   // Uploads show from their files (MessageBody); inline copies only when the prompt names no stored image.
   const images = Array.isArray(message.content) && imageRefs(text, folder).length === 0 ? message.content.filter((c: any) => c?.type === "image").map((img: any) => ({ src: `data:${img.mimeType};base64,${img.data}` })) : []
   return (
-    <div className="flex items-start justify-end gap-2">
-      <ReplyStack text={text} align="end" className="max-w-[88%]" header={<div className="mb-1 text-right text-xs font-semibold">{message.author?.username ?? "Unknown author"}</div>}>
+    <div className="flex items-start gap-2">
+      <AuthorAvatar id={message.author?.id ?? "unknown"} name={message.author?.username ?? "?"} />
+      <ReplyStack text={text} className="max-w-[88%]" header={<MessageHeader name={message.author?.username ?? "Unknown author"} at={message.timestamp} />}>
         {(body) => (
           <div className="min-w-0">
-            <div className="rounded-3xl rounded-br-md bg-blue-50 px-4 py-2.5 text-sm text-black">
+            <div className={cn("human-bubble rounded-3xl bg-blue-50 px-4 py-2.5 text-sm text-black", own && "own-bubble")}>
               {memory !== undefined && <ProjectMemoryPill memory={memory} onRemove={onRemoveMemory} />}
               {isWatchResult(body) ? <WatchResultPill text={body} /> : <MessageBody text={body} folder={folder} />}
               <ImageGallery images={images} />
             </div>
-            <MessageTime at={message.timestamp} />
           </div>
         )}
       </ReplyStack>
-      <AuthorAvatar id={message.author?.id ?? "unknown"} name={message.author?.username ?? "?"} />
     </div>
   )
 }
@@ -183,8 +182,7 @@ function AgentBubble({
     <div className="flex items-start gap-2">
       <PiAvatar />
       <div className="max-w-[88%] min-w-0">
-        <div className="mb-1 flex min-h-8 flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-gray-500 dark:text-gray-300">Beezy</span>
+        <MessageHeader name="Beezy" at={run.running ? undefined : run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp}>
           <button type="button" onClick={() => onOpen(null)} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label="Open detailed steps" title="Open detailed steps">
             <List className="size-4" />
           </button>
@@ -195,10 +193,10 @@ function AgentBubble({
           <button type="button" onClick={() => onOpen(null, true)} className={cn("rounded px-1 py-1 hover:bg-accent", failed.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300")} title="Open failed step details">
             {run.running ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}
           </button>
-        </div>
+        </MessageHeader>
         {(run.running || run.answer || question || answered.length > 0 || interactions) && (
           <>
-            <div className="agent-message agent-bubble rounded-3xl rounded-bl-md px-4 py-2.5 text-sm">
+            <div className="agent-message agent-bubble rounded-3xl px-4 py-2.5 text-sm">
               {run.running && !run.answer?.trim() && !question && !interactions && (
                 <div role="status" aria-label="Beezy is working" className="py-2 text-black">
                   <pre aria-hidden="true" className="ascii-bee m-0 font-mono text-xs leading-tight">
@@ -221,7 +219,6 @@ function AgentBubble({
               {interactions}
               {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
             </div>
-            {!run.running && <MessageTime at={run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp} />}
           </>
         )}
       </div>
@@ -276,12 +273,11 @@ function RunView({
       {user && (
         <div {...replySource(userText)}>
           <div className={cn(pendingDelete && "opacity-50")}>
-            <UserBubble message={user} text={userText} memory={memory} folder={folder} onRemoveMemory={onRemoveMemory && userText.trim() && user.author?.id === selfId && !pendingDelete ? () => onRemoveMemory(user, userText) : undefined} />
+            <UserBubble message={user} text={userText} memory={memory} folder={folder} own={user.author?.id === selfId} onRemoveMemory={onRemoveMemory && userText.trim() && user.author?.id === selfId && !pendingDelete ? () => onRemoveMemory(user, userText) : undefined} />
           </div>
           {userText && (
             <MessageActions
-              align="end"
-              className="pr-10"
+              className="pl-10"
               copy={parseReply(userText)?.body ?? userText}
               onReply={onReply && (() => onReply({ author: user.author?.username ?? "Unknown author", text: userText, sourceId }))}
               onEdit={onEdit && (() => onEdit({ message: user, text: userText, prompt: true }))}

@@ -1,5 +1,5 @@
-import { Check, Folder, FolderKanban, Link2, Loader2, Pencil, Plus, Trash2, Users, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Check, Folder, FolderKanban, Link2, Loader2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -173,14 +173,16 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
 
 /**
  * The projects in the top bar: the two most recently opened ones, then … with every project, a new
- * one, and the active project's sharing, rename and delete.
+ * one, the chat search (`onSearch`), and the active project's sharing, rename and delete.
  */
-export function ProjectSwitcher({ className, onSelect }: { className?: string; onSelect?: () => void }) {
+export function ProjectSwitcher({ className, onSelect, onSearch }: { className?: string; onSelect?: () => void; onSearch?: () => void }) {
   const { projects, active, setActive, reload } = useProjects()
   const [editing, setEditing] = useState<Project>()
   const [creating, setCreating] = useState(false)
   const [sharing, setSharing] = useState<Project>()
   const [confirmDelete, setConfirmDelete] = useState<Project>()
+  // Opening the search must not hand focus back to the trigger, or the empty search would close on blur.
+  const searching = useRef(false)
   const select = (project: Project) => {
     setActive(project.id)
     onSelect?.()
@@ -207,7 +209,15 @@ export function ProjectSwitcher({ className, onSelect }: { className?: string; o
             <span className="truncate">{active?.name ?? "Projects"}</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-h-[70dvh] w-60 overflow-y-auto">
+        <DropdownMenuContent
+          align="start"
+          className="max-h-[70dvh] w-60 overflow-y-auto"
+          onCloseAutoFocus={(e) => {
+            if (!searching.current) return
+            searching.current = false
+            e.preventDefault()
+          }}
+        >
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Projects</DropdownMenuLabel>
           {projects.map((project) => (
             <DropdownMenuItem key={project.id} onSelect={() => select(project)} title={`/${project.folder}`}>
@@ -218,10 +228,24 @@ export function ProjectSwitcher({ className, onSelect }: { className?: string; o
           <DropdownMenuItem onSelect={() => setCreating(true)}>
             <Plus /> New project
           </DropdownMenuItem>
-          {active?.canManage && (
+          {active && (onSearch || active.canManage) && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{active.name} · /{active.folder}</DropdownMenuLabel>
+            </>
+          )}
+          {onSearch && (
+            <DropdownMenuItem
+              onSelect={() => {
+                searching.current = true
+                onSearch()
+              }}
+            >
+              <Search /> Search chats
+            </DropdownMenuItem>
+          )}
+          {active?.canManage && (
+            <>
               <DropdownMenuItem onSelect={() => setSharing(active)}>
                 <Users /> Share project with…
               </DropdownMenuItem>

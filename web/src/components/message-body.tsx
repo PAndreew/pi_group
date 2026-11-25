@@ -50,7 +50,7 @@ function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
               nav.openFile(part.path)
             }}
           >
-            <FileIcon fileName={part.path.split("/").pop() ?? part.path} autoAssign width={16} height={16} className="mr-1 inline-block align-text-bottom" aria-hidden="true" />
+            <FileIcon fileName={part.path.split("/").pop() ?? part.path} autoAssign width={16} height={16} className="mr-1 inline-block align-text-bottom file-icon" aria-hidden="true" />
             <span>{part.path.split("/").pop()}</span>
           </a>
         ) : (

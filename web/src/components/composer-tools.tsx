@@ -1,13 +1,15 @@
-import { Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, Server, SquareTerminal, Vault } from "lucide-react"
+import { ChevronDown, Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, Library, MoreHorizontal, Server, SquareTerminal, Vault } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { AppletsDialog } from "@/components/applets-dialog"
 import { JobsDialog } from "@/components/jobs-dialog"
+import { LinksDialog } from "@/components/links-dialog"
 import { ModelSettingsDialog } from "@/components/model-settings-dialog"
 import { RemoteMachinesDialog } from "@/components/remote-machines-dialog"
 import { ResourceMonitorDialog } from "@/components/resource-monitor-dialog"
 import { ToolsDialog } from "@/components/tools-dialog"
 import { VaultDialog } from "@/components/vault-dialog"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
 import { usePendingApplets } from "@/hooks/use-pending-applets"
 import { usePendingJobs } from "@/hooks/use-pending-jobs"
@@ -16,11 +18,11 @@ import { useNav } from "@/lib/nav"
 /** xterm.js is large; load it only when someone opens a terminal. */
 const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
-type Panel = "terminal" | "tools" | "jobs" | "applets" | "monitor" | "vault" | "models" | "machines"
+type Panel = "links" | "terminal" | "tools" | "jobs" | "applets" | "monitor" | "vault" | "models" | "machines"
 
 /**
- * The tool icons, each opening its own modal: under every message box, or at the bottom of the
- * large-screen left sidebar (which replaces the ones under the box, and already shows the files).
+ * The menu items of the left sidebar and mobile drawer, each opening its own modal: links, jobs and
+ * applets directly, everything else under "More".
  * With a session they act on it; without one (home screen, a chat pi has not joined yet) they act
  * on `folder`.
  */
@@ -46,6 +48,12 @@ export function ComposerTools({
       {node}<span>{label}</span>
     </Button>
   )
+  const item = (name: Panel | "explorer", label: string, node: React.ReactNode) => (
+    <DropdownMenuItem key={name} onSelect={() => (name === "explorer" ? nav.openExplorer(folder) : setPanel(name))}>
+      {node}
+      {label}
+    </DropdownMenuItem>
+  )
   const dot = (show: boolean, node: React.ReactNode) => (
     <span className="relative">
       {node}
@@ -58,15 +66,27 @@ export function ComposerTools({
   return (
     <>
       <div className="flex flex-col items-stretch gap-1">
-        {user?.role === "admin" && icon("terminal", "Terminal", <SquareTerminal />)}
-        {icon("tools", "Tools, skills, commands & MCP", <Hammer />)}
+        {icon("links", "Links", <Library />)}
         {icon("jobs", pendingJobs ? `Scheduled jobs (${pendingJobs} waiting for approval)` : "Scheduled jobs", dot(pendingJobs > 0, <Clock />))}
         {icon("applets", pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets", dot(pendingApplets > 0, <LayoutGrid />))}
-        {icon("monitor", "Resource monitor", <Gauge />)}
-        {icon("explorer", "Folders and files", <FolderOpen />)}
-        {icon("machines", "Remote machines", <Server />)}
-        {icon("vault", "Secret vault", <Vault />)}
-        {icon("models", "Model settings", <Cpu />)}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-auto min-h-10 w-full justify-start gap-3 px-3 py-2 text-left font-normal [&_svg]:size-4" aria-label="More">
+              <MoreHorizontal />
+              <span className="flex-1">More</span>
+              <ChevronDown className="text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
+            {user?.role === "admin" && item("terminal", "Terminal", <SquareTerminal />)}
+            {item("tools", "Tools, skills, commands & MCP", <Hammer />)}
+            {item("monitor", "Resource monitor", <Gauge />)}
+            {item("explorer", "Folders and files", <FolderOpen />)}
+            {item("machines", "Remote machines", <Server />)}
+            {item("vault", "Secret vault", <Vault />)}
+            {item("models", "Model settings", <Cpu />)}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <ToolsDialog
         sessionKey={sessionKey}
@@ -81,6 +101,7 @@ export function ComposerTools({
           })
         }
       />
+      <LinksDialog open={panel === "links"} onOpenChange={openChange("links")} />
       <JobsDialog open={panel === "jobs"} onOpenChange={openChange("jobs")} />
       <AppletsDialog open={panel === "applets"} onOpenChange={openChange("applets")} />
       <ResourceMonitorDialog open={panel === "monitor"} onOpenChange={openChange("monitor")} onOpenSession={(s) => nav.openSession(s.key, s.path)} />

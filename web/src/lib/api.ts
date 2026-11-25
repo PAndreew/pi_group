@@ -77,21 +77,24 @@ export interface ContextPolicy {
   windowHours: number
 }
 
-export interface MemoryCacheSettings {
-  /** PI_CACHE_RETENTION=long: providers keep prompts cached longer. */
-  longRetention: boolean
-  /** Chats without pi wait this long after their last message. */
-  chatIdleMinutes: number
-  providers: { provider: string; minutes: number; defaultMinutes: number; custom: boolean }[]
+export interface MemoryModelSettings {
+  /** Minutes between a project's memory syncs. */
+  syncMinutes: number
+  /** The model a sync run by the caller would use now. */
+  current?: { provider: string; id: string }
+  /** `configured` is the admin's pick; without it a sync uses `cheapest`. */
+  providers: { provider: string; configured?: string; cheapest?: string; models: { id: string; name: string; cost?: { input: number; output: number } }[] }[]
 }
 
 export interface ProjectMemoryStatus {
   /** What agents see of long conversations: old turns trimmed after `trimHours`, older than `windowHours` left out (0 = off). */
   context: ContextPolicy
-  /** When a session last finished updating memory. */
+  /** When a sync last read new conversations into memory. */
   lastRun?: string
-  /** Sessions (the caller can open) updating memory right now. */
-  updating: { key: string; title: string }[]
+  /** A sync is running now. */
+  syncing: boolean
+  /** When the next hourly sync is due. */
+  nextSync: string
   error?: string
   /** A few orienting sentences at the top of the master. */
   overview: string
@@ -610,9 +613,9 @@ export const api = {
   cancelMove: (id: string) => request("DELETE", `/api/projects/moves/${enc(id)}`),
   projectMemory: (id: string) => request<ProjectMemoryStatus>("GET", `/api/memory/${enc(id)}`),
   setMemorySettings: (id: string, body: { context?: ContextPolicy }) => request("PATCH", `/api/memory/${enc(id)}`, body),
-  memoryCache: () => request<MemoryCacheSettings>("GET", "/api/memory-cache"),
-  /** Minutes per provider; null returns a provider to its default. Admins only. */
-  saveMemoryCache: (minutes: Record<string, number | null>) => request("PUT", "/api/memory-cache", minutes),
+  memoryModel: () => request<MemoryModelSettings>("GET", "/api/memory-model"),
+  /** Model id per provider; null returns a provider to its cheapest. Admins only. */
+  saveMemoryModel: (models: Record<string, string | null>) => request("PUT", "/api/memory-model", models),
   saveMemoryOverview: (id: string, body: string) => request("PUT", `/api/memory/${enc(id)}/overview`, { body }),
   memoryTopic: (id: string, slug: string) => request<MemoryTopic>("GET", `/api/memory/${enc(id)}/topics/${enc(slug)}`),
   saveMemoryTopic: (id: string, slug: string, body: { title: string; description: string; body: string }) => request("PUT", `/api/memory/${enc(id)}/topics/${enc(slug)}`, body),

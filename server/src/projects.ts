@@ -35,9 +35,10 @@ export interface Project {
 	links?: string[];
 	general?: boolean;
 	createdBy: string;
-	/** Zero disables automatic consolidation; manual runs remain available. */
-	/** When a session last finished updating this project's memory. */
+	/** When a memory sync last changed (or checked) this project's memory with new conversations. */
 	memoryLastRun?: string;
+	/** Conversations up to this time are in memory; the next hourly sync reads what came after. */
+	memorySyncedAt?: string;
 	/** Hours after an agent turn ends before its reasoning and tool output leave the model's context (default 12, 0 = never). */
 	contextTrimHours?: number;
 	/** Hours of conversation the agent sees when it starts working again (default 168, 0 = all); the rest via session_history. */

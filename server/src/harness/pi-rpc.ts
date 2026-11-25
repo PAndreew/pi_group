@@ -197,6 +197,7 @@ const toModelInfo = (m: any): ModelInfo => ({
 	thinkingLevels: getSupportedThinkingLevels(m),
 	contextWindow: m.contextWindow,
 	input: m.input,
+	...(typeof m.cost?.input === "number" && typeof m.cost?.output === "number" ? { cost: { input: m.cost.input, output: m.cost.output } } : {}),
 });
 
 class PiLiveSession extends LiveSessionBase {

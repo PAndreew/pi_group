@@ -2,13 +2,18 @@
 
 Every non-General project already has a generated `projects/<name>/` folder under its tenant file root. General uses the tenant chat folder. Linked repositories do not become the memory storage location.
 
-Memory updates itself; there is no schedule to set. When a session someone worked in goes quiet, the server waits until **30 seconds before its provider's prompt cache expires** and then sends that session's own agent a short housekeeping prompt asking it to fold what the conversation added into the project's memory. The agent already has the whole conversation in context and the prompt is still cached, so this costs a fraction of re-reading the conversation in a separate worker. A run ending restarts the wait; a new prompt pushes it back.
+Memory updates itself through an **hourly sync per project** (`MEMORY_SYNC_MINUTES`, default 60, at most once per that interval). The server checks every 5 minutes; when a project's last sync is an hour old and its conversations have something new, it:
 
-**Cache lifetime per provider** is set in Model settings → Project memory → Memory update timing (admins change it, `GET|PUT /api/memory-cache`). The provider is the live agent's model provider, else the owner's default model's. Defaults are the providers' cache lifetimes as pi requests them: 5 minutes for Anthropic, OpenAI, Google and most others; with `PI_CACHE_RETENTION=long`, 60 minutes for Anthropic and OpenAI (OpenAI's 24 hours capped to an hour); DeepSeek 60.
+1. collects every message since the last sync from the project's sessions and group chats (a chat's pi session is covered by the chat itself);
+2. strips them to the discussion: what people and agents said. Thinking, images, injected project memory and tool results are left out; tool calls shrink to one `[tools: edit server/src/x.ts; bash npm test ×2]` line, failed results to a short error. Long conversations keep their newest part (about 150,000 characters in all);
+3. starts a short-lived session with the project's creator (else the most active participant with project access), on the **memory sync model** of their default provider, with thinking low. Its prompt holds the current overview and all topics in full, plus the digest;
+4. the session updates topics and the overview with `project_memory_update` and is then **deleted** (runtime, harness file and metadata). Sync sessions never show in session lists; one left over by a restart is removed at startup.
 
-**Group chats** take part too; the last message sent marks their activity. A chat with pi in it uses its pi session, timed by that session's provider: the session gets the update prompt plus what people said since pi's last turn (pi then counts as having seen it), queued like an @pi turn so nothing interleaves, and no reply is posted to the chat. A chat without pi has no cache to catch: `MEMORY_IDLE_MINUTES` (default 15) after its last message, a short-lived hidden worker reads the messages since the chat's last update (last 40,000 characters) and is removed afterwards. Every member must have project access.
+The conversations themselves are never prompted or changed, so nobody waits for memory and no housekeeping piles up in their context. Without anything new, no session is started. A failed sync is retried an hour later with the same messages.
 
-Only sessions and chats with activity since the server started are considered: old ones are never swept up, and after a restart they take part again once someone works in them. Private sessions, applets and sessions whose viewers lack project access never update memory. The update prompt does not count as activity, does not move the session up the list and does not title it. Once the update has run, its prompt and everything the agent did for it are deleted from the session (after the next run when someone prompted meanwhile), so housekeeping does not pile up in the context.
+**Memory sync model** (Model settings → Project memory, `GET|PUT /api/memory-model`, admins change it): per provider, the configured model, else the provider's cheapest by listed price (input weighted 3:1 over output, since a sync mostly reads), else a light model by name (haiku, mini, flash, …), else the owner's default model.
+
+Only messages after the server first started with this design are synced (the first cursor is the server start, or the project's last update); old conversations are never swept up. Private sessions, applets and sessions or chats whose viewers or members lack project access are left out.
 
 ## Topics and the overview
 
@@ -19,16 +24,16 @@ Memory is a short **overview** plus a set of **topics**, one Markdown file each,
 - `MEMORY.md`: the master the server **generates** from the overview and the topic headers. Never edit it by hand.
 - `memory/archives/<id>.json.gz`: losslessly compressed session metadata and messages. Harness originals are retained as well; archiving is not deletion.
 
-**What agents get.** Only the master is put in front of a prompt, at most once per rolling 24 hours per session (memory updates never get it; their prompt lists the topics). Changes made meanwhile reach the agent at the next injection or through `project_memory`. This also works for sessions started in linked repositories. The master tells the agent to read only the topics relevant to its task, with the `project_memory` tool, which pi and pi durable sessions both have:
+**What agents get.** Only the master is put in front of a prompt, at most once per rolling 24 hours per session (sync sessions never get it; their prompt holds the topics). Changes made meanwhile reach the agent at the next injection or through `project_memory`. This also works for sessions started in linked repositories. The master tells the agent to read only the topics relevant to its task, with the `project_memory` tool, which pi and pi durable sessions both have:
 - `topics` reads whole topics by name;
 - `query` finds matching lines across all topics;
 - with neither, it lists the topics.
 
-**Agents write memory** with `project_memory_update`: `action=write` creates or replaces a whole topic (`topic`, `title`, `description`, `body`), `action=delete` removes one, `action=overview` replaces the overview. Every change is validated (slug, required header fields, size and topic limits) and the master is regenerated right away; a rejected change comes back to the agent as text saying why. Agents may use it whenever asked to, not only in the quiet-session update. Both tools act with the session owner's access, under the same rules as the master (see Privacy); private sessions can read but not write.
+**Agents write memory** with `project_memory_update`: `action=write` creates or replaces a whole topic (`topic`, `title`, `description`, `body`), `action=delete` removes one, `action=overview` replaces the overview. Every change is validated (slug, required header fields, size and topic limits) and the master is regenerated right away; a rejected change comes back to the agent as text saying why. Agents may use it whenever asked to, not only in the hourly sync. Both tools act with the session owner's access, under the same rules as the master (see Privacy); private sessions can read but not write.
 
 **People edit memory.** In Model settings → Project memory, anyone with access to the project can edit the overview and create, edit and delete topics. Agents are told to keep what people wrote unless a conversation clearly supersedes it.
 
-**From before topics.** A `MEMORY.md` written before topics is moved to `memory/legacy-master.md`. Agents keep getting it unchanged until the first memory update splits it into topics and an overview; it is removed once an agent writes a topic or the overview.
+**From before topics.** A `MEMORY.md` written before topics is moved to `memory/legacy-master.md`. Agents keep getting it unchanged until the first memory sync splits it into topics and an overview; it is removed once an agent writes a topic or the overview.
 
 ## Context trimming
 
@@ -57,7 +62,7 @@ A session that has already added to memory cannot be made private retroactively 
 
 ## Archive eligibility
 
-A session is hidden from ordinary session lists only once its memory update has finished after its last activity (checked hourly), and only if:
+A session is hidden from ordinary session lists only once a memory sync has read it after its last activity (checked hourly), and only if:
 
 - it is not explicitly private, deleted, a group-chat backing session or a memory worker;
 - recorded prompt authorship identifies exactly its initiating owner (unknown or multiple authors are retained conservatively);
@@ -72,8 +77,8 @@ The session menu's Keep live option is independent of keeping an agent process r
 
 ## API
 
-- `GET|PUT /api/memory-cache`: prompt-cache minutes per provider (`{ "anthropic": 60 }`, `null` = default); PUT is admin-only.
-- `GET /api/memory/:projectId`: context trimming, sessions updating memory now, last update, latest error, overview, topics (slug, title, description, updated, size), limits, whether a master from before topics is waiting.
+- `GET|PUT /api/memory-model`: the sync model per provider (`{ "anthropic": "claude-haiku-4-5" }`, `null` = cheapest); PUT is admin-only.
+- `GET /api/memory/:projectId`: context trimming, whether a sync runs now, next sync, last update, latest error, overview, topics (slug, title, description, updated, size), limits, whether a master from before topics is waiting.
 - `PATCH /api/memory/:projectId` with `{ "context": { "trimHours": 12, "windowHours": 168 } }` (project creator or admin).
 - `PUT /api/memory/:projectId/overview` with `{ "body" }`: replace the overview (empty removes it).
 - `GET|PUT|DELETE /api/memory/:projectId/topics/:slug`: read, create or replace (`{ "title", "description", "body" }`), delete a topic. Anyone with project access; 409 when an 11th topic would be created.
@@ -82,4 +87,4 @@ The session menu's Keep live option is independent of keeping an agent process r
 - `POST /api/sessions` accepts `memoryPrivate` (default false).
 - `POST /api/memory-bridge/:key` and `POST /api/memory-bridge/:key/update` (session bridge credential): the pi extension's `project_memory` and `project_memory_update` tools.
 
-The separate batch consolidation worker, its schedule, model setting and manual "Consolidate now" were removed.
+The in-session update just before the prompt cache expired (with per-provider cache timings) was replaced by the hourly sync: it made people wait behind housekeeping turns and ran on the session's expensive model.

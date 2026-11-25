@@ -85,7 +85,7 @@ export function BrowserAsk({
             <p className="mb-2 whitespace-pre-wrap break-words text-muted-foreground">{answer.question}</p>
             {answer.text ? <Markdown text={answer.text} base={folder} /> : answer.running ? <Loader2 className="my-1 size-4 animate-spin text-muted-foreground" /> : !answer.error && <p>No text reply.</p>}
             {answer.error && <p className="text-destructive">{answer.error}</p>}
-            {!answer.running && <MessageTime at={answer.at} />}
+            {!answer.running && <MessageTime at={answer.at} className="mt-1 block text-right" />}
           </div>
         </section>
       )}

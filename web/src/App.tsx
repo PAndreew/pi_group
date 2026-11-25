@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, Library, LogOut, Monitor, Moon, PanelLeft, Sun, Users } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, KeyRound, LogOut, Monitor, Moon, PanelLeft, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -9,9 +9,8 @@ import { ExplorerDialog, type ExplorerState } from "@/components/explorer-dialog
 import { FileViewer } from "@/components/file-viewer"
 import { Home } from "@/components/home"
 import { Login } from "@/components/login"
-import { LinksDialog } from "@/components/links-dialog"
 import { NewSessionDialog } from "@/components/new-session-dialog"
-import { ChatSearchBox } from "@/components/chat-search-box"
+import { ChatSearchOverlay } from "@/components/chat-search-box"
 import { FilePreviewDialog, FilePreviewPanel, useLastEdit } from "@/components/file-preview-panel"
 import { ProjectSwitcher } from "@/components/project-bar"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
@@ -151,7 +150,7 @@ function Workspace() {
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [linksOpen, setLinksOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const [explorer, setExplorer] = useState<ExplorerState>({ open: false, folder: "", query: "" })
   /** Where closing the file preview goes back to, and whether the explorer it was opened from reopens. */
@@ -222,11 +221,9 @@ function Workspace() {
         <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
           <div className="flex shrink-0 items-center gap-1">
             <Button variant="ghost" size="icon-sm" aria-label={wide ? (sidebarOpen ? "Hide sidebar" : "Show sidebar") : "Open navigation"} title={wide ? (sidebarOpen ? "Hide sidebar" : "Show sidebar") : undefined} onClick={() => (wide ? toggleSidebar() : setDrawerOpen(true))}><PanelLeft /></Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Project links" title="Project links" onClick={() => setLinksOpen(true)}><Library /></Button>
           </div>
-          <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} /></div>
+          <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} onSearch={() => setSearchOpen(true)} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
-          <ChatSearchBox onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -313,7 +310,7 @@ function Workspace() {
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
-        <LinksDialog open={linksOpen} onOpenChange={setLinksOpen} />
+        <ChatSearchOverlay open={searchOpen} onOpenChange={setSearchOpen} onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />
         <ExplorerDialog
           state={explorer}
           onChange={setExplorer}

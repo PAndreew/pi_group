@@ -6,9 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { api, type ContextPolicy, type MemoryTopic, type ProjectMemoryStatus } from "@/lib/api"
-import { useNav } from "@/lib/nav"
 import { useProjects } from "@/lib/projects"
-import { MemoryCacheSettingsPanel } from "@/components/memory-cache-settings"
+import { MemoryModelSettingsPanel } from "@/components/memory-model-settings"
 import { Section } from "@/components/ui/section"
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/
@@ -42,7 +41,6 @@ export function ProjectMemorySettings() {
   const [overview, setOverview] = useState<string>()
   const [context, setContext] = useState<ContextPolicy>({ trimHours: 12, windowHours: 168 })
   const [editing, setEditing] = useState<Partial<MemoryTopic>>()
-  const nav = useNav()
   const [archives, setArchives] = useState<Awaited<ReturnType<typeof api.memoryArchives>>["sessions"]>([])
   const reload = async () => {
     if (!active) return
@@ -95,7 +93,7 @@ export function ProjectMemorySettings() {
           <Label>Topics ({status?.topics.length ?? 0}/{maxTopics})</Label>
           <Button variant="outline" size="sm" className="ml-auto h-7" disabled={!status || status.topics.length >= maxTopics || Boolean(editing)} onClick={() => setEditing({})}><Plus className="size-3.5" /> New topic</Button>
         </div>
-        {status?.legacy && <p className="text-xs text-muted-foreground">Agents still get the memory from before topics. The next memory update splits it into topics.</p>}
+        {status?.legacy && <p className="text-xs text-muted-foreground">Agents still get the memory from before topics. The next memory sync splits it into topics.</p>}
         {editing && !editing.slug && <TopicEditor topic={editing} max={status?.topicMax ?? 8000} onSave={saveTopic} onCancel={() => setEditing(undefined)} />}
         {status && !status.topics.length && !editing && <p className="text-sm text-muted-foreground">No topics yet.</p>}
         <ul className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">{status?.topics.map(t => <li key={t.slug} className="min-w-0">
@@ -110,8 +108,8 @@ export function ProjectMemorySettings() {
           </div>}
         </li>)}</ul>
       </div>
-      <p className="text-xs text-muted-foreground">Last memory update: {status?.lastRun ? new Date(status.lastRun).toLocaleString() : "Never"}</p>
-      {!!status?.updating.length && <ul className="grid gap-1">{status.updating.map(u => <li key={u.key} className="flex min-w-0 items-center gap-2 text-sm"><Loader2 className="size-4 shrink-0 animate-spin" /><span className="min-w-0 flex-1 truncate">Updating memory from “{u.title}”</span><Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => nav.openSession(u.key)}>Open</Button></li>)}</ul>}
+      <p className="text-xs text-muted-foreground">Last memory update: {status?.lastRun ? new Date(status.lastRun).toLocaleString() : "Never"}{status?.nextSync && !status.syncing ? ` · next sync ${new Date(status.nextSync).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</p>
+      {status?.syncing && <p className="flex items-center gap-2 text-sm"><Loader2 className="size-4 shrink-0 animate-spin" />Syncing memory from the latest conversations…</p>}
       {status?.error && <p role="alert" className="text-sm wrap-anywhere text-destructive">{status.error}</p>}
     </Section>
     <Section title="Agent context" hint={`Trim after ${context.trimHours || "∞"} h · show last ${context.windowHours || "all"} h`} icon={<Scissors />}>
@@ -126,8 +124,8 @@ export function ProjectMemorySettings() {
       <p className="text-xs text-muted-foreground">Saves tokens in long conversations. Once a turn is older than the trim time, agents no longer see its reasoning, and each tool call and result shrinks to one line. When an agent picks up a conversation, it sees only the last N hours. It can read everything else with its session_history tool. The full conversation stays stored and visible here. Managed by the project creator or an admin.</p>
       <div><Button variant="outline" size="sm" onClick={() => void save()}>Save context settings</Button></div>
     </Section>
-    <Section title="Memory update timing" hint="When quiet sessions update memory, per provider" icon={<Timer />}>
-      <MemoryCacheSettingsPanel />
+    <Section title="Memory sync model" hint="Hourly sync, cheapest model per provider" icon={<Timer />}>
+      <MemoryModelSettingsPanel />
     </Section>
     <Section title="Archived sessions" hint={`${archives.length} archived`} icon={<Archive />}>
       <p className="text-xs text-muted-foreground">One-on-one sessions inactive for 24 hours are archived once their memory is up to date, unless marked Keep live.</p>

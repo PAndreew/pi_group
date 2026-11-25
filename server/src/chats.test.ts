@@ -31,22 +31,23 @@ function fakeHarness() {
 			prompt: async (input: PromptInput) => {
 				assert.equal(state.running, false, "chat prompts must wait for the active turn");
 				prompts.push({ id, cwd, text: input.text });
-				if (input.text.includes("[beezy: project memory update]")) {
-					// The agent updates memory through its tool, from its own (cached) conversation.
+				if (input.text.startsWith("[beezy: project memory sync]")) {
+					// The sync session updates memory through its tool, from the digest in its prompt.
 					const { projectMemoryUpdate } = await import("./memory.js");
 					const meta = (await import("./store.js")).store.session(`pi:${id}`);
 					projectMemoryUpdate(meta, { action: "write", topic: "deploy", title: "Deploy", description: "Deploy decisions", body: `Deploy decisions are recorded here, from ${meta!.key}.` });
 					projectMemoryUpdate(meta, { action: "overview", body: "Beezy API server; deploys go through the deploy topic." });
 				}
-				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }] });
+				state.messages.push({ role: "user", content: [{ type: "text", text: input.text }], timestamp: Date.now() });
 				state.running = true;
 				status();
 				setTimeout(() => {
-					state.messages.push({ role: "assistant", content: [{ type: "text", text: `reply to ${id}` }], stopReason: "stop" });
+					state.messages.push({ role: "assistant", content: [{ type: "text", text: `reply to ${id}` }, { type: "thinking", thinking: "secret-reasoning" }], stopReason: "stop", timestamp: Date.now() });
 					state.running = false;
 					status();
 				}, 100);
 			},
+			setModel: async () => {},
 			close: async () => {},
 		};
 		sessions.set(id, live);
@@ -245,17 +246,20 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal((await contextBridge("wrong")).status, 403);
 		assert.deepEqual(await (await contextBridge(interactionEnvironment(soloMeta.key).BEEZY_INTERACTION_TOKEN)).json(), { trimHours: 6, windowHours: 0 });
 
-		// Sessions worked in since the server started update memory themselves once quiet; old ones never do.
+		// An hourly sync per project: a short-lived session reads what was said since the last sync and is removed.
 		const { memoryControls, MEMORY_UPDATE_TAG } = await import("./memory.js");
-		assert.ok(memoryControls.pending(soloMeta.key), "a session with activity waits for its quiet period");
-		const updates = () => prompts.filter(p => p.text.includes(MEMORY_UPDATE_TAG));
-		await memoryControls.updateNow(privateSession.key);
-		assert.equal(updates().length, 0, "private sessions do not update memory");
-		await memoryControls.updateNow(soloMeta.key);
-		assert.deepEqual(updates().map(p => p.id), [soloMeta.id], "the update runs in the session itself");
-		assert.ok(!adapter.live(soloMeta.id)!.state.messages.some((m: any) => JSON.stringify(m).includes(MEMORY_UPDATE_TAG)), "the update turn is removed from the session afterwards");
-		assert.ok(!memoryControls.pending(soloMeta.key), "the update prompt is not activity");
-		assert.equal(store.session(soloMeta.key)!.updatedAt, "2020-01-01T00:00:00.000Z", "a background update does not move the session up");
+		const syncs = () => prompts.filter(p => p.text.startsWith(MEMORY_UPDATE_TAG));
+		await memoryControls.syncNow("general-work");
+		assert.equal(syncs().length, 1, "one sync session for the project");
+		const [firstSync] = syncs();
+		assert.ok(!Object.values(store.data.sessions).some(s => s.key !== `pi:${firstSync.id}` && s.id === firstSync.id), "the sync runs in a session of its own");
+		assert.equal(store.session(`pi:${firstSync.id}`)!.deleted, true, "the sync session is removed afterwards");
+		assert.match(firstSync.text, /late-important-fact/, "the newest part of long conversations is kept");
+		assert.match(firstSync.text, new RegExp(`agent: reply to ${soloMeta.id}`));
+		assert.doesNotMatch(firstSync.text, /secret-reasoning/, "thinking is left out");
+		assert.doesNotMatch(firstSync.text, /private-secret-not-for-memory/, "private sessions never reach memory");
+		assert.ok(!adapter.live(soloMeta.id)!.state.messages.some((m: any) => JSON.stringify(m).includes(MEMORY_UPDATE_TAG)), "conversations are not touched");
+		assert.equal(store.session(soloMeta.key)!.updatedAt, "2020-01-01T00:00:00.000Z", "a sync does not move sessions up");
 		const status = (await call("chat-admin", "GET", endpoint)).body;
 		assert.equal(status.error, undefined);
 		assert.ok(status.lastRun);
@@ -313,33 +317,27 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal((await call("anna", "GET", endpoint)).body.overview, "Edited by a person.");
 		assert.equal(store.session(privateSession.key)!.consolidatedAt, undefined);
 
-		// Group chats update memory too: in their pi session, with what people said since pi's last turn.
-		assert.ok(memoryControls.pending(`chat:${chatId}`), "a chat with new messages waits for its quiet period");
+		// The next sync reads only what came after the last one, group chats included.
 		await call("anna", "POST", `/chats/${chatId}/messages`, { text: "we settled on blue-green deploys" });
-		const before = updates().length;
-		await memoryControls.updateChatNow(chatId);
-		const chatUpdate = updates().slice(before);
-		const chatSession = (await import("./chats.js")).getChat(chatId)!.sessionKey!;
-		assert.deepEqual(chatUpdate.map(p => `pi:${p.id}`), [chatSession], "the chat's own pi session updates memory");
-		assert.match(chatUpdate[0].text, /anna: we settled on blue-green deploys/);
-		assert.ok((await import("./chats.js")).getChat(chatId)!.consolidatedAt);
-		assert.ok(!(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.message.role === "assistant" && /reply to/.test(JSON.stringify(m.message)) && m.status === "working"), "no chat reply is posted for the update");
-		// A people-only chat has no cache to catch: a short-lived worker reads its messages.
 		const plain = (await call("anna", "POST", "/chats", { text: "the logo stays orange", userIds: [bob.id] })).body.chat;
-		const workerCount = updates().length;
-		await memoryControls.updateChatNow(plain);
-		const workerPrompt = updates().slice(workerCount);
-		assert.equal(workerPrompt.length, 1);
-		assert.match(workerPrompt[0].text, /<chat>\nanna: the logo stays orange\n<\/chat>/);
-		assert.equal(store.session(`pi:${workerPrompt[0].id}`)!.deleted, true, "the worker is removed");
+		await memoryControls.syncNow("general-work");
+		assert.equal(syncs().length, 2);
+		const secondSync = syncs()[1].text;
+		assert.match(secondSync, /anna: we settled on blue-green deploys/);
+		assert.match(secondSync, /anna: the logo stays orange/);
+		assert.doesNotMatch(secondSync, /late-important-fact/, "what the last sync read is not read again");
+		assert.ok((await import("./chats.js")).getChat(plain)!.consolidatedAt);
+		assert.ok(!(await call("anna", "GET", `/chats/${chatId}`)).body.messages.some((m: any) => m.status === "working"), "no chat reply is posted for the sync");
+		await memoryControls.syncNow("general-work");
+		assert.equal(syncs().length, 2, "nothing new, no sync session");
 
-		// Cache lifetime per provider decides how long a session waits; admins change it.
-		const cache = (await call("anna", "GET", "/memory-cache")).body;
-		assert.deepEqual(cache.providers.find((p: any) => p.provider === "test"), { provider: "test", minutes: 5, defaultMinutes: 5, custom: false });
-		assert.equal((await call("anna", "PUT", "/memory-cache", { test: 10 })).status, 403);
-		assert.equal((await call("chat-admin", "PUT", "/memory-cache", { test: 10 })).status, 200);
-		assert.equal((await call("anna", "GET", "/memory-cache")).body.providers.find((p: any) => p.provider === "test").minutes, 10);
-		assert.equal((await call("chat-admin", "PUT", "/memory-cache", { test: null })).status, 200);
+		// The sync model per provider: the cheapest unless an admin picks one.
+		const memoryModel = (await call("anna", "GET", "/memory-model")).body;
+		assert.deepEqual(memoryModel.current, { provider: "test", id: "cheap" });
+		assert.equal((await call("anna", "PUT", "/memory-model", { test: "cheap" })).status, 403);
+		assert.equal((await call("chat-admin", "PUT", "/memory-model", { test: "cheap" })).status, 200);
+		assert.equal((await call("anna", "GET", "/memory-model")).body.providers.find((p: any) => p.provider === "test").configured, "cheap");
+		assert.equal((await call("chat-admin", "PUT", "/memory-model", { test: null })).status, 200);
 
 		// Deleting a chat removes it for the one deleting; it is gone once the last member deletes it.
 		const doomed = (await call("anna", "POST", "/chats", { text: "temporary", userIds: [bob.id] })).body.chat;

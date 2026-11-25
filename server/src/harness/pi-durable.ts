@@ -470,7 +470,7 @@ export class PiDurableAdapter implements HarnessAdapter {
 	async listModels(): Promise<ModelInfo[]> {
 		if (!this.models) return [];
 		const models = await this.models.getAvailable();
-		return (models as Any[]).map((m) => ({ provider: m.provider, id: m.id, name: m.name ?? m.id, reasoning: m.reasoning, thinkingLevels: getSupportedThinkingLevels(m), contextWindow: m.contextWindow, input: m.input }));
+		return (models as Any[]).map((m) => ({ provider: m.provider, id: m.id, name: m.name ?? m.id, reasoning: m.reasoning, thinkingLevels: getSupportedThinkingLevels(m), contextWindow: m.contextWindow, input: m.input, ...(typeof m.cost?.input === "number" && typeof m.cost?.output === "number" ? { cost: { input: m.cost.input, output: m.cost.output } } : {}) }));
 	}
 
 	private storagePath(folder: string) {

@@ -77,8 +77,8 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
   if (area === 'tenants' && method === 'GET') return json({ active: 'demo', tenants: [{ id: 'demo', name: 'Demo workspace', canShare: false }] })
   if (area === 'harnesses') return json(id ? { models } : { harnesses: [{ id: 'pi', label: 'pi', ok: true, durable: false, description: 'pi coding agent' }] })
   if (area === 'projects' && method === 'GET') return json(action === 'links' ? { links: [] } : id === 'moves' ? { moves: [] } : { projects: [project] })
-  if (area === 'memory' && method === 'GET') return json(action === 'archives' ? { sessions: [] } : { context: { trimHours: 24, windowHours: 168 }, updating: [], overview: '', overviewMax: 1500, topics: [], maxTopics: 10, topicMax: 8000, legacy: false })
-  if (area === 'memory-cache') return json(method === 'GET' ? { longRetention: false, chatIdleMinutes: 15, providers: [{ provider: 'anthropic', minutes: 5, defaultMinutes: 5, custom: false }] } : { ok: true })
+  if (area === 'memory' && method === 'GET') return json(action === 'archives' ? { sessions: [] } : { context: { trimHours: 24, windowHours: 168 }, syncing: false, nextSync: new Date(Date.now() + 3_600_000).toISOString(), overview: '', overviewMax: 1500, topics: [], maxTopics: 10, topicMax: 8000, legacy: false })
+  if (area === 'memory-model') return json(method === 'GET' ? { syncMinutes: 60, current: { provider: 'anthropic', id: 'claude-haiku-4-5' }, providers: [{ provider: 'anthropic', cheapest: 'claude-haiku-4-5', models: [{ id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: { input: 1, output: 5 } }] }] } : { ok: true })
   if (area === 'sessions') {
     if (!id && method === 'POST') return json({ session: createSession(body.name || 'New demo session', body.path || folder, undefined, body.model) })
     if (!id || id === 'active' || id === 'recent') return json({ path: q.get('path') || '', sessions: all.filter(s => !q.get('path') || s.path === q.get('path')) })

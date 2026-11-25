@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 
-/** Right-aligned send time, with the date included for messages sent before today. */
+/** Send time for a message header (next to the author), with the date for messages sent before today. */
 export function MessageTime({ at, edited, className }: { at?: string | number; edited?: boolean; className?: string }) {
   if (at === undefined) return null
   const date = new Date(at)
@@ -9,8 +9,8 @@ export function MessageTime({ at, edited, className }: { at?: string | number; e
   const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   const label = today ? time : `${date.toLocaleDateString([], { day: "numeric", month: "short", ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }) })} ${time}`
   return (
-    <div className={cn("mt-1 text-right text-[10px] leading-none tracking-tight tabular-nums opacity-60 [font-stretch:condensed]", className)} title={date.toLocaleString()}>
+    <time dateTime={date.toISOString()} className={cn("text-[11px] font-normal leading-none tabular-nums text-muted-foreground", className)} title={date.toLocaleString()}>
       {label}{edited && " · edited"}
-    </div>
+    </time>
   )
 }

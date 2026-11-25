@@ -15,6 +15,8 @@ export interface ModelInfo {
   reasoning?: boolean;
 	contextWindow?: number;
 	input?: string[];
+	/** Dollars per million tokens, when the model registry knows them. */
+	cost?: { input: number; output: number };
 }
 
 export interface SessionListing {
