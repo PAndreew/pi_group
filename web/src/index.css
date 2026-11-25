@@ -156,6 +156,9 @@ html[data-editing] body { padding-bottom: 0; }
 .prose-pi :where(blockquote) { @apply border-l-2 pl-3 text-muted-foreground; }
 .prose-pi :where(:not(pre) > code) { @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]; }
 .prose-pi :where(pre) { @apply overflow-x-auto rounded-md bg-muted p-3 text-xs; }
+/* Let long equations scroll within the bubble rather than widen the chat. */
+.prose-pi .katex-display { @apply max-w-full overflow-x-auto py-1; }
+.prose-pi .katex-display > .katex { min-width: max-content; }
 /* Tables: a rounded, sideways-scrolling box a few tones darker than what it sits on, with a bold
    header row and only horizontal dividers. The tints mix the text colour, so they work on every bubble and theme. */
 .prose-pi .md-table {

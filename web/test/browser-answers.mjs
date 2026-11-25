@@ -10,6 +10,16 @@ try {
   const memory = 'Remember the user prefers short answers.'
   const question = 'What is on the page?'
   const answer = 'An example page with a headline.'
+  const literal = String.raw`\(\sqrt{2}\)`
+  const math = String.raw`\(\mathbb{R}\) includes \(\sqrt{2}\) and \(\pi\). Here is $x$.
+
+\[
+\frac{1}{2} + \frac{1}{2} = 1
+\]
+
+$$
+x^2 + y^2 = z^2
+$$`
   const session = { key: 's', harness: 'pi', path: 'workspace', access: 'owner', live: true }
   const messages = []
   let stream
@@ -74,7 +84,7 @@ try {
   await publish()
   await bubble.getByText('An example page', { exact: true }).waitFor()
   partial = null
-  messages.push({ role: 'assistant', content: [{ type: 'text', text: answer }], timestamp: 2 })
+  messages.push({ role: 'assistant', content: [{ type: 'text', text: `${answer}\n\n${math}\n\nLiteral: \`${literal}\`` }], timestamp: 2 })
   running = false
   await publish()
   await page.getByText(answer, { exact: true }).first().waitFor()
@@ -82,6 +92,12 @@ try {
   await bubble.getByText(answer, { exact: true }).waitFor()
   assert.equal(await bubble.getByText('Running…').count(), 0)
   assert.equal(await page.getByText(answer, { exact: true }).count(), 2)
+  for (const prose of await page.locator('.prose-pi').filter({ hasText: answer }).all()) {
+    await prose.locator('.katex math msqrt').waitFor({ state: 'attached' })
+    assert.equal(await prose.locator('.katex-display').count(), 2)
+    assert.deepEqual(await prose.locator('.katex annotation').allTextContents(), [String.raw`\mathbb{R}`, String.raw`\sqrt{2}`, String.raw`\pi`, 'x', String.raw`\frac{1}{2} + \frac{1}{2} = 1`, 'x^2 + y^2 = z^2'])
+    assert.equal(await prose.locator('code').textContent(), literal)
+  }
   await page.reload()
   await openBrowser()
   await bubble.getByText(answer, { exact: true }).waitFor()

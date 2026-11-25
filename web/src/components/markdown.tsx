@@ -3,7 +3,10 @@ import type { Element, ElementContent } from "hast"
 import { memo, useContext, useEffect, useState, type ComponentProps } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
+import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math-extended"
+import "katex/dist/katex.min.css"
 import { CopyCode, InPre } from "@/components/copy-code"
 import { ImageGallery } from "@/components/image-gallery"
 import { WebLink } from "@/components/web-link"
@@ -67,8 +70,8 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
   return (
     <div className={cn("prose-pi", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { detect: false, ignoreMissing: true }]]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypeKatex, { trust: false, maxExpand: 1000, maxSize: 20 }], [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
         components={{
           // A scroll box around the table so wide tables scroll sideways instead of stretching the bubble.
           // At least ~8rem per column, so many columns scroll rather than squeeze into tall, narrow cells.
