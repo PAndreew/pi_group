@@ -81,16 +81,74 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     const socket = new WebSocket(api.browserUrl(sessionKey))
     socket.binaryType = "blob"
     ws.current = socket
-    socket.onmessage = (event) => {
-      if (typeof event.data !== "string") {
-        void createImageBitmap(event.data as Blob).then((frame) => {
-          const target = canvas.current
-          if (target) {
-            if (target.width !== frame.width || target.height !== frame.height) Object.assign(target, { width: frame.width, height: frame.height })
-            target.getContext("2d")?.drawImage(frame, 0, 0)
+    const host = area.current
+    let active = true
+    let generation = 0
+    let decoding = false
+    let pending: Blob | undefined
+    let lastPresentation = ""
+    const present = () => {
+      if (socket.readyState !== WebSocket.OPEN) return
+      const visible = !document.hidden
+      const width = host?.clientWidth ?? 0
+      const height = host?.clientHeight ?? 0
+      const dpr = window.devicePixelRatio || 1
+      // Round up to avoid restarting capture for every pixel during a layout resize.
+      const size = width && height ? {
+        width: Math.min(3840, Math.ceil(width * dpr / 64) * 64),
+        height: Math.min(3200, Math.ceil(height * dpr / 64) * 64),
+      } : undefined
+      const message = JSON.stringify({ type: "presentation", visible, size })
+      if (message !== lastPresentation) {
+        socket.send(message)
+        lastPresentation = message
+      }
+    }
+    const onVisibility = () => {
+      generation++
+      pending = undefined
+      present()
+    }
+    const observer = new ResizeObserver(present)
+    if (host) observer.observe(host)
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("resize", present)
+    socket.onopen = present
+
+    const decode = async () => {
+      if (decoding) return
+      decoding = true
+      try {
+        while (active && !document.hidden && pending) {
+          const blob = pending
+          const current = generation
+          pending = undefined
+          try {
+            const frame = await createImageBitmap(blob)
+            try {
+              const target = canvas.current
+              if (active && !document.hidden && current === generation && target) {
+                if (target.width !== frame.width || target.height !== frame.height) Object.assign(target, { width: frame.width, height: frame.height })
+                target.getContext("2d")?.drawImage(frame, 0, 0)
+              }
+            } finally {
+              frame.close()
+            }
+          } catch {
+            // Drop undecodable frames; the stream can recover on the next one.
           }
-          frame.close()
-        })
+        }
+      } finally {
+        decoding = false
+      }
+    }
+    socket.onmessage = (event) => {
+      if (!active) return
+      if (typeof event.data !== "string") {
+        if (!document.hidden) {
+          pending = event.data as Blob
+          void decode()
+        }
         return
       }
       const message = JSON.parse(event.data)
@@ -121,7 +179,15 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
       }
     }
     socket.onclose = (event) => setStatus({ state: "closed", reason: event.reason || (event.code === 1006 ? "Connection lost" : `Closed (${event.code})`) })
-    return () => socket.close()
+    return () => {
+      active = false
+      pending = undefined
+      observer.disconnect()
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("resize", present)
+      socket.onclose = null
+      socket.close()
+    }
   }, [sessionKey, attempt])
 
   // Resize Chromium itself so responsive pages reflow, not just the canvas.

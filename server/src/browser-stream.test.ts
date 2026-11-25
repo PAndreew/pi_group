@@ -65,7 +65,11 @@ test("shared browser streams sharp frames and hands viewport control to the next
 		const [, jpeg] = await Promise.all([resized, frame]);
 		assert.deepEqual(dimensions(jpeg), [780, 1300]);
 
-		// Input and element picking still use CSS coordinates, not the larger frame's pixels.
+		const smaller = phone.next<Buffer>(true, (jpg) => dimensions(jpg)[0] === 390);
+		phone.send({ type: "presentation", visible: true, size: { width: 390, height: 650 } });
+		assert.deepEqual(dimensions(await smaller), [390, 650]);
+
+		// Input and element picking still use CSS coordinates, independent of stream resolution.
 		const picked = phone.next<{ type: string; elements: { text: string }[]; image?: string }>(false, (m) => m.type === "picked");
 		const point = { x: 275, y: 460 };
 		phone.send({ type: "mouse", action: "down", ...point, buttons: 1 });
@@ -77,6 +81,21 @@ test("shared browser streams sharp frames and hands viewport control to the next
 
 		const desktop = connect();
 		assert.equal((await desktop.next<State>(false, (m) => m.type === "state")).canResize, false);
+		phone.send({ type: "presentation", visible: false });
+		// An inspect response is a barrier: the server processed the preceding visibility message.
+		const hidden = phone.next<State>(false, (m) => m.type === "hover");
+		phone.send({ type: "inspect", ...point });
+		await hidden;
+		let hiddenFrames = 0;
+		phone.socket.on("message", (_data, binary) => { if (binary) hiddenFrames++; });
+		const reloaded = desktop.next<Buffer>(true);
+		desktop.send({ type: "reload" });
+		await reloaded;
+		assert.equal(hiddenFrames, 0);
+		const resumed = phone.next<Buffer>(true);
+		phone.send({ type: "presentation", visible: true, size: { width: 390, height: 650 } });
+		await resumed;
+
 		desktop.send({ type: "viewport", width: 1280, height: 800 });
 		const promotes = desktop.next<State>(false, (m) => m.canResize === true);
 		phone.socket.close();

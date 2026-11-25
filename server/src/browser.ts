@@ -191,13 +191,14 @@ interface Pick {
 }
 
 class SessionBrowser {
-	private viewers = new Map<WebSocket, { canInput: boolean }>();
+	private viewers = new Map<WebSocket, { canInput: boolean; visible: boolean; size?: { width: number; height: number } }>();
 	private viewportOwner?: WebSocket;
 	private cdp?: CDPSession;
 	private frame?: Buffer;
 	private searchHistory = new Map<string, string>();
 	private idle?: NodeJS.Timeout;
-	private screencasting = false;
+	private castSize?: { width: number; height: number };
+	private castQueue = Promise.resolve();
 	private capturingPick = false;
 	private queue = Promise.resolve();
 	closed = false;
@@ -227,8 +228,10 @@ class SessionBrowser {
 			void this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
 			const viewport = this.page.viewportSize() ?? VIEWPORT;
 			if (this.capturingPick || metadata.deviceWidth !== viewport.width || metadata.deviceHeight !== viewport.height) return;
+			if (!this.castSize || !this.hasVisibleViewer()) return;
 			this.frame = Buffer.from(data, "base64");
-			for (const ws of this.viewers.keys()) {
+			for (const [ws, viewer] of this.viewers) {
+				if (!viewer.visible) continue;
 				// A slow viewer skips frames rather than queueing them.
 				if (ws.readyState === ws.OPEN && ws.bufferedAmount < 2_000_000) ws.send(this.frame);
 			}
@@ -261,22 +264,47 @@ class SessionBrowser {
 	touch() {
 		clearTimeout(this.idle);
 		this.idle = setTimeout(() => {
-			if (this.viewers.size === 0) void close(this.key);
+			if (!this.hasVisibleViewer()) void close(this.key);
 			else this.touch();
 		}, IDLE_MS);
 		this.idle.unref();
 	}
 
-	private async screencast(on: boolean) {
-		if ((on && this.capturingPick) || on === this.screencasting || !this.cdp) return;
-		this.screencasting = on;
-		if (on) await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 90, maxWidth: MAX_VIEWPORT.width * PIXEL_RATIO, maxHeight: MAX_VIEWPORT.height * PIXEL_RATIO }).catch(() => {});
-		else await this.cdp.send("Page.stopScreencast").catch(() => {});
+	private hasVisibleViewer() {
+		return [...this.viewers.values()].some((viewer) => viewer.visible);
+	}
+
+	private updateScreencast() {
+		// Serialize CDP start/stop across visibility, resizing and screenshot requests.
+		this.castQueue = this.castQueue.then(async () => {
+			if (!this.cdp || this.closed) return;
+			let width = 0, height = 0;
+			if (!this.capturingPick) for (const viewer of this.viewers.values()) {
+				if (!viewer.visible) continue;
+				width = Math.max(width, viewer.size?.width ?? MAX_VIEWPORT.width * PIXEL_RATIO);
+				height = Math.max(height, viewer.size?.height ?? MAX_VIEWPORT.height * PIXEL_RATIO);
+			}
+			if (this.castSize?.width === width && this.castSize.height === height) return;
+			if (this.castSize) {
+				this.castSize = undefined;
+				await this.cdp.send("Page.stopScreencast");
+			}
+			if (width && height && !this.closed && !this.capturingPick && this.hasVisibleViewer()) {
+				this.castSize = { width, height };
+				try {
+					await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 90, maxWidth: width, maxHeight: height });
+				} catch {
+					this.castSize = undefined;
+				}
+			}
+		}).catch(() => {});
+		return this.castQueue;
 	}
 
 	async join(ws: WebSocket, canInput: boolean) {
 		if (ws.readyState !== ws.OPEN || this.closed) return;
-		this.viewers.set(ws, { canInput });
+		this.viewers.set(ws, { canInput, visible: true });
+		this.touch();
 		if (canInput) this.viewportOwner ??= ws;
 		// Listen before the first await, or messages sent right after the state arrives are lost.
 		ws.on("message", (raw, binary) => {
@@ -304,17 +332,27 @@ class SessionBrowser {
 					}
 				}
 			}
-			if (this.viewers.size === 0) void this.screencast(false);
+			void this.updateScreencast();
 		});
 		const title = await this.page.title().catch(() => "");
 		if (ws.readyState !== ws.OPEN) return;
 		send(ws, { type: "state", ...this.status(), title, canInput, canResize: ws === this.viewportOwner });
-		if (this.frame) ws.send(this.frame);
-		await this.screencast(true);
+		if (this.frame && this.viewers.get(ws)?.visible) ws.send(this.frame);
+		await this.updateScreencast();
 	}
 
 	private async handle(ws: WebSocket, canInput: boolean, raw: unknown) {
 		const message = clientMessage.parse(raw);
+		if (message.type === "presentation") {
+			const viewer = this.viewers.get(ws);
+			if (!viewer) return;
+			const resumed = !viewer.visible && message.visible;
+			viewer.visible = message.visible;
+			viewer.size = message.size;
+			if (resumed && this.frame && ws.readyState === ws.OPEN && ws.bufferedAmount < 2_000_000) ws.send(this.frame);
+			await this.updateScreencast();
+			return;
+		}
 		if (message.type === "inspect") {
 			const hit = (await this.page.evaluate(`(${PICK})(${JSON.stringify({ x: message.x, y: message.y, depth: message.depth, hover: true })})`)) as { box: Pick["box"]; label: string; depth: number; count: number } | null;
 			return send(ws, { type: "hover", ...hit });
@@ -423,11 +461,11 @@ class SessionBrowser {
 			// Chromium can stream the temporary cropped surface. Keep showing the last full frame.
 			this.capturingPick = true;
 			try {
-				await this.screencast(false);
+				await this.updateScreencast();
 				image = (await this.page.screenshot({ clip, type: "png" })).toString("base64");
 			} finally {
 				this.capturingPick = false;
-				await this.screencast(this.viewers.size > 0);
+				await this.updateScreencast();
 			}
 		}
 		return { url: this.page.url(), title: await this.page.title().catch(() => ""), ...pick, image };
@@ -445,6 +483,7 @@ class SessionBrowser {
 
 const point = { x: z.number().finite(), y: z.number().finite() };
 const clientMessage = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("presentation"), visible: z.boolean(), size: z.object({ width: z.number().int().min(1).max(MAX_VIEWPORT.width * PIXEL_RATIO), height: z.number().int().min(1).max(MAX_VIEWPORT.height * PIXEL_RATIO) }).optional() }),
 	z.object({ type: z.literal("inspect"), ...point, depth: z.number().int().min(0).max(200).optional() }),
 	z.object({ type: z.literal("pick"), id: z.string().max(100), x: z.number().finite().optional(), y: z.number().finite().optional(), depth: z.number().int().min(0).max(200).optional(), rect: z.object({ ...point, width: z.number().positive(), height: z.number().positive() }).optional() }),
 	z.object({ type: z.literal("navigate"), url: z.string().min(1).max(4000) }),
