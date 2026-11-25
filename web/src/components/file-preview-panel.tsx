@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ExternalLink, FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { FileViewer } from "@/components/file-viewer"
@@ -47,6 +48,7 @@ export function useLastEdit(sessionKey?: string, projectId?: string): LastEdit {
 }
 
 function Preview({ lastEdit, onOpen }: { lastEdit: LastEdit; onOpen?: () => void }) {
+  const { t: tr } = useLocale()
   const nav = useNav()
   const { file, version } = lastEdit
   return (
@@ -65,8 +67,8 @@ function Preview({ lastEdit, onOpen }: { lastEdit: LastEdit; onOpen?: () => void
               onOpen?.()
               nav.openFile(file)
             }}
-            aria-label="Open file"
-            title="Open file"
+            aria-label={tr("ui.open-file-f11b87")}
+            title={tr("ui.open-file-f11b87")}
           >
             <ExternalLink />
           </Button>
@@ -85,8 +87,9 @@ function Preview({ lastEdit, onOpen }: { lastEdit: LastEdit; onOpen?: () => void
 
 /** The very-large-screen right sidebar showing the last edited file. */
 export function FilePreviewPanel({ lastEdit, className }: { lastEdit: LastEdit; className?: string }) {
+  const { t: tr } = useLocale()
   return (
-    <aside className={cn("flex min-h-0 flex-col border-l", className)} aria-label="Last edited file">
+    <aside className={cn("flex min-h-0 flex-col border-l", className)} aria-label={tr("ui.last-edited-file-7e0ca8")}>
       <Preview lastEdit={lastEdit} />
     </aside>
   )
@@ -94,11 +97,12 @@ export function FilePreviewPanel({ lastEdit, className }: { lastEdit: LastEdit; 
 
 /** The same preview in a modal, for screens without room for the sidebar. */
 export function FilePreviewDialog({ lastEdit, open, onOpenChange }: { lastEdit: LastEdit; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85dvh] flex-col gap-0 p-0 pt-8 sm:max-w-3xl">
-        <DialogTitle className="sr-only">Last edited file</DialogTitle>
-        <DialogDescription className="sr-only">The file pi last wrote or edited</DialogDescription>
+        <DialogTitle className="sr-only">{tr("ui.last-edited-file-7e0ca8")}</DialogTitle>
+        <DialogDescription className="sr-only">{tr("ui.the-file-pi-last-wrote-or-edited-626374")}</DialogDescription>
         <Preview lastEdit={lastEdit} onOpen={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { File, Folder, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
@@ -8,6 +9,7 @@ import { relativePath } from "@/lib/utils"
  * text and hands the path, relative to the session's folder, to `onPick` (shown as a pill, sent in backticks).
  */
 export function PathDropup({ value, folder, onPick }: { value: string; folder: string; onPick: (path: string, rest: string) => void }) {
+  const { t: tr } = useLocale()
   const [entries, setEntries] = useState<{ path: string; type: "dir" | "file" }[]>([])
   const [dismissed, setDismissed] = useState<string>()
   const match = /(^|\s)\$([^\s$]*)$/.exec(value)
@@ -30,7 +32,7 @@ export function PathDropup({ value, folder, onPick }: { value: string; folder: s
   return (
     <div data-suggestions className="absolute bottom-full left-0 z-20 mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md">
       <div className="flex shrink-0 justify-end px-1 pt-1">
-        <button type="button" aria-label="Dismiss file suggestions" className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}>
+        <button type="button" aria-label={tr("ui.dismiss-file-suggestions-f6c731")} className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}>
           <X className="size-4" />
         </button>
       </div>

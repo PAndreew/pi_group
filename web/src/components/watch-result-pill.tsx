@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Clock } from "lucide-react"
 
 // Recognize the prompt envelope from wakeText in server/src/watches.ts, including batched results.
@@ -10,10 +11,11 @@ export function isWatchResult(text: string) {
 }
 
 export function WatchResultPill({ text }: { text: string }) {
+  const { t: tr } = useLocale()
   return (
     <details className="mb-1.5 min-w-0">
       <summary className="inline-flex max-w-full cursor-pointer list-none items-center gap-1.5 rounded-full border border-sky-500/60 bg-[linear-gradient(165deg,#aec9e0_0%,#edf8ff_38%,#88afd2_64%,#c7e1f4_100%)] px-2.5 py-1 text-xs font-medium text-sky-950 shadow-xs hover:brightness-105 focus-visible:outline-2 focus-visible:outline-sky-700 [&::-webkit-details-marker]:hidden">
-        <Clock className="size-3.5 shrink-0" aria-hidden="true" /> Watch results
+        <Clock className="size-3.5 shrink-0" aria-hidden="true" /> {tr("ui.watch-results-f29160")}
       </summary>
       <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-sky-300 bg-white/70 p-2 text-xs whitespace-pre-wrap wrap-anywhere">{text}</pre>
     </details>

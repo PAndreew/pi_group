@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Brain, Folder, FolderInput, Loader2, MoreVertical, Trash2, WandSparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -35,6 +36,7 @@ function Avatars({ item, selfId }: { item: ChatListItem; selfId?: string }) {
  * on chat, run and project events. Swiping a row left uncovers Move (to another project) and Delete.
  */
 export function ChatList({ selected, className, requests, selectSessions }: { selected?: string; className?: string; requests?: boolean; selectSessions?: boolean }) {
+  const { t: tr, language } = useLocale()
   const { user } = useAuth()
   const nav = useNav()
   const { active } = useProjects()
@@ -84,7 +86,7 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
       <div className="chat-scroll-fade min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
         {!visible && <Loader2 className="mx-auto mt-6 size-4 animate-spin text-muted-foreground" />}
         {requests && <MoveRequests />}
-        {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? "No matching chats." : active && !active.general ? `Nothing in ${active.name} yet. Start a chat below, or move one here.` : "No chats yet. Mention @pi or someone below to start one."}</p>}
+        {visible?.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">{q ? tr("chat.noMatches") : active && !active.general ? tr("chat.emptyProject", { project: active.name }) : tr("chat.empty")}</p>}
         {visible?.map((item) => {
           const actions: SwipeAction[] = []
           if (item.canMove) actions.push({ label: `Move ${item.title} to another project`, icon: <FolderInput />, className: "bg-sky-600 hover:bg-sky-700", onClick: () => setMoving({ kind: item.kind, id: item.id, title: item.title, projectId: item.projectId }) })
@@ -106,12 +108,12 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
               <span className="flex min-w-0 items-center gap-1.5">
                 {item.kind === "session" && item.memory && <Brain className="size-3.5 shrink-0 text-muted-foreground" />}
                 <span className={cn("min-w-0 flex-1 truncate text-sm", item.kind === "chat" && item.unread > 0 && "font-semibold")}>{item.title}</span>
-                {item.running && <span className="size-2 shrink-0 animate-pulse rounded-full bg-green-500" title="Beezy is working" />}
-                <span className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(item.updatedAt)}</span>
+                {item.running && <span className="size-2 shrink-0 animate-pulse rounded-full bg-green-500" title={tr("ui.beezy-is-working-73c42b")} />}
+                <span className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(item.updatedAt, language)}</span>
               </span>
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="min-w-0 flex-1 truncate">
-                  {item.kind === "chat" ? (item.last ? `${item.last.author === user?.username ? "You" : item.last.author === "pi" ? "Beezy" : item.last.author}: ${item.last.text || "…"}` : "") : item.running ? "Beezy is working…" : `Beezy · ${item.harness}`}
+                  {item.kind === "chat" ? (item.last ? `${item.last.author === user?.username ? tr("chat.you") : item.last.author === "pi" ? "Beezy" : item.last.author}: ${item.last.text || "…"}` : "") : item.running ? tr("chat.working") : `Beezy · ${item.harness}`}
                 </span>
                 {(item.kind === "session" || item.pi) && item.folder && (
                   <span title={`/${item.folder}`} className="flex min-w-0 max-w-[50%] items-center gap-0.5">
@@ -119,7 +121,7 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
                     <span className="truncate">/{item.folder}</span>
                   </span>
                 )}
-                {item.moving && <span className="shrink-0 rounded-full border border-amber-500/50 px-1.5 text-[10px] text-amber-600 dark:text-amber-400" title="Waiting for the people in it to approve">→ {item.moving}</span>}
+                {item.moving && <span className="shrink-0 rounded-full border border-amber-500/50 px-1.5 text-[10px] text-amber-600 dark:text-amber-400" title={tr("ui.waiting-for-the-people-in-it-to-app-9a969a")}>→ {item.moving}</span>}
                 {item.kind === "chat" && item.unread > 0 && <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground tabular-nums">{item.unread}</span>}
               </span>
             </span>
@@ -127,7 +129,7 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
           {!selecting && actions.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="mr-1 shrink-0" aria-label={`Actions for ${item.title}`}><MoreVertical /></Button>
+                <Button variant="ghost" size="icon-sm" className="mr-1 shrink-0" aria-label={tr("chat.actionsFor", { title: item.title })}><MoreVertical /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {item.kind === "session" && item.canMove && <DropdownMenuItem onSelect={() => {
@@ -135,7 +137,7 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
                     setItems(current => current?.map(row => row.id === item.id ? { ...row, title: name } : row))
                     toast.success("Title generated")
                   }).catch(error => toast.error(error.message))
-                }}><WandSparkles /> Generate title</DropdownMenuItem>}
+                }}><WandSparkles /> {tr("ui.generate-title-547a38")}</DropdownMenuItem>}
                 {actions.map((action) => (
                   <DropdownMenuItem key={action.label} onSelect={action.onClick} className={action.label.startsWith("Delete ") ? "text-destructive focus:text-destructive" : undefined}>
                     {action.icon}{action.label.startsWith("Delete ") ? "Delete" : "Move to project"}
@@ -173,8 +175,8 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete the chat with {deletingChat?.title}?</DialogTitle>
-            <DialogDescription>It disappears for you, and you leave it. The others keep it until they delete it too.</DialogDescription>
+            <DialogTitle>{tr("chat.deleteTitle", { title: deletingChat?.title ?? "" })}</DialogTitle>
+            <DialogDescription>{tr("ui.it-disappears-for-you-and-you-leave-1f5580")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
@@ -187,7 +189,7 @@ export function ChatList({ selected, className, requests, selectSessions }: { se
                 if (selected === chat.id) nav.home()
               }}
             >
-              <Trash2 /> Delete chat
+              <Trash2 /> {tr("ui.delete-chat-db9121")}
             </Button>
           </DialogFooter>
         </DialogContent>

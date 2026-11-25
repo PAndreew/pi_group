@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ArrowRightLeft, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -20,6 +21,7 @@ const PERSONAL = "personal"
  * agent sees keys and descriptions and reads a value by its key; values are only shown here when asked for.
  */
 export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const [status, setStatus] = useState<{ configured: boolean; reachable: boolean }>()
   const [secrets, setSecrets] = useState<VaultSecret[]>()
   const [revealed, setRevealed] = useState<Record<string, string>>({})
@@ -93,9 +95,9 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Secret vault</DialogTitle>
+          <DialogTitle>{tr("ui.secret-vault-9ab269")}</DialogTitle>
           <DialogDescription>
-            Personal secrets are yours alone. Project secrets are shared with everyone who can open the project, and agents in its sessions can read them. Agents see ordinary secret keys and descriptions and can read their values by key. Values an agent reads become part of that session’s history, which everyone it is shared with can see.
+            {tr("ui.personal-secrets-are-yours-alone-pr-731104")}
           </DialogDescription>
         </DialogHeader>
 
@@ -114,13 +116,13 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         {ready && (
           <>
             <div className="grid gap-1">
-              <Label htmlFor="vault-scope">Secrets of</Label>
+              <Label htmlFor="vault-scope">{tr("ui.secrets-of-8ea9bb")}</Label>
               <Select value={project ?? PERSONAL} onValueChange={switchTo}>
                 <SelectTrigger id="vault-scope" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={PERSONAL}>Personal</SelectItem>
+                  <SelectItem value={PERSONAL}>{tr("ui.personal-40f073")}</SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       Project: {p.name}
@@ -132,7 +134,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
             </div>
             <div className="space-y-1.5">
               {!secrets && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
-              {secrets?.length === 0 && editing !== "new" && <p className="text-sm text-muted-foreground">No secrets yet.</p>}
+              {secrets?.length === 0 && editing !== "new" && <p className="text-sm text-muted-foreground">{tr("ui.no-secrets-yet-c3d50e")}</p>}
               {secrets?.map((s) =>
                 editing !== "new" && editing?.key === s.key ? (
                   <SecretForm key={s.key} secret={s} project={project} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
@@ -148,13 +150,13 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm" aria-label={`Move ${s.key}`} title="Move to…">
+                          <Button variant="ghost" size="icon-sm" aria-label={`Move ${s.key}`} title={tr("ui.move-to-c0a3ef")}>
                             <ArrowRightLeft />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Move to</DropdownMenuLabel>
-                          {project && <DropdownMenuItem onSelect={() => void move(s.key)}>Personal</DropdownMenuItem>}
+                          <DropdownMenuLabel>{tr("ui.move-to-349f80")}</DropdownMenuLabel>
+                          {project && <DropdownMenuItem onSelect={() => void move(s.key)}>{tr("ui.personal-40f073")}</DropdownMenuItem>}
                           {projects
                             .filter((p) => p.id !== project)
                             .map((p) => (
@@ -178,7 +180,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
               <SecretForm project={project} taken={secrets?.map((s) => s.key) ?? []} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
             ) : (
               <Button variant="outline" onClick={() => setEditing("new")}>
-                <Plus /> Add {project ? "project" : "personal"} secret
+                <Plus /> {tr("ui.add-61cc55")} {project ? "project" : "personal"} {tr("ui.secret-e5e9fa")}
               </Button>
             )}
           </>
@@ -190,6 +192,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 
 /** Add a secret, or change one's description and (optionally) value. */
 function SecretForm({ secret, project, taken = [], onDone, onCancel }: { secret?: VaultSecret; project?: string; taken?: string[]; onDone: () => void; onCancel: () => void }) {
+  const { t: tr } = useLocale()
   const [key, setKey] = useState(secret?.key ?? "")
   const [value, setValue] = useState("")
   const [description, setDescription] = useState(secret?.description ?? "")
@@ -219,7 +222,7 @@ function SecretForm({ secret, project, taken = [], onDone, onCancel }: { secret?
       }}
     >
       <div className="grid gap-1">
-        <Label htmlFor="vault-key">Key</Label>
+        <Label htmlFor="vault-key">{tr("ui.key-c67dd2")}</Label>
         <Input id="vault-key" value={key} onChange={(e) => setKey(e.target.value.replace(/[^A-Za-z0-9_]/g, "_"))} placeholder="GITHUB_TOKEN" disabled={Boolean(secret)} autoComplete="off" spellCheck={false} className="font-mono" />
         {keyError && <span className="text-xs text-destructive">{keyError}</span>}
       </div>
@@ -228,15 +231,15 @@ function SecretForm({ secret, project, taken = [], onDone, onCancel }: { secret?
         <Input id="vault-value" type="password" value={value} onChange={(e) => setValue(e.target.value)} autoComplete="new-password" spellCheck={false} />
       </div>
       <div className="grid gap-1">
-        <Label htmlFor="vault-description">Description for the agent</Label>
-        <Textarea id="vault-description" value={description} onChange={(e) => setDescription(e.target.value.slice(0, 300))} placeholder="Personal access token for github.com/acme, repo scope" rows={2} />
+        <Label htmlFor="vault-description">{tr("ui.description-for-the-agent-09cec3")}</Label>
+        <Textarea id="vault-description" value={description} onChange={(e) => setDescription(e.target.value.slice(0, 300))} placeholder={tr("ui.personal-access-token-for-github-co-92321c")} rows={2} />
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
+          {tr("ui.cancel-77dfd2")}
         </Button>
         <Button type="submit" disabled={!canSave || saving}>
-          {saving && <Loader2 className="animate-spin" />} Save
+          {saving && <Loader2 className="animate-spin" />} {tr("ui.save-efc007")}
         </Button>
       </div>
     </form>

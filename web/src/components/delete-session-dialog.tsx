@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Check, Loader2, Trash2 } from "lucide-react"
 import { useCallback, useState } from "react"
 import { toast } from "sonner"
@@ -57,17 +58,19 @@ export function SessionDeleteCheckbox({ selection, target, blocked }: { selectio
 }
 
 export function SessionDeleteToolbar({ selection }: { selection: SessionDeletion }) {
+  const { t: tr } = useLocale()
   const count = selection.selection?.size ?? 0
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
-      <span className="mr-auto text-xs text-muted-foreground" role="status">{count} selected</span>
-      <Button size="sm" variant="ghost" onClick={selection.cancel}>Cancel</Button>
-      <Button size="sm" variant="destructive" disabled={!count} onClick={selection.confirm}><Trash2 /> Delete selected</Button>
+      <span className="mr-auto text-xs text-muted-foreground" role="status">{count} {tr("ui.selected-835f3b")}</span>
+      <Button size="sm" variant="ghost" onClick={selection.cancel}>{tr("ui.cancel-77dfd2")}</Button>
+      <Button size="sm" variant="destructive" disabled={!count} onClick={selection.confirm}><Trash2 /> {tr("ui.delete-selected-8516a7")}</Button>
     </div>
   )
 }
 
 export function DeleteSessionDialog({ selection, onResult }: { selection: SessionDeletion; onResult: (deleted: string[]) => void }) {
+  const { t: tr } = useLocale()
   const [deleting, setDeleting] = useState(false)
   const targets = selection.confirming
   const count = targets?.length ?? 0
@@ -98,15 +101,15 @@ export function DeleteSessionDialog({ selection, onResult }: { selection: Sessio
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{count === 1 ? "Delete session?" : `Delete ${count} sessions?`}</DialogTitle>
-          <DialogDescription>Selected sessions will be removed for everyone they are shared with. This cannot be undone.</DialogDescription>
+          <DialogDescription>{tr("ui.selected-sessions-will-be-removed-f-b72065")}</DialogDescription>
         </DialogHeader>
         <ul className="max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-sm">
           {targets?.map(({ key, title }) => <li key={key} className="break-words">{title}</li>)}
         </ul>
         <DialogFooter>
-          <Button variant="outline" disabled={deleting} onClick={selection.closeConfirmation}>Cancel</Button>
+          <Button variant="outline" disabled={deleting} onClick={selection.closeConfirmation}>{tr("ui.cancel-77dfd2")}</Button>
           <Button variant="destructive" disabled={deleting || !count} onClick={() => void remove()}>
-            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} Delete
+            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} {tr("ui.delete-f6fdbe")}
           </Button>
         </DialogFooter>
       </DialogContent>

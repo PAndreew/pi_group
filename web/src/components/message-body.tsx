@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { FileIcon } from "@react-symbols/icons/utils"
 import { Share } from "lucide-react"
 import { useContext } from "react"
@@ -69,6 +70,7 @@ function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
  * videos play in place.
  */
 export function MessageBody({ text, folder, tinted }: { text: string; folder?: string; tinted?: boolean }) {
+  const { t: tr } = useLocale()
   const shared = parseShared(text)
   if (!shared) {
     const { text: message, pages } = splitBrowserRefs(text)
@@ -98,7 +100,7 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
       <div className="flex min-w-0 items-center gap-1 text-xs opacity-80">
         <Share className="size-3 shrink-0" />
         <span className="truncate">
-          Shared from{" "}
+          {tr("ui.shared-from-5bdd86")}{" "}
           {shared.href ? (
             <a href={shared.href} className="font-medium underline underline-offset-2">
               {shared.label}

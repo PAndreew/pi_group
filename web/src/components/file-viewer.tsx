@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ArrowLeft, Code, Download, Eye, File, FileQuestion, FileX, Loader2, Pencil, Save, Search, X } from "lucide-react"
 import { lazy, Suspense, useContext, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -93,6 +94,7 @@ function useText(path: string, enabled: boolean) {
  * was loaded with, so a newer version on disk (another person, the agent) is never overwritten blindly.
  */
 function TextEditor({ path, text, mtime, onSaved, onClose }: { path: string; text: string; mtime?: number; onSaved: (text: string, mtime: number) => void; onClose: () => void }) {
+  const { t: tr } = useLocale()
   // Textareas work in \n; files written with \r\n keep their line endings.
   const crlf = text.includes("\r\n")
   const original = crlf ? text.replace(/\r\n/g, "\n") : text
@@ -117,12 +119,12 @@ function TextEditor({ path, text, mtime, onSaved, onClose }: { path: string; tex
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-        <span className="flex-1">{dirty ? "Unsaved changes" : "No changes"} · Ctrl+S saves</span>
+        <span className="flex-1">{dirty ? "Unsaved changes" : "No changes"} {tr("ui.ctrl-s-saves-67c6ba")}</span>
         <Button variant="ghost" size="sm" onClick={close}>
-          <X /> Close
+          <X /> {tr("ui.close-bbfa77")}
         </Button>
         <Button size="sm" onClick={() => void save()} disabled={!dirty || saving}>
-          {saving ? <Loader2 className="animate-spin" /> : <Save />} Save
+          {saving ? <Loader2 className="animate-spin" /> : <Save />} {tr("ui.save-efc007")}
         </Button>
       </div>
       <textarea
@@ -172,6 +174,7 @@ function useMissing(path: string) {
 
 /** A moved or deleted file: say so, and offer to look for files with the same name. */
 function NotFound({ path }: { path: string }) {
+  const { t: tr } = useLocale()
   const nav = useContext(NavContext)
   const name = path.split("/").pop() ?? path
   const [found, setFound] = useState<string[]>()
@@ -191,16 +194,16 @@ function NotFound({ path }: { path: string }) {
     <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
       <FileX className="size-10" />
       <p>
-        This file was moved or deleted.
+        {tr("ui.this-file-was-moved-or-deleted-fa6093")}
         <br />
         <span className="break-all text-xs">/{path}</span>
       </p>
       {nav && (
         <Button variant="outline" onClick={() => void search()} disabled={searching}>
-          {searching ? <Loader2 className="animate-spin" /> : <Search />} Search for {name}
+          {searching ? <Loader2 className="animate-spin" /> : <Search />} {tr("ui.search-for-0f53c9")} {name}
         </Button>
       )}
-      {found?.length === 0 && <p>No other file with this name.</p>}
+      {found?.length === 0 && <p>{tr("ui.no-other-file-with-this-name-d85046")}</p>}
       {found && found.length > 0 && (
         <ul className="grid w-full max-w-md gap-1 text-left">
           {found.map((p) => (
@@ -218,6 +221,7 @@ function NotFound({ path }: { path: string }) {
 }
 
 export function FileViewer({ path, onClose }: { path: string; onClose?: () => void }) {
+  const { t: tr } = useLocale()
   const kind = kindOf(path)
   const needsText = kind === "html" || kind === "markdown" || kind === "csv" || kind === "text"
   const [{ text, mtime, error, binary, tooBig }, setLoaded] = useText(path, needsText)
@@ -255,7 +259,7 @@ export function FileViewer({ path, onClose }: { path: string; onClose?: () => vo
         {tooBig ? `This file is too large to preview (${formatBytes(tooBig)}).` : "No preview for this file type."}
         <Button asChild variant="outline">
           <a href={api.downloadUrl(path)}>
-            <Download /> Download
+            <Download /> {tr("ui.download-a479c9")}
           </a>
         </Button>
       </div>
@@ -284,21 +288,21 @@ export function FileViewer({ path, onClose }: { path: string; onClose?: () => vo
             ))}
           </tbody>
         </table>
-        {rows.length >= 500 && <p className="p-2 text-xs text-muted-foreground">Showing the first 500 rows.</p>}
+        {rows.length >= 500 && <p className="p-2 text-xs text-muted-foreground">{tr("ui.showing-the-first-500-rows-3f5c03")}</p>}
       </div>
     )
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2">
-        {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Back from preview"><ArrowLeft /></Button>}
+        {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={tr("ui.back-from-preview-8298c7")}><ArrowLeft /></Button>}
         <span className="min-w-0 flex-1 truncate text-sm" title={path}>
           {onClose && <span className="text-muted-foreground">{path.slice(0, path.length - name.length)}</span>}<strong>{name}</strong>
         </span>
         {needsText && text !== undefined && !editing && (
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
             <Pencil />
-            <span className="hidden sm:inline">Edit</span>
+            <span className="hidden sm:inline">{tr("ui.edit-530164")}</span>
           </Button>
         )}
         {canToggle && !editing && (
@@ -308,9 +312,9 @@ export function FileViewer({ path, onClose }: { path: string; onClose?: () => vo
           </Button>
         )}
         <Button asChild variant="ghost" size="icon-sm">
-          <a href={api.downloadUrl(path)} aria-label="Download file" title="Download file"><Download /></a>
+          <a href={api.downloadUrl(path)} aria-label={tr("ui.download-file-774025")} title={tr("ui.download-file-774025")}><Download /></a>
         </Button>
-        {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close preview" title="Close preview"><X /></Button>}
+        {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={tr("ui.close-preview-baa550")} title={tr("ui.close-preview-baa550")}><X /></Button>}
       </div>
       <div className={editing ? "min-h-0 flex-1" : "min-h-0 flex-1 overflow-auto"}>{body}</div>
     </div>

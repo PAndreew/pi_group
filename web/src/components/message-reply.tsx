@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { X } from "lucide-react"
 import { useRef } from "react"
 import { toast } from "sonner"
@@ -14,13 +15,14 @@ export function selectReply(setReply: (reply: ReplyTarget) => void, reply: Reply
 }
 
 export function ReplyPreview({ reply, onCancel }: { reply: ReplyTarget; onCancel: () => void }) {
+  const { t: tr } = useLocale()
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-md border-l-2 border-primary bg-muted p-2 text-xs" role="region" aria-label="Reply preview">
-      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => document.getElementById(reply.sourceId)?.scrollIntoView({ block: "center", behavior: "smooth" })} title="Jump to original message">
-        <span className="block font-medium">Replying to {reply.author}</span>
+    <div className="flex min-w-0 items-center gap-2 rounded-md border-l-2 border-primary bg-muted p-2 text-xs" role="region" aria-label={tr("ui.reply-preview-2ea0d4")}>
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => document.getElementById(reply.sourceId)?.scrollIntoView({ block: "center", behavior: "smooth" })} title={tr("ui.jump-to-original-message-afce99")}>
+        <span className="block font-medium">{tr("ui.replying-to-dc7ded")} {reply.author}</span>
         <span className="block truncate text-muted-foreground">{reply.text}</span>
       </button>
-      <button type="button" className="grid size-9 shrink-0 place-items-center" aria-label="Cancel reply" onClick={onCancel}><X className="size-4" /></button>
+      <button type="button" className="grid size-9 shrink-0 place-items-center" aria-label={tr("ui.cancel-reply-bd62d2")} onClick={onCancel}><X className="size-4" /></button>
     </div>
   )
 }
@@ -46,6 +48,7 @@ export function jumpToOriginal(from: HTMLElement, quote: string) {
  * card jumps to the quoted message.
  */
 export function ReplyStack({ text, align = "start", className, header, children }: { text: string; align?: "start" | "end"; className?: string; header?: React.ReactNode; children: (body: string) => React.ReactNode }) {
+  const { t: tr } = useLocale()
   const reply = parseReply(text)
   const card = useRef<HTMLButtonElement>(null)
   return (
@@ -57,7 +60,7 @@ export function ReplyStack({ text, align = "start", className, header, children 
           type="button"
           onClick={() => card.current && jumpToOriginal(card.current, reply.quote)}
           aria-label={`Go to the original message from ${reply.author}`}
-          title="Go to the original message"
+          title={tr("ui.go-to-the-original-message-bacb7c")}
           className={cn("relative z-0 w-full cursor-pointer rounded-t-xl bg-muted px-3 py-2 text-left text-xs text-muted-foreground opacity-65 transition-opacity hover:opacity-90 focus-visible:opacity-90 focus-visible:outline-2 focus-visible:outline-ring")}
         >
           <span className="block font-medium">{reply.author}</span>

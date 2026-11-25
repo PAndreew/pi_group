@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ChevronRight, Loader2, RotateCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -88,6 +89,7 @@ function ServerRow({ server }: { server: McpServer }) {
 
 /** Tools the session's agent can call, its slash commands and skills, MCP servers, and what pi has installed. */
 export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: { sessionKey?: string; path?: string; open: boolean; onOpenChange: (open: boolean) => void; onInsert?: (text: string) => void }) {
+  const { t: tr } = useLocale()
   const [data, setData] = useState<SessionTools>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
@@ -122,8 +124,8 @@ export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: 
       <DialogContent className="tools-dialog flex max-h-[85dvh] min-w-0 flex-col sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Tools
-            <Button variant="ghost" size="icon-sm" onClick={load} disabled={loading || mcpLoading} aria-label="Refresh">
+            {tr("ui.tools-4fa8cc")}
+            <Button variant="ghost" size="icon-sm" onClick={load} disabled={loading || mcpLoading} aria-label={tr("ui.refresh-56e3ba")}>
               {loading || mcpLoading ? <Loader2 className="animate-spin" /> : <RotateCw />}
             </Button>
           </DialogTitle>
@@ -148,14 +150,14 @@ export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: 
                 </Section>
               ))}
               <section className="grid gap-1.5">
-                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">MCP servers{mcp ? ` (${mcp.servers.length})` : ""}</h3>
+                <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{tr("ui.mcp-servers-8d9a30")}{mcp ? ` (${mcp.servers.length})` : ""}</h3>
                 {mcpError && <p className="text-sm text-destructive">{mcpError}</p>}
                 {!mcp && mcpLoading && (
                   <p className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" /> Connecting to servers…
+                    <Loader2 className="size-3.5 animate-spin" /> {tr("ui.connecting-to-servers-11ab1a")}
                   </p>
                 )}
-                {mcp && mcp.servers.length === 0 && !mcp.note && <p className="px-2 text-xs text-muted-foreground">No MCP servers configured.</p>}
+                {mcp && mcp.servers.length === 0 && !mcp.note && <p className="px-2 text-xs text-muted-foreground">{tr("ui.no-mcp-servers-configured-b88244")}</p>}
                 {mcp && mcp.servers.length > 0 && (
                   <ul className="grid gap-2">
                     {mcp.servers.map((server) => (
@@ -165,10 +167,10 @@ export function ToolsDialog({ sessionKey, path, open, onOpenChange, onInsert }: 
                 )}
                 {mcp?.note && <p className="text-xs text-muted-foreground">{mcp.note}</p>}
                 <p className="text-xs text-muted-foreground">
-                  From <code>~/.pi/agent/mcp.json</code> and the project's <code>.pi/mcp.json</code>; manage them with <code>pi mcp add|remove</code> in the terminal.
+                  {tr("ui.from-3f6605")} <code>~/.pi/agent/mcp.json</code> {tr("ui.and-the-project-s-1d78f5")} <code>.pi/mcp.json</code>{tr("ui.manage-them-with-753306")} <code>pi mcp add|remove</code> {tr("ui.in-the-terminal-b33b8d")}
                 </p>
               </section>
-              {!data.commands && data.resources.length > 0 && <p className="text-xs text-muted-foreground">Start the session to list its slash commands; below is what is installed on disk.</p>}
+              {!data.commands && data.resources.length > 0 && <p className="text-xs text-muted-foreground">{tr("ui.start-the-session-to-list-its-slash-06e09b")}</p>}
               {resourceGroups.map(([kind, items]) => (
                 <Section key={kind} title={`Installed ${KIND_LABEL[kind].toLowerCase()}`}>
                   {items.map((r) => (

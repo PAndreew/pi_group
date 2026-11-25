@@ -1,9 +1,11 @@
+import { useLocale } from "@/lib/i18n"
 import { X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api, type SessionTools } from "@/lib/api"
 
 /** Skill suggestions for the direct-session composer; dismissal never changes the draft. */
 export function SkillDropup({ value, sessionKey, onChange }: { value: string; sessionKey: string; onChange: (value: string) => void }) {
+  const { t: tr } = useLocale()
   const [resources, setResources] = useState<SessionTools["resources"]>([])
   const [dismissed, setDismissed] = useState<string>()
 
@@ -31,7 +33,7 @@ export function SkillDropup({ value, sessionKey, onChange }: { value: string; se
       }}
     >
       <div className="flex shrink-0 justify-end px-1 pt-1">
-        <button type="button" aria-label="Dismiss skill suggestions" className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}>
+        <button type="button" aria-label={tr("ui.dismiss-skill-suggestions-d81a23")} className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}>
           <X className="size-4" />
         </button>
       </div>

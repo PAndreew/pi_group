@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { useMemo } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { type ModelInfo, THINKING_LEVELS } from "@/lib/api"
@@ -19,6 +20,7 @@ export function ModelPicker({
   compact?: boolean
   showProvider?: boolean
 }) {
+  const { t: tr } = useLocale()
   const providers = useMemo(() => [...new Set(models.map((m) => m.provider))].sort(), [models])
   const provider = value?.provider && providers.includes(value.provider) ? value.provider : providers[0]
   const inProvider = models.filter((m) => m.provider === provider)
@@ -44,8 +46,8 @@ export function ModelPicker({
             if (first) onChange({ provider: p, id: first.id })
           }}
         >
-          <SelectTrigger size={size} className={cn("w-full min-w-0 sm:w-auto sm:max-w-36", compact && "text-xs")} aria-label="Provider">
-            <SelectValue placeholder="Provider" />
+          <SelectTrigger size={size} className={cn("w-full min-w-0 sm:w-auto sm:max-w-36", compact && "text-xs")} aria-label={tr("ui.provider-7ceee3")}>
+            <SelectValue placeholder={tr("ui.provider-7ceee3")} />
           </SelectTrigger>
           <SelectContent>
             {providers.map((p) => (
@@ -57,7 +59,7 @@ export function ModelPicker({
         </Select>
       )}
       <Select value={current ? current.id : undefined} disabled={disabled} onValueChange={(id) => onChange({ provider: provider!, id })}>
-        <SelectTrigger size={size} className={cn("w-full min-w-0 sm:w-auto sm:max-w-56", compact && "text-xs")} aria-label="Model">
+        <SelectTrigger size={size} className={cn("w-full min-w-0 sm:w-auto sm:max-w-56", compact && "text-xs")} aria-label={tr("ui.model-68c2cc")}>
           <SelectValue placeholder={value ? value.id : "Model"} />
         </SelectTrigger>
         <SelectContent>
@@ -73,15 +75,16 @@ export function ModelPicker({
 }
 
 export function ThinkingPicker({ value, onChange, disabled, compact, levels = THINKING_LEVELS }: { value?: string; onChange: (v: string) => void; disabled?: boolean; compact?: boolean; levels?: readonly string[] }) {
+  const { t: tr } = useLocale()
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger size={compact ? "sm" : "default"} className={cn("w-auto", compact && "text-xs")} aria-label="Thinking level">
-        <SelectValue placeholder="thinking" />
+      <SelectTrigger size={compact ? "sm" : "default"} className={cn("w-auto", compact && "text-xs")} aria-label={tr("ui.thinking-level-e1ba55")}>
+        <SelectValue placeholder={tr("ui.thinking-beac9e")} />
       </SelectTrigger>
       <SelectContent>
         {levels.map((l) => (
           <SelectItem key={l} value={l}>
-            think: {l}
+            {tr("ui.think-ec0e9e")} {l}
           </SelectItem>
         ))}
       </SelectContent>

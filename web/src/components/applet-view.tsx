@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ArrowUp, CheckCircle2, CircleSlash, Copy, ExternalLink, File, Folder, FolderOpen, LayoutGrid, Loader2, Play, RotateCcw, Save, ShieldCheck, Trash2, Upload, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -40,6 +41,7 @@ const blank = (value: Value | undefined) => value === undefined || value === "" 
 
 /** Files or a folder under the shared root, browsed from `start`. */
 function PathPicker({ mode, accept, multiple, start, open, onOpenChange, onPick }: { mode: "file" | "folder"; accept?: string[]; multiple?: boolean; start: string; open: boolean; onOpenChange: (open: boolean) => void; onPick: (paths: string[]) => void }) {
+  const { t: tr } = useLocale()
   const [dir, setDir] = useState(start)
   const [entries, setEntries] = useState<FsEntry[]>()
   const [picked, setPicked] = useState<string[]>([])
@@ -88,7 +90,7 @@ function PathPicker({ mode, accept, multiple, start, open, onOpenChange, onPick 
               </button>
             </li>
           ))}
-          {entries && !entries.some(fits) && <li className="px-2 py-3 text-sm text-muted-foreground">Nothing to choose here.</li>}
+          {entries && !entries.some(fits) && <li className="px-2 py-3 text-sm text-muted-foreground">{tr("ui.nothing-to-choose-here-3baa0d")}</li>}
         </ul>
         {(mode === "folder" || multiple) && (
           <DialogFooter>
@@ -104,6 +106,7 @@ function PathPicker({ mode, accept, multiple, start, open, onOpenChange, onPick 
 
 /** Picked paths as chips, filled by uploading into the applet folder's uploads or by browsing. */
 function PathField({ field, value, folder, disabled, onChange }: { field: Extract<InputField, { type: "file" | "folder" }>; value: Value; folder: string; disabled: boolean; onChange: (value: Value) => void }) {
+  const { t: tr } = useLocale()
   const input = useRef<HTMLInputElement>(null)
   const [browsing, setBrowsing] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -148,7 +151,7 @@ function PathField({ field, value, folder, disabled, onChange }: { field: Extrac
               }}
             />
             <Button type="button" variant="outline" size="sm" disabled={disabled || uploading} onClick={() => input.current?.click()}>
-              {uploading ? <Loader2 className="animate-spin" /> : <Upload />} Upload
+              {uploading ? <Loader2 className="animate-spin" /> : <Upload />} {tr("ui.upload-8bdf05")}
             </Button>
           </>
         )}
@@ -162,6 +165,7 @@ function PathField({ field, value, folder, disabled, onChange }: { field: Extrac
 }
 
 function FieldInput({ field, value, folder, disabled, onChange }: { field: InputField; value: Value; folder: string; disabled: boolean; onChange: (value: Value) => void }) {
+  const { t: tr } = useLocale()
   const id = `applet-field-${field.id}`
   switch (field.type) {
     case "text":
@@ -175,7 +179,7 @@ function FieldInput({ field, value, folder, disabled, onChange }: { field: Input
         return (
           <Select value={String(value) || undefined} onValueChange={onChange} disabled={disabled}>
             <SelectTrigger id={id} className="w-full sm:w-72">
-              <SelectValue placeholder="Choose…" />
+              <SelectValue placeholder={tr("ui.choose-c3b69e")} />
             </SelectTrigger>
             <SelectContent>
               {field.options.map((o) => (
@@ -218,6 +222,7 @@ function FieldInput({ field, value, folder, disabled, onChange }: { field: Input
 
 /** The applet's form; `onRun` is left out to show it as a preview. */
 function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string; onRun?: (action: string, values: Values) => Promise<boolean> }) {
+  const { t: tr } = useLocale()
   const [values, setValues] = useState(() => initialValues(spec))
   const [busy, setBusy] = useState<string>()
   const disabled = !onRun || Boolean(busy)
@@ -274,7 +279,7 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
           <div key={field.id} className="grid grid-cols-1 gap-1.5">
             <Label id={`applet-field-${field.id}-label`} htmlFor={`applet-field-${field.id}`}>
               {field.label}
-              {field.optional && <span className="font-normal text-muted-foreground">(optional)</span>}
+              {field.optional && <span className="font-normal text-muted-foreground">{tr("ui.optional-b16c7a")}</span>}
             </Label>
             <FieldInput field={field} value={values[field.id]} folder={folder} disabled={disabled} onChange={(value) => setValues({ ...values, [field.id]: value })} />
             {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
@@ -309,7 +314,7 @@ function AppletForm({ spec, folder, onRun }: { spec: AppletSpec; folder: string;
             </Button>
           )
         })}
-        {onRun && spec.actions.some((action) => "prompt" in action && !action.noInputs) && missing.length > 0 && <span className="text-xs text-muted-foreground">Fill in {missing.map((f) => f.label).join(", ")}</span>}
+        {onRun && spec.actions.some((action) => "prompt" in action && !action.noInputs) && missing.length > 0 && <span className="text-xs text-muted-foreground">{tr("ui.fill-in-d20fc7")} {missing.map((f) => f.label).join(", ")}</span>}
       </div>
   )
   return (
@@ -361,6 +366,7 @@ function RunItem({ run, folder, onOpenSession }: { run: AppletRun; folder: strin
 
 /** What approving lets each button do. */
 function ActionPreview({ spec }: { spec: AppletSpec }) {
+  const { t: tr } = useLocale()
   return (
     <div className="grid gap-2">
       {spec.actions.map((a) => {
@@ -377,7 +383,7 @@ function ActionPreview({ spec }: { spec: AppletSpec }) {
         )
       })}
       {spec.data && <details className="text-xs">
-        <summary className="cursor-pointer">Review data collections, reads and writes</summary>
+        <summary className="cursor-pointer">{tr("ui.review-data-collections-reads-and-w-5c1b5d")}</summary>
         <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-muted p-2 text-[11px]">{JSON.stringify(spec.data, null, 2)}</pre>
       </details>}
     </div>
@@ -386,6 +392,7 @@ function ActionPreview({ spec }: { spec: AppletSpec }) {
 
 /** An applet's page (/apps/<slug>): its form, approval for its owner, and the signed-in user's runs. */
 export function AppletView({ slug, header }: { slug: string; header?: React.ReactNode }) {
+  const { t: tr } = useLocale()
   const nav = useNav()
   const [applet, setApplet] = useState<Applet & { spec: AppletSpec }>()
   const [runs, setRuns] = useState<AppletRun[]>([])
@@ -463,7 +470,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
         </div>
         {applet?.canManage && (
           <Button size="sm" variant={confirmDelete ? "destructive" : "ghost"} onClick={() => (confirmDelete ? void remove() : setConfirmDelete(true))} onBlur={() => setConfirmDelete(false)} disabled={busy}>
-            <Trash2 /> {confirmDelete ? (applet.spec.data ? "Delete applet and all saved data" : "Delete for good") : <span className="sr-only sm:not-sr-only">Delete</span>}
+            <Trash2 /> {confirmDelete ? (applet.spec.data ? "Delete applet and all saved data" : "Delete for good") : <span className="sr-only sm:not-sr-only">{tr("ui.delete-f6fdbe")}</span>}
           </Button>
         )}
       </div>
@@ -477,13 +484,13 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
               {applet.canManage && (!applet.approved || applet.draft) && (
                 <section className="grid gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
                   <p>
-                    {applet.approved ? "The agent proposed a change. The approved version below keeps working until you approve it." : "Nobody can use this applet until you approve it."} Review what each button does below before approving.
+                    {applet.approved ? "The agent proposed a change. The approved version below keeps working until you approve it." : "Nobody can use this applet until you approve it."} {tr("ui.review-what-each-button-does-below--377794")}
                   </p>
                   {(applet.note || applet.proposedIn) && (
                     <p className="text-xs text-muted-foreground">
                       {applet.proposedIn ? (
                         <>
-                          Proposed in{" "}
+                          {tr("ui.proposed-in-cbe067")}{" "}
                           <button type="button" className="font-medium underline underline-offset-2" onClick={() => nav.openSession(applet.proposedIn!.key, applet.proposedIn!.folder)}>
                             {applet.proposedIn.name}
                           </button>
@@ -496,7 +503,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
                   )}
                   {applet.draft && (
                     <div className="grid gap-2 rounded-md border bg-background p-3">
-                      <p className="text-xs font-medium text-muted-foreground">Proposed version (preview)</p>
+                      <p className="text-xs font-medium text-muted-foreground">{tr("ui.proposed-version-preview-a76f7c")}</p>
                       <AppletForm key={`draft-${applet.version}`} spec={applet.draft} folder={applet.folder} />
                     </div>
                   )}
@@ -507,7 +514,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
                     </Button>
                     {applet.draft && (
                       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(() => api.discardAppletDraft(applet.id))}>
-                        Discard the change
+                        {tr("ui.discard-the-change-dc482f")}
                       </Button>
                     )}
                   </div>
@@ -521,7 +528,7 @@ export function AppletView({ slug, header }: { slug: string; header?: React.Reac
               )}
               {runs.length > 0 && (
                 <section className="grid grid-cols-1 gap-2">
-                  <h3 className="text-sm font-medium">Your runs</h3>
+                  <h3 className="text-sm font-medium">{tr("ui.your-runs-c10e7e")}</h3>
                   <ul className="grid grid-cols-1 gap-2">
                     {runs.map((r) => (
                       <RunItem key={r.id} run={r} folder={applet.folder} onOpenSession={nav.openSession} />

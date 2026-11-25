@@ -10,4 +10,4 @@ Choose **Profile and settings → Language**. Changes apply immediately and the 
 
 For new interface text, add a key to `en.json` and use `useLocale().t(key, values)` in the component. Use `useLocale().language` with `Intl` for locale-aware formatting. Keep commands, paths, and stored message formats unchanged.
 
-The first localization pass covers the profile menu, navigation labels, sign-in, composer and message status. Other screens and server-generated text remain in English until they are moved into the catalog. The language setting does not translate conversation content or change the agent's response language.
+Interface labels, accessibility text, and many dialogs are catalogued; some dynamic statuses, server errors, and less frequently used flows still need translation. The language setting does not translate conversation content, applet content, commands, paths, or agent-generated text, and does not change the agent's response language. Run `npm test` in `web/` to check catalog keys and interpolation placeholders. The Hungarian catalog is checked for completeness.

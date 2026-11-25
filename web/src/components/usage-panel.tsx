@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -25,18 +26,19 @@ const desktopMetrics: Metric[] = ["tokens", "calls", "hit", "cost"]
 const shortDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })
 
 function DailyChart({ days }: { days: UsageReport["days"] }) {
+  const { t: tr } = useLocale()
   const [active, setActive] = useState<number>()
   const max = Math.max(STEP, Math.ceil(Math.max(0, ...days.map(volume)) / STEP) * STEP)
   const ticks = Array.from({ length: max / STEP + 1 }, (_, i) => i * STEP)
   const height = Math.max(144, (ticks.length - 1) * 24)
   const day = active === undefined ? undefined : days[active]
   return <figure className="grid min-w-0 gap-3 rounded-lg border p-3">
-    <figcaption className="text-xs font-medium">Tokens per day</figcaption>
+    <figcaption className="text-xs font-medium">{tr("ui.tokens-per-day-994771")}</figcaption>
     <div className="flex min-w-0 gap-2 pt-2">
-      <div className="relative w-12 shrink-0 text-right text-[10px] text-muted-foreground" style={{ height }} aria-label="Tokens in increments of 10 million">
+      <div className="relative w-12 shrink-0 text-right text-[10px] text-muted-foreground" style={{ height }} aria-label={tr("ui.tokens-in-increments-of-10-million-0fc970")}>
         {ticks.map(tick => <span key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: `${100 - tick / max * 100}%` }}>{tick / 1_000_000}M</span>)}
       </div>
-      <div className="min-w-0 flex-1 overflow-x-auto pb-2" tabIndex={0} role="region" aria-label="Scrollable daily token graph">
+      <div className="min-w-0 flex-1 overflow-x-auto pb-2" tabIndex={0} role="region" aria-label={tr("ui.scrollable-daily-token-graph-85ba7a")}>
         <div style={{ minWidth: Math.max(240, days.length * 36) }}>
           <div className="relative" style={{ height }}>
             <div className="pointer-events-none absolute inset-0 flex flex-col justify-between" aria-hidden="true">{ticks.map(tick => <div key={tick} className="border-t border-border/70" />)}</div>
@@ -55,11 +57,12 @@ function DailyChart({ days }: { days: UsageReport["days"] }) {
 }
 
 function UsageTable({ title, rows, metric, onOpen }: { title: string; rows: { key: string; name: string; detail?: string; totals: UsageTotals; path?: string }[]; metric: Metric; onOpen?: (key: string, path: string) => void }) {
+  const { t: tr } = useLocale()
   return <section className="min-w-0">
     <h3 className="mb-2 text-xs font-medium">{title}</h3>
     <table className="w-full table-fixed text-xs tabular-nums">
       <thead><tr className="border-b text-muted-foreground">
-        <th className="w-3/5 py-2 text-left font-normal sm:w-2/5">Name</th>
+        <th className="w-3/5 py-2 text-left font-normal sm:w-2/5">{tr("ui.name-709a23")}</th>
         <th className="text-right font-normal sm:hidden">{metrics[metric].label}</th>
         {desktopMetrics.map(key => <th key={key} className="hidden text-right font-normal sm:table-cell">{metrics[key].label}</th>)}
       </tr></thead>
@@ -76,6 +79,7 @@ function UsageTable({ title, rows, metric, onOpen }: { title: string; rows: { ke
 }
 
 export function UsagePanel({ onOpenSession }: { onOpenSession: (key: string, path: string) => void }) {
+  const { t: tr } = useLocale()
   const [days, setDays] = useState<(typeof RANGES)[number]>(30)
   const [scope, setScope] = useState<"visible" | "mine">("visible")
   const [report, setReport] = useState<UsageReport>()
@@ -90,8 +94,8 @@ export function UsagePanel({ onOpenSession }: { onOpenSession: (key: string, pat
   const t = report?.totals
   return <div className="grid min-w-0 gap-4">
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex rounded-md border p-0.5" role="group" aria-label="Time range">{RANGES.map(r => <Button key={r} size="sm" variant={days === r ? "secondary" : "ghost"} className="h-7" aria-pressed={days === r} onClick={() => setDays(r)}>{r} days</Button>)}</div>
-      <div className="flex rounded-md border p-0.5" role="group" aria-label="Sessions">{([["visible", "All I can see"], ["mine", "Only mine"]] as const).map(([value, label]) => <Button key={value} size="sm" variant={scope === value ? "secondary" : "ghost"} className="h-7" aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</Button>)}</div>
+      <div className="flex rounded-md border p-0.5" role="group" aria-label={tr("ui.time-range-22cd3c")}>{RANGES.map(r => <Button key={r} size="sm" variant={days === r ? "secondary" : "ghost"} className="h-7" aria-pressed={days === r} onClick={() => setDays(r)}>{r} {tr("ui.days-5548ae")}</Button>)}</div>
+      <div className="flex rounded-md border p-0.5" role="group" aria-label={tr("ui.sessions-e11e37")}>{([["visible", "All I can see"], ["mine", "Only mine"]] as const).map(([value, label]) => <Button key={value} size="sm" variant={scope === value ? "secondary" : "ghost"} className="h-7" aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</Button>)}</div>
     </div>
     {error && <p className="break-words text-sm text-destructive">{error}</p>}
     {!report && !error && <Loader2 className="mx-auto animate-spin" />}
@@ -102,13 +106,13 @@ export function UsagePanel({ onOpenSession }: { onOpenSession: (key: string, pat
         ["Context per call", t.calls ? compact(prompt(t) / t.calls) : "–", `output ${compact(t.calls ? t.output / t.calls : 0)} per call`],
         ["Cost at API prices", money(t.cost), t.reasoning ? `${compact(t.reasoning)} reasoning tokens` : `output ${compact(t.output)}`],
       ].map(([label, value, detail]) => <div key={label} className="grid min-w-0 gap-0.5 rounded-lg border p-3"><span className="text-xs text-muted-foreground">{label}</span><span className="break-all text-xl font-semibold tabular-nums">{value}</span><span className="truncate text-[11px] text-muted-foreground">{detail}</span></div>)}</div>
-      {t.calls === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">No model calls in this period.</p> : <>
+      {t.calls === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">{tr("ui.no-model-calls-in-this-period-3363d8")}</p> : <>
         <DailyChart days={report.days} />
-        <label className="flex min-w-0 items-center justify-between gap-2 text-xs sm:hidden">Table attribute<select aria-label="Table attribute" className="min-w-0 rounded-md border bg-background p-2" value={metric} onChange={e => setMetric(e.target.value as Metric)}>{Object.entries(metrics).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
-        <UsageTable title="By model" metric={metric} rows={report.models.map(m => ({ key: `${m.provider}/${m.model}`, name: m.model ?? "unknown", detail: m.provider, totals: m }))} />
-        <UsageTable title="Top sessions" metric={metric} onOpen={onOpenSession} rows={report.sessions.slice(0, 10).map(s => ({ key: s.key, name: s.name, detail: `/${s.path}`, path: s.path, totals: s }))} />
+        <label className="flex min-w-0 items-center justify-between gap-2 text-xs sm:hidden">{tr("ui.table-attribute-3c05cd")}<select aria-label={tr("ui.table-attribute-3c05cd")} className="min-w-0 rounded-md border bg-background p-2" value={metric} onChange={e => setMetric(e.target.value as Metric)}>{Object.entries(metrics).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
+        <UsageTable title={tr("ui.by-model-be76ac")} metric={metric} rows={report.models.map(m => ({ key: `${m.provider}/${m.model}`, name: m.model ?? "unknown", detail: m.provider, totals: m }))} />
+        <UsageTable title={tr("ui.top-sessions-2beaa6")} metric={metric} onOpen={onOpenSession} rows={report.sessions.slice(0, 10).map(s => ({ key: s.key, name: s.name, detail: `/${s.path}`, path: s.path, totals: s }))} />
       </>}
-      <p className="break-words text-[11px] text-muted-foreground">Counts every model call recorded in pi session files, including abandoned branches. Costs use the provider’s API list prices; on a subscription (such as ChatGPT for Codex) you are not billed per token.{report.untracked.length > 0 && ` Sessions of ${report.untracked.join(", ")} keep no per-call usage and are not included.`}</p>
+      <p className="break-words text-[11px] text-muted-foreground">{tr("ui.counts-every-model-call-recorded-in-57723d")}{report.untracked.length > 0 && ` Sessions of ${report.untracked.join(", ")} keep no per-call usage and are not included.`}</p>
     </>}
   </div>
 }

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Loader2, Share, Users } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -13,6 +14,7 @@ const refKey = (ref: ShareRef) => `${ref.kind}:${ref.id}`
  * server while the source (`from`) or a target's agent is running.
  */
 export function ForwardDialog({ text, from, onOpenChange }: { text?: string; from?: ShareRef; onOpenChange: (open: boolean) => void }) {
+  const { t: tr, language } = useLocale()
   const [targets, setTargets] = useState<ShareTarget[]>()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState(false)
@@ -57,12 +59,12 @@ export function ForwardDialog({ text, from, onOpenChange }: { text?: string; fro
     <Dialog open={open} onOpenChange={(o) => !sending && onOpenChange(o)}>
       <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Send to other sessions</DialogTitle>
-          <DialogDescription>The message is added to the end of each chosen session or chat. Where an agent is running, it waits until the agent has finished.</DialogDescription>
+          <DialogTitle>{tr("ui.send-to-other-sessions-408c5a")}</DialogTitle>
+          <DialogDescription>{tr("ui.the-message-is-added-to-the-end-of--180f62")}</DialogDescription>
         </DialogHeader>
         <div className="-mx-2 min-h-0 overflow-y-auto px-2">
           {!targets && <Loader2 className="mx-auto my-4 animate-spin text-muted-foreground" />}
-          {targets?.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No other sessions or chats you can write to.</p>}
+          {targets?.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">{tr("ui.no-other-sessions-or-chats-you-can--de79c2")}</p>}
           {targets && targets.length > 0 && (
             <ul className="grid gap-1">
               {targets.map((t) => (
@@ -71,14 +73,14 @@ export function ForwardDialog({ text, from, onOpenChange }: { text?: string; fro
                     <input type="checkbox" className="size-4 shrink-0 accent-primary" checked={selected.has(refKey(t))} onChange={() => toggle(refKey(t))} />
                     <span className="grid min-w-0 flex-1 gap-0.5">
                       <span className="flex min-w-0 items-center gap-1.5 text-sm">
-                        {t.kind === "chat" && <Users className="size-3.5 shrink-0 text-muted-foreground" aria-label="Chat" />}
+                        {t.kind === "chat" && <Users className="size-3.5 shrink-0 text-muted-foreground" aria-label={tr("ui.chat-2ced57")} />}
                         <span className="truncate">{t.title}</span>
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                        /{t.folder} · {timeAgo(t.updatedAt)}
+                        /{t.folder} · {timeAgo(t.updatedAt, language)}
                       </span>
                     </span>
-                    {t.running && <span className="flex shrink-0 items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"><Loader2 className="size-3 animate-spin" /> running</span>}
+                    {t.running && <span className="flex shrink-0 items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"><Loader2 className="size-3 animate-spin" /> {tr("ui.running-3c49d9")}</span>}
                   </label>
                 </li>
               ))}
@@ -87,10 +89,10 @@ export function ForwardDialog({ text, from, onOpenChange }: { text?: string; fro
         </div>
         <DialogFooter>
           <Button variant="outline" disabled={sending} onClick={() => onOpenChange(false)}>
-            Cancel
+            {tr("ui.cancel-77dfd2")}
           </Button>
           <Button disabled={sending || !selected.size} onClick={() => void share()}>
-            {sending ? <Loader2 className="animate-spin" /> : <Share />} Share{selected.size > 1 ? ` (${selected.size})` : ""}
+            {sending ? <Loader2 className="animate-spin" /> : <Share />} {tr("ui.share-09ca55")}{selected.size > 1 ? ` (${selected.size})` : ""}
           </Button>
         </DialogFooter>
       </DialogContent>

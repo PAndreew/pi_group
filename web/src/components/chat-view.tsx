@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils"
 
 
 function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; folder?: string; onWatch?: () => void; children?: React.ReactNode; actions?: React.ReactNode }) {
-  const { t } = useLocale()
+  const { t: tr } = useLocale()
   const text = messageText(m.message.content)
   const { state } = useSessionStream(m.sessionKey)
   const [details, setDetails] = useState<{ failed: boolean; index: number | null } | null>(null)
@@ -60,15 +60,15 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
       <PiAvatar />
       <div className="min-w-0 max-w-[85%]">
         <MessageHeader name="Beezy" at={m.status === "working" ? undefined : m.createdAt} edited={Boolean(m.editedAt)}>
-          <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label={t("message.openSteps")} title={t("message.openSteps")}><List className="size-4" /></button>
-          <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-300" title={t("message.allSteps")}>
-            {m.status === "working" ? <><Icon className="size-3.5" />{t("message.stepCount", { count: steps.length })}</> : t("message.stepTotal", { count: steps.length })}
+          <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label={tr("message.openSteps")} title={tr("message.openSteps")}><List className="size-4" /></button>
+          <button type="button" onClick={() => setDetails({ failed: false, index: null })} className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-300" title={tr("message.allSteps")}>
+            {m.status === "working" ? <><Icon className="size-3.5" />{tr("message.stepCount", { count: steps.length })}</> : tr("message.stepTotal", { count: steps.length })}
           </button>
-          <button type="button" onClick={() => setDetails({ failed: true, index: null })} className={failed.length ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300"} title={t("message.openFailedSteps")}>{t(working ? "message.failingCount" : "message.failedCount", { count: failed.length })}</button>
-          {m.status === "working" && <span className="running-shimmer">{t("message.running")}</span>}
+          <button type="button" onClick={() => setDetails({ failed: true, index: null })} className={failed.length ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300"} title={tr("message.openFailedSteps")}>{tr(working ? "message.failingCount" : "message.failedCount", { count: failed.length })}</button>
+          {m.status === "working" && <span className="running-shimmer">{tr("message.running")}</span>}
           {onWatch && (
             <button type="button" className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground" onClick={onWatch}>
-              {t(working ? "message.watch" : "message.session")} <ExternalLink className="size-3" />
+              {tr(working ? "message.watch" : "message.session")} <ExternalLink className="size-3" />
             </button>
           )}
         </MessageHeader>
@@ -76,10 +76,10 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
         <div className={cn("grid min-w-0 grid-cols-1 gap-1", !buzzing && "agent-message agent-bubble rounded-3xl px-4 py-2.5")}>
           {buzzing ? null : m.status === "error" ? (
             <span className="flex items-start gap-1.5 text-sm text-destructive">
-              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {text || t("message.runFailed")}
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {text || tr("message.runFailed")}
             </span>
           ) : m.status === "aborted" ? (
-            <span className="text-sm text-muted-foreground">{t("message.stopped")}</span>
+            <span className="text-sm text-muted-foreground">{tr("message.stopped")}</span>
           ) : (
             <Markdown text={partial ?? text} className="text-sm" base={folder} />
           )}
@@ -93,13 +93,13 @@ function PiMessage({ m, folder, onWatch, children, actions }: { m: ChatMessage; 
 }
 
 function HumanMessage({ m, own, folder }: { m: ChatMessage; own: boolean; folder?: string }) {
-  const { t } = useLocale()
+  const { t: tr } = useLocale()
   const author = m.message.author as { id: string; username: string } | undefined
   const text = messageText(m.message.content)
   return (
     <div className="flex items-start gap-2">
       {author ? <AuthorAvatar id={author.id} name={author.username} /> : <span className="size-8 shrink-0" />}
-      <ReplyStack text={text} className="max-w-[85%]" header={<MessageHeader name={author?.username ?? t("message.unknownAuthor")} at={m.createdAt} edited={Boolean(m.editedAt)} />}>
+      <ReplyStack text={text} className="max-w-[85%]" header={<MessageHeader name={author?.username ?? tr("message.unknownAuthor")} at={m.createdAt} edited={Boolean(m.editedAt)} />}>
         {(body) => (
           <div className="min-w-0">
             <div className={cn("human-bubble rounded-3xl px-4 py-2.5 text-sm", own ? "own-bubble bg-blue-50 text-black" : "bg-muted")}>
@@ -121,7 +121,7 @@ function mergeMessages(current: ChatMessage[] | undefined, incoming: ChatMessage
 
 /** A chat between people, with pi when someone mentions @pi. */
 export function ChatView({ chatId }: { chatId: string }) {
-  const { t } = useLocale()
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const { uploadFolder } = useProjects()
   const nav = useNav()
@@ -290,7 +290,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <ConversationHeader className="gap-2 px-2 py-1.5">
-        <Button variant="ghost" size="icon-sm" onClick={nav.home} aria-label="Back to chats">
+        <Button variant="ghost" size="icon-sm" onClick={nav.home} aria-label={tr("ui.back-to-chats-8de6f6")}>
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
@@ -307,7 +307,7 @@ export function ChatView({ chatId }: { chatId: string }) {
         {chat && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="Chat actions"><MoreVertical /></Button>
+              <Button variant="ghost" size="icon-sm" aria-label={tr("ui.chat-actions-c08e62")}><MoreVertical /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               {chat.sessionKey && <DropdownMenuItem onSelect={() => {
@@ -315,9 +315,9 @@ export function ChatView({ chatId }: { chatId: string }) {
                   setChat(current => current ? { ...current, title: name } : current)
                   toast.success("Title generated")
                 }).catch(error => toast.error(error.message))
-              }}><WandSparkles /> Generate title</DropdownMenuItem>}
-              {watch && <DropdownMenuItem onSelect={watch}><ExternalLink /> Open agent session</DropdownMenuItem>}
-              <DropdownMenuItem onSelect={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })}><FolderInput /> Move to project…</DropdownMenuItem>
+              }}><WandSparkles /> {tr("ui.generate-title-547a38")}</DropdownMenuItem>}
+              {watch && <DropdownMenuItem onSelect={watch}><ExternalLink /> {tr("ui.open-agent-session-3bdbc2")}</DropdownMenuItem>}
+              <DropdownMenuItem onSelect={() => setMoving({ kind: "chat", id: chat.id, title: chat.title, projectId: chat.projectId })}><FolderInput /> {tr("ui.move-to-project-34a4d0")}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -389,7 +389,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           onStop={piWorking && chat?.sessionKey ? () => { void api.abort(chat.sessionKey!).catch((error) => toast.error(error.message)) } : undefined}
           selfId={user?.id}
           hash="paths"
-          placeholder={t(editing ? "composer.edit" : "composer.chat")}
+          placeholder={tr(editing ? "composer.edit" : "composer.chat")}
           editing={Boolean(editing)}
           controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={parseMessage(text, []).pi || reply?.assistant === true} />}
           onFiles={(files) => void attach(files)}

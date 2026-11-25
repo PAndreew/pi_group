@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Camera, Globe, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -20,6 +21,7 @@ const iconButton = "composer-icon grid size-10 shrink-0 place-items-center round
  * reasoning level is set in Settings.
  */
 export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disabled, agentEnabled = true, draft, onDraftChange }: { agentEnabled?: boolean; sessionKey?: string; draft?: ComposerConfig; onDraftChange?: (config: ComposerConfig) => void; onCamera: (files: File[]) => void; onAttach?: () => void; browser?: BrowserToggle; disabled?: boolean }) {
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const { state: liveState } = useSessionStream(sessionKey)
   const state = sessionKey ? liveState : draft
@@ -73,7 +75,7 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
     <span ref={anchor} className="hidden" />
     {modelTarget && createPortal(<DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" aria-label="Current session model" className="max-w-full truncate px-2 py-1 text-xs text-foreground hover:text-foreground disabled:opacity-75" disabled={disabled || locked || busy || !models.length}>{modelLabel ?? "Model"}</button>
+        <button type="button" aria-label={tr("ui.current-session-model-f555c9")} className="max-w-full truncate px-2 py-1 text-xs text-foreground hover:text-foreground disabled:opacity-75" disabled={disabled || locked || busy || !models.length}>{modelLabel ?? "Model"}</button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="center" className="max-h-72 max-w-[90vw] overflow-y-auto">
         {models.map((m) => <DropdownMenuItem key={`${m.provider}/${m.id}`} className="whitespace-normal [overflow-wrap:anywhere]" onSelect={() => {
@@ -86,13 +88,13 @@ export function ComposerControls({ sessionKey, onCamera, onAttach, browser, disa
       </DropdownMenuContent>
     </DropdownMenu>, modelTarget)}
     <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { onCamera(Array.from(e.target.files ?? [])); e.target.value = "" }} />
-    <button type="button" disabled={disabled || !onAttach} className={iconButton} aria-label="Attach files" title="Attach files (or paste them)" onClick={onAttach}><Paperclip /></button>
-    <button type="button" disabled={disabled || !browser} className={iconButton} data-active={browser?.shown} aria-label="Shared browser" title={browser ? "Shared browser: open your app or any page, pick elements to reference" : "The shared browser opens in agent sessions"} onClick={browser?.toggle}>
+    <button type="button" disabled={disabled || !onAttach} className={iconButton} aria-label={tr("ui.attach-files-137135")} title={tr("ui.attach-files-or-paste-them-db43b2")} onClick={onAttach}><Paperclip /></button>
+    <button type="button" disabled={disabled || !browser} className={iconButton} data-active={browser?.shown} aria-label={tr("ui.shared-browser-faa48b")} title={browser ? "Shared browser: open your app or any page, pick elements to reference" : "The shared browser opens in agent sessions"} onClick={browser?.toggle}>
       <span className="relative">
         <Globe />
         {browser?.live && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-green-500" />}
       </span>
     </button>
-    <button type="button" disabled={disabled} className={iconButton} aria-label="Take photo" title="Take photo" onClick={() => camera.current?.click()}><Camera /></button>
+    <button type="button" disabled={disabled} className={iconButton} aria-label={tr("ui.take-photo-7ebd5d")} title={tr("ui.take-photo-7ebd5d")} onClick={() => camera.current?.click()}><Camera /></button>
   </>
 }

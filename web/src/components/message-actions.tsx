@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Clock, Copy, Pencil, Reply, Share, SmilePlus, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -38,10 +39,11 @@ export function MessageActions({
   deletePending?: boolean
   className?: string
 }) {
+  const { t: tr } = useLocale()
   return (
     <div className={cn("flex gap-1.5 pt-1", align === "end" ? "justify-end" : "justify-start", className)}>
       {onReply && (
-        <button type="button" className={cn(round, "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:text-sky-300")} onClick={onReply} aria-label="Reply to message" title="Reply">
+        <button type="button" className={cn(round, "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:text-sky-300")} onClick={onReply} aria-label={tr("ui.reply-to-message-4d9336")} title={tr("ui.reply-6c2bb7")}>
           <Reply />
         </button>
       )}
@@ -49,13 +51,13 @@ export function MessageActions({
         type="button"
         className={cn(round, "bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300")}
         onClick={() => copyText(copy).then(() => toast.success("Copied"), (error) => toast.error((error as Error).message))}
-        aria-label="Copy message"
-        title="Copy"
+        aria-label={tr("ui.copy-message-26902e")}
+        title={tr("ui.copy-af74f7")}
       >
         <Copy />
       </button>
       {(onEdit || editBlocked) && (
-        <button type="button" className={cn(round, "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300")} onClick={onEdit} disabled={Boolean(editBlocked)} aria-label="Edit message" title={editBlocked ?? "Edit"}>
+        <button type="button" className={cn(round, "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300")} onClick={onEdit} disabled={Boolean(editBlocked)} aria-label={tr("ui.edit-message-96116a")} title={editBlocked ?? "Edit"}>
           <Pencil />
         </button>
       )}
@@ -72,14 +74,14 @@ export function MessageActions({
         </button>
       )}
       {onShare && (
-        <button type="button" className={cn(round, "bg-violet-500/15 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300")} onClick={onShare} aria-label="Send to other sessions" title="Send to other sessions">
+        <button type="button" className={cn(round, "bg-violet-500/15 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300")} onClick={onShare} aria-label={tr("ui.send-to-other-sessions-408c5a")} title={tr("ui.send-to-other-sessions-408c5a")}>
           <Share />
         </button>
       )}
       {onReact && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={cn(round, "bg-pink-500/15 text-pink-700 hover:bg-pink-500/25 dark:text-pink-300")} aria-label="React with an emoji" title="React">
+            <button type="button" className={cn(round, "bg-pink-500/15 text-pink-700 hover:bg-pink-500/25 dark:text-pink-300")} aria-label={tr("ui.react-with-an-emoji-a5749f")} title={tr("ui.react-4d1f99")}>
               <SmilePlus />
             </button>
           </DropdownMenuTrigger>
@@ -124,14 +126,15 @@ export function Reactions({ reactions, selfId, names, align = "start", onReact }
 
 /** Shown above the composer while it holds a message being edited. */
 export function EditPreview({ text, onCancel }: { text: string; onCancel: () => void }) {
+  const { t: tr } = useLocale()
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-md border-l-2 border-amber-500 bg-muted p-2 text-xs" role="region" aria-label="Edit preview">
+    <div className="flex min-w-0 items-center gap-2 rounded-md border-l-2 border-amber-500 bg-muted p-2 text-xs" role="region" aria-label={tr("ui.edit-preview-ee77b4")}>
       <Pencil className="size-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
       <span className="min-w-0 flex-1">
-        <span className="block font-medium">Editing message</span>
+        <span className="block font-medium">{tr("ui.editing-message-a2baee")}</span>
         <span className="block truncate text-muted-foreground">{text}</span>
       </span>
-      <button type="button" className="grid size-9 shrink-0 place-items-center" aria-label="Cancel editing" onClick={onCancel}>
+      <button type="button" className="grid size-9 shrink-0 place-items-center" aria-label={tr("ui.cancel-editing-26bbc0")} onClick={onCancel}>
         <X className="size-4" />
       </button>
     </div>

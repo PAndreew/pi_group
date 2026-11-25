@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ChevronLeft, ChevronRight, ChevronUp, Loader2 } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { CodeBlock, languageFor } from "@/components/code-block"
@@ -58,6 +59,7 @@ function Diff({ oldText, newText }: { oldText?: string; newText?: string }) {
 }
 
 function StepBody({ step }: { step: Step }) {
+  const { t: tr } = useLocale()
   const args = step.toolCall?.arguments ?? {}
   const path: string | undefined = args.path ?? args.file_path ?? args.filePath
   const out = output(step)
@@ -66,7 +68,7 @@ function StepBody({ step }: { step: Step }) {
     step.status === "running" && !out ? (
       <Section title={title}>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> running…
+          <Loader2 className="size-4 animate-spin" /> {tr("ui.running-c85296")}
         </div>
       </Section>
     ) : (
@@ -86,28 +88,28 @@ function StepBody({ step }: { step: Step }) {
     case "bash":
       return (
         <div className="space-y-4">
-          <Section title="Command">
+          <Section title={tr("ui.command-890189")}>
             <CodeBlock code={String(args.command ?? step.toolCall?.partialArgs ?? "")} language="bash" wrap />
           </Section>
-          {args.timeout && <div className="text-xs text-muted-foreground">timeout: {args.timeout}s</div>}
+          {args.timeout && <div className="text-xs text-muted-foreground">{tr("ui.timeout-8008ae")} {args.timeout}s</div>}
           {outBlock()}
         </div>
       )
     case "read":
       return (
         <div className="space-y-4">
-          <Section title="File">
+          <Section title={tr("ui.file-2c3caf")}>
             <code className="text-sm break-all">{path}</code>
             {(args.offset || args.limit) && (
               <div className="text-xs text-muted-foreground">
-                lines {args.offset ?? 1}
+                {tr("ui.lines-8525aa")} {args.offset ?? 1}
                 {args.limit ? `–${(args.offset ?? 1) + args.limit - 1}` : "+"}
               </div>
             )}
           </Section>
           <ResultImages step={step} />
           {step.result && !isError ? (
-            <Section title="Content">
+            <Section title={tr("ui.content-4f9be0")}>
               <CodeBlock code={out} language={path ? languageFor(path) : undefined} />
             </Section>
           ) : (
@@ -119,7 +121,7 @@ function StepBody({ step }: { step: Step }) {
       const edits: { oldText?: string; newText?: string }[] = Array.isArray(args.edits) ? args.edits : [{ oldText: args.oldText ?? args.old_string, newText: args.newText ?? args.new_string }]
       return (
         <div className="space-y-4">
-          <Section title="File">
+          <Section title={tr("ui.file-2c3caf")}>
             <code className="text-sm break-all">{path}</code>
           </Section>
           <Section title={edits.length > 1 ? `${edits.length} changes` : "Change"}>
@@ -136,10 +138,10 @@ function StepBody({ step }: { step: Step }) {
     case "write":
       return (
         <div className="space-y-4">
-          <Section title="File">
+          <Section title={tr("ui.file-2c3caf")}>
             <code className="text-sm break-all">{path}</code>
           </Section>
-          <Section title="Content">
+          <Section title={tr("ui.content-4f9be0")}>
             <CodeBlock code={String(args.content ?? step.toolCall?.partialArgs ?? "")} language={path ? languageFor(path) : undefined} />
           </Section>
           {(step.result || step.status === "running") && outBlock("Result")}
@@ -160,6 +162,7 @@ function StepBody({ step }: { step: Step }) {
 
 /** One step expanded below the grid, with prev/next. */
 function StepDetail({ step, index, count, onIndex }: { step: Step; index: number; count: number; onIndex: (index: number | null) => void }) {
+  const { t: tr } = useLocale()
   const Icon = STEP_ICON[step.kind]
   const usage = step.message?.usage
   const subtitle = step.kind === "thinking" || step.kind === "text" ? (step.message?.model ? `${step.message.provider}/${step.message.model}` : "") : step.title
@@ -170,16 +173,16 @@ function StepDetail({ step, index, count, onIndex }: { step: Step; index: number
         <span className="shrink-0 text-sm font-medium">
           {step.index}. {step.kind === "tool" ? (step.toolCall?.name ?? "Tool") : STEP_LABEL[step.kind]}
         </span>
-        {step.status === "running" && <Badge variant="secondary">running</Badge>}
-        {step.status === "error" && <Badge variant="destructive">error</Badge>}
+        {step.status === "running" && <Badge variant="secondary">{tr("ui.running-3c49d9")}</Badge>}
+        {step.status === "error" && <Badge variant="destructive">{tr("ui.error-11f957")}</Badge>}
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{subtitle}</span>
-        <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous step">
+        <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label={tr("ui.previous-step-da5705")}>
           <ChevronLeft />
         </Button>
-        <Button variant="ghost" size="icon-sm" disabled={index === count - 1} onClick={() => onIndex(index + 1)} aria-label="Next step">
+        <Button variant="ghost" size="icon-sm" disabled={index === count - 1} onClick={() => onIndex(index + 1)} aria-label={tr("ui.next-step-5500ee")}>
           <ChevronRight />
         </Button>
-        <Button variant="ghost" size="icon-sm" onClick={() => onIndex(null)} aria-label="Collapse step">
+        <Button variant="ghost" size="icon-sm" onClick={() => onIndex(null)} aria-label={tr("ui.collapse-step-55c244")}>
           <ChevronUp />
         </Button>
       </div>
@@ -197,6 +200,7 @@ function StepDetail({ step, index, count, onIndex }: { step: Step; index: number
 
 /** All steps of a run as a grid; tapping one expands its details inside the modal. */
 export function StepsDialog({ steps, open, index, onIndex, onClose }: { steps: Step[]; open: boolean; index: number | null; onIndex: (index: number | null) => void; onClose: () => void }) {
+  const { t: tr } = useLocale()
   const detail = useRef<HTMLDivElement>(null)
   const step = index === null ? undefined : steps[index]
 
@@ -218,9 +222,9 @@ export function StepsDialog({ steps, open, index, onIndex, onClose }: { steps: S
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="flex max-h-[92dvh] flex-col gap-3 p-4 sm:max-w-3xl sm:p-5">
         <DialogHeader>
-          <DialogTitle className="text-base">Steps</DialogTitle>
+          <DialogTitle className="text-base">{tr("ui.steps-cdde4f")}</DialogTitle>
           <DialogDescription>
-            {steps.length} step{steps.length === 1 ? "" : "s"} in this run. Tap one to expand it.
+            {tr(steps.length === 1 ? "steps.descriptionOne" : "steps.descriptionMany", { count: steps.length })}
           </DialogDescription>
         </DialogHeader>
         <div className="scrollbar-thin -mx-1 min-h-0 flex-1 space-y-3 overflow-y-auto px-1 pb-1">

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ChevronDown, Clock, Cpu, FolderOpen, Gauge, Hammer, LayoutGrid, Library, MoreHorizontal, Server, SquareTerminal, Vault } from "lucide-react"
 import { lazy, Suspense, useState } from "react"
 import { AppletsDialog } from "@/components/applets-dialog"
@@ -37,6 +38,7 @@ export function ComposerTools({
   onInsert?: (text: string) => void
   placement?: "composer" | "sidebar"
 }) {
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const nav = useNav()
   const [panel, setPanel] = useState<Panel>()
@@ -66,25 +68,25 @@ export function ComposerTools({
   return (
     <>
       <div className="flex flex-col items-stretch gap-1">
-        {icon("links", "Links", <Library />)}
-        {icon("jobs", pendingJobs ? `Scheduled jobs (${pendingJobs} waiting for approval)` : "Scheduled jobs", dot(pendingJobs > 0, <Clock />))}
-        {icon("applets", pendingApplets ? `Applets (${pendingApplets} waiting for approval)` : "Applets", dot(pendingApplets > 0, <LayoutGrid />))}
+        {icon("links", tr("ui.links-014bcd"), <Library />)}
+        {icon("jobs", pendingJobs ? tr("tools.jobsPending", { count: pendingJobs }) : tr("ui.scheduled-jobs-3fea94"), dot(pendingJobs > 0, <Clock />))}
+        {icon("applets", pendingApplets ? tr("tools.appletsPending", { count: pendingApplets }) : tr("ui.applets-29dfcc"), dot(pendingApplets > 0, <LayoutGrid />))}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-auto min-h-10 w-full justify-start gap-3 px-3 py-2 text-left font-normal [&_svg]:size-4" aria-label="More">
+            <Button variant="ghost" className="h-auto min-h-10 w-full justify-start gap-3 px-3 py-2 text-left font-normal [&_svg]:size-4" aria-label={tr("ui.more-4bab2d")}>
               <MoreHorizontal />
-              <span className="flex-1">More</span>
+              <span className="flex-1">{tr("ui.more-4bab2d")}</span>
               <ChevronDown className="text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
-            {user?.role === "admin" && item("terminal", "Terminal", <SquareTerminal />)}
-            {item("tools", "Tools, skills, commands & MCP", <Hammer />)}
-            {item("monitor", "Resource monitor", <Gauge />)}
-            {item("explorer", "Folders and files", <FolderOpen />)}
-            {item("machines", "Remote machines", <Server />)}
-            {item("vault", "Secret vault", <Vault />)}
-            {item("models", "Model settings", <Cpu />)}
+            {user?.role === "admin" && item("terminal", tr("tools.terminal"), <SquareTerminal />)}
+            {item("tools", tr("tools.tools"), <Hammer />)}
+            {item("monitor", tr("tools.monitor"), <Gauge />)}
+            {item("explorer", tr("tools.explorer"), <FolderOpen />)}
+            {item("machines", tr("tools.machines"), <Server />)}
+            {item("vault", tr("tools.vault"), <Vault />)}
+            {item("models", tr("tools.models"), <Cpu />)}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

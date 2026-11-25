@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { KeyRound, Trash2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, type Role, type User } from "@/lib/api"
 
 export function UsersDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const { user: me } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [username, setUsername] = useState("")
@@ -35,8 +37,8 @@ export function UsersDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Users</DialogTitle>
-          <DialogDescription>Everyone here can browse files and start sessions; sessions stay private unless shared.</DialogDescription>
+          <DialogTitle>{tr("ui.users-57f2b1")}</DialogTitle>
+          <DialogDescription>{tr("ui.everyone-here-can-browse-files-and--4e8eda")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-1">
           {users.map((u) => (
@@ -47,8 +49,8 @@ export function UsersDialog({ open, onOpenChange }: { open: boolean; onOpenChang
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">member</SelectItem>
-                  <SelectItem value="admin">admin</SelectItem>
+                  <SelectItem value="member">{tr("ui.member-6467ba")}</SelectItem>
+                  <SelectItem value="admin">{tr("ui.admin-d033e2")}</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -86,21 +88,21 @@ export function UsersDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           }}
         >
           <div className="flex items-center justify-between text-sm font-medium">
-            Add user <Badge variant="outline">min. 8 char password</Badge>
+            {tr("ui.add-user-f347a8")} <Badge variant="outline">{tr("ui.min-8-char-password-dc53a0")}</Badge>
           </div>
-          <Input placeholder="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          <Input placeholder="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+          <Input placeholder={tr("ui.username-249ba3")} autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          <Input placeholder={tr("ui.password-5baa61")} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
           <div className="flex gap-2">
             <Select value={role} onValueChange={(r) => setRole(r as Role)}>
               <SelectTrigger className="flex-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="member">member</SelectItem>
-                <SelectItem value="admin">admin</SelectItem>
+                <SelectItem value="member">{tr("ui.member-6467ba")}</SelectItem>
+                <SelectItem value="admin">{tr("ui.admin-d033e2")}</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="submit">Add</Button>
+            <Button type="submit">{tr("ui.add-61cc55")}</Button>
           </div>
         </form>
       </DialogContent>
@@ -109,13 +111,14 @@ export function UsersDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 }
 
 export function PasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
+          <DialogTitle>{tr("ui.change-password-8c6842")}</DialogTitle>
         </DialogHeader>
         <form
           className="grid gap-3"
@@ -132,9 +135,9 @@ export function PasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             }
           }}
         >
-          <Input type="password" placeholder="current password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-          <Input type="password" placeholder="new password (min. 8)" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={8} />
-          <Button type="submit">Change</Button>
+          <Input type="password" placeholder={tr("ui.current-password-959abc")} autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+          <Input type="password" placeholder={tr("ui.new-password-min-8-de2cd1")} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={8} />
+          <Button type="submit">{tr("ui.change-64fbd9")}</Button>
         </form>
       </DialogContent>
     </Dialog>

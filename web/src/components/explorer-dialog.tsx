@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { useEffect, useState } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -11,6 +12,7 @@ export type ExplorerState = { open: boolean; folder: string; query: string }
  * live with the app, so it reopens where it was after a file opened from it is closed.
  */
 export function ExplorerDialog({ state, onChange, onFile }: { state: ExplorerState; onChange: (state: ExplorerState) => void; onFile: (path: string) => void }) {
+  const { t: tr } = useLocale()
   const nav = useNav()
   const [rootName, setRootName] = useState("root")
   const [version, setVersion] = useState(0)
@@ -28,8 +30,8 @@ export function ExplorerDialog({ state, onChange, onFile }: { state: ExplorerSta
   return (
     <Dialog open={open} onOpenChange={(open) => onChange({ ...state, open })}>
       <DialogContent className="flex h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
-        <DialogTitle className="sr-only">Folders</DialogTitle>
-        <DialogDescription className="sr-only">Folders, files and the sessions in each folder</DialogDescription>
+        <DialogTitle className="sr-only">{tr("ui.folders-19adc4")}</DialogTitle>
+        <DialogDescription className="sr-only">{tr("ui.folders-files-and-the-sessions-in-e-f06eaa")}</DialogDescription>
         <div className="min-h-0 flex-1 pt-6">
           <Sidebar
             rootName={rootName}

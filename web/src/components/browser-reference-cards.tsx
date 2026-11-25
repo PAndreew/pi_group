@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ChevronRight, ExternalLink, ImageIcon } from "lucide-react"
 import { SiteIcon } from "@/components/site-icon"
 import { api } from "@/lib/api"
@@ -11,9 +12,10 @@ function webUrl(value: string) {
 }
 
 export function BrowserReferenceCards({ pages, screenshots }: { pages: ReferencePage[]; screenshots: Map<string, string> }) {
+  const { t: tr } = useLocale()
   if (!pages.length) return null
   return (
-    <div aria-label="Browser references" className="mt-1.5 grid min-w-0 gap-1.5">
+    <div aria-label={tr("ui.browser-references-f60523")} className="mt-1.5 grid min-w-0 gap-1.5">
       {pages.map((page) => {
         const url = webUrl(page.url)
         const name = page.title || url?.host || page.url
@@ -37,12 +39,12 @@ export function BrowserReferenceCards({ pages, screenshots }: { pages: Reference
                   <div className="mt-0.5 flex flex-wrap items-start gap-x-3 text-xs">
                     {path && (
                       <a href={api.rawUrl(path)} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-6 items-center gap-1 underline underline-offset-2">
-                        <ImageIcon aria-hidden="true" className="size-3" /> View screenshot
+                        <ImageIcon aria-hidden="true" className="size-3" /> {tr("ui.view-screenshot-21d168")}
                       </a>
                     )}
                     <details className="group min-w-0">
                       <summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-0.5 opacity-80 hover:opacity-100 [&::-webkit-details-marker]:hidden">
-                        <ChevronRight aria-hidden="true" className="size-3 group-open:rotate-90" /> Details
+                        <ChevronRight aria-hidden="true" className="size-3 group-open:rotate-90" /> {tr("ui.details-dc3dec")}
                       </summary>
                       <ul className="grid gap-1 pb-1 pl-1">
                         {pick.elements.map((element, i) => (

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Crosshair, Loader2, MessageCircle, Send, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Markdown } from "@/components/markdown"
@@ -38,6 +39,7 @@ export function BrowserAsk({
   replies: BrowserAnswer[]
   folder?: string
 }) {
+  const { t: tr } = useLocale()
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
   const [expanded, setExpanded] = useState<string | null>("latest")
@@ -73,24 +75,24 @@ export function BrowserAsk({
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-20 z-10 flex flex-col items-center gap-2 px-3">
       {answer && (
-        <section aria-label="Browser answer" className="pointer-events-auto flex max-h-[40vh] min-h-0 w-full max-w-xl flex-col rounded-2xl border bg-background shadow-lg">
+        <section aria-label={tr("ui.browser-answer-7c8e07")} className="pointer-events-auto flex max-h-[40vh] min-h-0 w-full max-w-xl flex-col rounded-2xl border bg-background shadow-lg">
           <div className="flex items-center gap-2 px-3.5 pt-2 text-xs">
             <span className="font-semibold text-gray-500 dark:text-gray-300">Beezy</span>
-            {answer.running && <span className="running-shimmer">Running…</span>}
-            <button type="button" onClick={() => setExpanded(null)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Collapse answer" title="Collapse answer">
+            {answer.running && <span className="running-shimmer">{tr("ui.running-7ef25a")}</span>}
+            <button type="button" onClick={() => setExpanded(null)} className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={tr("ui.collapse-answer-4e618f")} title={tr("ui.collapse-answer-4e618f")}>
               <X className="size-4" />
             </button>
           </div>
           <div ref={body} className="min-h-0 overflow-y-auto px-3.5 pb-2 text-sm">
             <p className="mb-2 whitespace-pre-wrap break-words text-muted-foreground">{answer.question}</p>
-            {answer.text ? <Markdown text={answer.text} base={folder} /> : answer.running ? <Loader2 className="my-1 size-4 animate-spin text-muted-foreground" /> : !answer.error && <p>No text reply.</p>}
+            {answer.text ? <Markdown text={answer.text} base={folder} /> : answer.running ? <Loader2 className="my-1 size-4 animate-spin text-muted-foreground" /> : !answer.error && <p>{tr("ui.no-text-reply-9288b8")}</p>}
             {answer.error && <p className="text-destructive">{answer.error}</p>}
             {!answer.running && <MessageTime at={answer.at} className="mt-1 block text-right" />}
           </div>
         </section>
       )}
       {replies.length > 0 && (
-        <div aria-label="Browser conversation history" role="group" className="pointer-events-auto flex max-w-full gap-1.5 overflow-x-auto rounded-full bg-background/95 p-1 shadow">
+        <div aria-label={tr("ui.browser-conversation-history-51085c")} role="group" className="pointer-events-auto flex max-w-full gap-1.5 overflow-x-auto rounded-full bg-background/95 p-1 shadow">
           {replies.map((reply, index) => (
             <Button key={reply.id} type="button" size="icon-sm" variant={answer?.id === reply.id ? "default" : "outline"} className="shrink-0 rounded-full" aria-expanded={answer?.id === reply.id} aria-label={`Question ${index + 1}: ${reply.question.slice(0, 100)}`} title={reply.question.slice(0, 100)} onClick={() => setExpanded(answer?.id === reply.id ? null : reply.id)}>
               {index + 1}
@@ -98,7 +100,7 @@ export function BrowserAsk({
           ))}
         </div>
       )}
-      {open && quote && <div className="pointer-events-auto flex w-full max-w-lg items-start gap-2 rounded-lg bg-background p-2 text-sm shadow"><blockquote className="line-clamp-3 min-w-0 flex-1 break-words">{quote}</blockquote><Button type="button" size="icon-sm" variant="ghost" onClick={onRemoveQuote} aria-label="Remove selected text"><X /></Button></div>}
+      {open && quote && <div className="pointer-events-auto flex w-full max-w-lg items-start gap-2 rounded-lg bg-background p-2 text-sm shadow"><blockquote className="line-clamp-3 min-w-0 flex-1 break-words">{quote}</blockquote><Button type="button" size="icon-sm" variant="ghost" onClick={onRemoveQuote} aria-label={tr("ui.remove-selected-text-5bb410")}><X /></Button></div>}
       {open ? (
         <form
           className="pointer-events-auto w-full max-w-xl rounded-2xl border bg-background p-2 shadow-lg"
@@ -116,7 +118,7 @@ export function BrowserAsk({
                 <span key={ref.id} className="flex max-w-full items-center gap-1 rounded-full bg-sky-500/10 py-0.5 pr-1 pl-2 text-xs text-sky-700 dark:text-sky-300">
                   <Crosshair className="size-3 shrink-0" />
                   <span className="truncate">{refLabel(ref)}</span>
-                  <button type="button" onClick={() => onRemovePick(ref.id)} className="rounded-full p-0.5 hover:bg-sky-500/20" aria-label="Remove pick">
+                  <button type="button" onClick={() => onRemovePick(ref.id)} className="rounded-full p-0.5 hover:bg-sky-500/20" aria-label={tr("ui.remove-pick-7d041a")}>
                     <X className="size-3" />
                   </button>
                 </span>
@@ -137,9 +139,9 @@ export function BrowserAsk({
               rows={1}
               placeholder={picks.length ? "Ask about the picked elements" : latest ? "Ask a follow-up…" : "Ask about this page (pick elements with ⌖)"}
               className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none [field-sizing:content]"
-              aria-label="Ask about this page"
+              aria-label={tr("ui.ask-about-this-page-fd49bd")}
             />
-            <Button type="submit" size="icon" className="size-9 shrink-0 rounded-full" disabled={Boolean(disabled) || sending || (!text.trim() && !picks.length && !quote)} title={disabled ?? "Send"} aria-label="Send">
+            <Button type="submit" size="icon" className="size-9 shrink-0 rounded-full" disabled={Boolean(disabled) || sending || (!text.trim() && !picks.length && !quote)} title={disabled ?? "Send"} aria-label={tr("ui.send-9bc257")}>
               {sending ? <Loader2 className="animate-spin" /> : <Send />}
             </Button>
           </div>
@@ -150,8 +152,8 @@ export function BrowserAsk({
           size="icon"
           className={cn("pointer-events-auto size-11 rounded-full shadow-lg", picks.length > 0 && "ring-2 ring-sky-500")}
           onClick={() => onOpenChange(true)}
-          aria-label="Ask about this page"
-          title="Ask about this page"
+          aria-label={tr("ui.ask-about-this-page-fd49bd")}
+          title={tr("ui.ask-about-this-page-fd49bd")}
         >
           <MessageCircle className="size-5" />
         </Button>

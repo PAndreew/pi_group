@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { FileIcon } from "@react-symbols/icons/utils"
 import { Folder, Library, Loader2, Search } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
@@ -36,6 +37,7 @@ function Section({ title, children, count }: { title: string; children: ReactNod
  * conversations (which the home page already lists). Folders are listed, not their contents; links are only those someone gave.
  */
 export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const nav = useNav()
   const { active: project } = useProjects()
   const [query, setQuery] = useState("")
@@ -67,24 +69,24 @@ export function LinksDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85dvh] min-w-0 flex-col sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Library className="size-4" /> Links{project ? ` · ${project.name}` : ""}</DialogTitle>
-          <DialogDescription>This project's folders, and the files and web pages mentioned in its conversations.</DialogDescription>
+          <DialogTitle className="flex items-center gap-2"><Library className="size-4" /> {tr("ui.links-014bcd")}{project ? ` · ${project.name}` : ""}</DialogTitle>
+          <DialogDescription>{tr("ui.this-project-s-folders-and-the-file-278b2d")}</DialogDescription>
         </DialogHeader>
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input autoFocus className="pl-8" placeholder="Search links" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search links" />
+          <Input autoFocus className="pl-8" placeholder={tr("ui.search-links-0db4c3")} value={query} onChange={e => setQuery(e.target.value)} aria-label={tr("ui.search-links-0db4c3")} />
         </div>
         <div className="-mx-2 grid min-h-0 min-w-0 grid-cols-1 content-start gap-3 overflow-y-auto px-2">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {loading && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
           {empty && <p className="py-6 text-center text-sm text-muted-foreground">{needle ? "Nothing matches." : "No links yet."}</p>}
-          <Section title="Folders" count={shownFolders.length}>
+          <Section title={tr("ui.folders-19adc4")} count={shownFolders.length}>
             {shownFolders.map(f => <Row key={f} icon={<Folder className="size-4" />} title={base(f)} detail={f === project?.folder ? `${f} · project folder` : f} onClick={go(() => nav.openExplorer(f))} />)}
           </Section>
-          <Section title="Files" count={files.length}>
+          <Section title={tr("ui.files-6ce6c5")} count={files.length}>
             {files.map(l => <Row key={l.target} icon={<FileIcon fileName={base(l.target)} autoAssign width={16} height={16} aria-hidden="true" />} title={l.label && l.label !== base(l.target) ? `${l.label} — ${base(l.target)}` : base(l.target)} detail={`${l.target} · ${from(l)}`} onClick={go(() => nav.openFile(l.target))} />)}
           </Section>
-          <Section title="Web" count={web.length}>
+          <Section title={tr("ui.web-a8323a")} count={web.length}>
             {web.map(l => <Row key={l.target} icon={<SiteIcon href={l.target} />} title={l.label ?? l.target.replace(/^https?:\/\//, "")} detail={`${host(l.target)} · ${from(l)}`} href={l.target} />)}
           </Section>
         </div>

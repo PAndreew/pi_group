@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Globe, Lock } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -20,6 +21,7 @@ export function ShareDialog({
   onOpenChange: (open: boolean) => void
   onSaved: (session: SessionSummary) => void
 }) {
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const [users, setUsers] = useState<{ id: string; username: string }[]>([])
   const [shared, setShared] = useState(session.visibility === "shared")
@@ -66,16 +68,16 @@ export function ShareDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Session access</DialogTitle>
-          <DialogDescription>Owner: {session.owner ?? "nobody (started outside the app; admins only)"}</DialogDescription>
+          <DialogTitle>{tr("ui.session-access-da8e48")}</DialogTitle>
+          <DialogDescription>{tr("ui.owner-719379")} {session.owner ?? "nobody (started outside the app; admins only)"}</DialogDescription>
         </DialogHeader>
 
         {user?.role === "admin" && (
           <div className="flex items-center justify-between gap-3">
-            <Label>Owner</Label>
+            <Label>{tr("ui.owner-89ff31")}</Label>
             <Select value={users.find((u) => u.username === session.owner)?.id} onValueChange={claim}>
               <SelectTrigger size="sm" className="w-44">
-                <SelectValue placeholder="Assign owner" />
+                <SelectValue placeholder={tr("ui.assign-owner-f9220f")} />
               </SelectTrigger>
               <SelectContent>
                 {users.map((u) => (
@@ -98,7 +100,7 @@ export function ShareDialog({
 
         {shared && (
           <div className="max-h-72 space-y-1 overflow-y-auto">
-            {others.length === 0 && <p className="text-sm text-muted-foreground">No other users yet. Admins can add users.</p>}
+            {others.length === 0 && <p className="text-sm text-muted-foreground">{tr("ui.no-other-users-yet-admins-can-add-u-53a3dc")}</p>}
             {others.map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-3 rounded-md px-1 py-1">
                 <span className="truncate text-sm">{u.username}</span>
@@ -107,9 +109,9 @@ export function ShareDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No access</SelectItem>
-                    <SelectItem value="read">Can view</SelectItem>
-                    <SelectItem value="write">Can prompt</SelectItem>
+                    <SelectItem value="none">{tr("ui.no-access-63bde5")}</SelectItem>
+                    <SelectItem value="read">{tr("ui.can-view-1b3e40")}</SelectItem>
+                    <SelectItem value="write">{tr("ui.can-prompt-e8efdb")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -119,10 +121,10 @@ export function ShareDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tr("ui.cancel-77dfd2")}
           </Button>
           <Button onClick={save} disabled={saving}>
-            Save
+            {tr("ui.save-efc007")}
           </Button>
         </DialogFooter>
       </DialogContent>

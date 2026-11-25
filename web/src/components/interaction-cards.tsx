@@ -1,9 +1,11 @@
+import { useLocale } from "@/lib/i18n"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { api, type Interaction } from "@/lib/api"
 
 function InteractionCard({ card, canWrite, onResolved }: { card: Interaction; canWrite: boolean; onResolved: (card: Interaction) => void }) {
+  const { t: tr } = useLocale()
   const [selected, setSelected] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const pending = card.status === "pending"
@@ -39,8 +41,8 @@ function InteractionCard({ card, canWrite, onResolved }: { card: Interaction; ca
       </fieldset>
       {pending ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="mr-auto text-xs text-muted-foreground">Awaiting user input</span>
-          {canWrite && <><Button variant="ghost" size="sm" disabled={busy} onClick={() => void answer(true)}>Cancel</Button><Button size="sm" disabled={busy || !selected.length} onClick={() => void answer()}>{busy ? "Submitting…" : card.spec.submitLabel ?? "Continue"}</Button></>}
+          <span className="mr-auto text-xs text-muted-foreground">{tr("ui.awaiting-user-input-b1d74a")}</span>
+          {canWrite && <><Button variant="ghost" size="sm" disabled={busy} onClick={() => void answer(true)}>{tr("ui.cancel-77dfd2")}</Button><Button size="sm" disabled={busy || !selected.length} onClick={() => void answer()}>{busy ? "Submitting…" : card.spec.submitLabel ?? "Continue"}</Button></>}
         </div>
       ) : <p className="mt-3 text-xs text-muted-foreground">{card.status === "answered" ? `Answered by ${card.respondent?.username ?? "a participant"}` : card.status === "cancelled" ? `Cancelled by ${card.respondent?.username ?? "a participant"}` : "Expired — the agent is no longer waiting. Ask it to offer these choices again."}</p>}
     </section>

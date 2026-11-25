@@ -26,16 +26,27 @@ export function formatBytes(bytes: number) {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`
 }
 
-export function timeAgo(input: string | number) {
+export function timeAgo(input: string | number, language = "en") {
   const then = typeof input === "number" ? input : Date.parse(input)
   const seconds = Math.round((Date.now() - then) / 1000)
   if (!Number.isFinite(seconds)) return ""
-  if (seconds < 60) return "just now"
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(then).toLocaleDateString()
+  if (language === "en") {
+    if (seconds < 60) return "just now"
+    const minutes = Math.round(seconds / 60)
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.round(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.round(hours / 24)
+    if (days < 30) return `${days}d ago`
+  } else {
+    const relative = new Intl.RelativeTimeFormat(language, { numeric: "auto", style: "short" })
+    if (seconds < 60) return relative.format(0, "second")
+    const minutes = Math.round(seconds / 60)
+    if (minutes < 60) return relative.format(-minutes, "minute")
+    const hours = Math.round(minutes / 60)
+    if (hours < 24) return relative.format(-hours, "hour")
+    const days = Math.round(hours / 24)
+    if (days < 30) return relative.format(-days, "day")
+  }
+  return new Date(then).toLocaleDateString(language)
 }

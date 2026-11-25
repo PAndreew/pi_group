@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
@@ -36,6 +37,7 @@ type Status = { state: "connecting" | "open" } | { state: "closed"; reason: stri
 
 /** A shell on the server in the session's folder; closing the dialog ends it. Loaded on demand. */
 export default function TerminalDialog({ sessionKey, path, title, open, onOpenChange }: { sessionKey?: string; path?: string; title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const [host, setHost] = useState<HTMLDivElement | null>(null)
   const [status, setStatus] = useState<Status>({ state: "connecting" })
   const [ctrl, setCtrl] = useState(false)
@@ -140,19 +142,19 @@ export default function TerminalDialog({ sessionKey, path, title, open, onOpenCh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent style={viewport ? { top: viewport.top + viewport.height / 2, height: Math.max(0, viewport.height - 16), maxHeight: Math.max(0, viewport.height - 16) } : undefined} className="flex h-[85dvh] min-h-0 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden p-3 sm:max-w-4xl sm:p-4">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="text-base">Terminal</DialogTitle>
+          <DialogTitle className="text-base">{tr("ui.terminal-a1f52c")}</DialogTitle>
           <DialogDescription className="flex items-center gap-2 text-xs">
             <span className={cn("inline-block size-1.5 rounded-full", status.state === "open" ? "bg-green-500" : status.state === "connecting" ? "animate-pulse bg-amber-500" : "bg-muted-foreground/40")} />
             <span className="truncate">{status.state === "closed" ? status.reason : status.state === "open" ? title : "Connecting…"}</span>
             {status.state === "closed" && (
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAttempt((a) => a + 1)}>
-                <RotateCw /> Reconnect
+                <RotateCw /> {tr("ui.reconnect-6988b1")}
               </Button>
             )}
           </DialogDescription>
         </DialogHeader>
         <div ref={setHost} className="mb-36 min-h-0 flex-1 overflow-hidden rounded-md border bg-white p-1 dark:bg-[#0a0a0a]" />
-        <div className="absolute right-3 bottom-3 left-3 grid h-36 min-w-0 auto-rows-fr grid-cols-8 gap-1 rounded-lg bg-neutral-100 p-2 shadow-lg dark:bg-neutral-900 sm:right-4 sm:bottom-4 sm:left-4" role="group" aria-label="Terminal keyboard">
+        <div className="absolute right-3 bottom-3 left-3 grid h-36 min-w-0 auto-rows-fr grid-cols-8 gap-1 rounded-lg bg-neutral-100 p-2 shadow-lg dark:bg-neutral-900 sm:right-4 sm:bottom-4 sm:left-4" role="group" aria-label={tr("ui.terminal-keyboard-c2640a")}>
           {KEYS.map((key) => (
             <Button
               key={key.label}

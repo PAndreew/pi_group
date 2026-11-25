@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { File, Folder, Trash2, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
@@ -111,6 +112,7 @@ export function MentionComposer({
   /** Files or images pasted into the box. */
   onFiles?: (files: File[]) => void
 }) {
+  const { t: tr } = useLocale()
   const [editingFolder, setEditingFolder] = useState(false)
   useEffect(() => { if (!rawValue) setEditingFolder(false) }, [rawValue])
   // Backspacing a pill unwraps it into ordinary text until another folder is picked.
@@ -281,7 +283,7 @@ export function MentionComposer({
     >
       {open && (
         <div data-suggestions className="absolute bottom-full left-0 z-[100] mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md" style={token?.trigger === "@" ? { maxHeight: "clamp(5rem, calc(var(--app-height, 100dvh) - 9rem), 16rem)" } : undefined} onPointerDown={(e) => e.preventDefault()}>
-        <div className="flex shrink-0 justify-end px-1 pt-1"><button type="button" aria-label="Dismiss suggestions" className="rounded p-1.5 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></div>
+        <div className="flex shrink-0 justify-end px-1 pt-1"><button type="button" aria-label={tr("ui.dismiss-suggestions-ce900c")} className="rounded p-1.5 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></div>
         {/* Rows scrolled past the edges fade out, like the chat list. */}
         <ul className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2" role="listbox">
           {suggestions.map((s, i) => (
@@ -295,7 +297,7 @@ export function MentionComposer({
               >
                 {s.kind === "pi" && (
                   <>
-                    <PiAvatar small /> <span className="font-medium">Beezy</span> <span className="text-xs text-muted-foreground">coding agent</span>
+                    <PiAvatar small /> <span className="font-medium">Beezy</span> <span className="text-xs text-muted-foreground">{tr("ui.coding-agent-23d4a5")}</span>
                   </>
                 )}
                 {s.kind === "person" && (

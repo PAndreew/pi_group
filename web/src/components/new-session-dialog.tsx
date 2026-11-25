@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -23,6 +24,7 @@ export function NewSessionDialog({
   onOpenChange: (open: boolean) => void
   onCreated: (session: SessionSummary) => void
 }) {
+  const { t: tr } = useLocale()
   const { user, saveDefaults } = useAuth()
   const defaults = user?.sessionDefaults
   const [harnesses, setHarnesses] = useState<Harness[]>([])
@@ -84,16 +86,16 @@ export function NewSessionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="grid-cols-[minmax(0,1fr)]">
         <DialogHeader>
-          <DialogTitle>New session</DialogTitle>
-          <DialogDescription className="min-w-0 break-words">in /{folder}</DialogDescription>
+          <DialogTitle>{tr("ui.new-session-5c881d")}</DialogTitle>
+          <DialogDescription className="min-w-0 break-words">{tr("ui.in-a7f713")}{folder}</DialogDescription>
         </DialogHeader>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={memoryPrivate} onChange={e => setMemoryPrivate(e.target.checked)} />Private session — reads public memory but never contributes</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={memoryPrivate} onChange={e => setMemoryPrivate(e.target.checked)} />{tr("ui.private-session-reads-public-memory-f661d7")}</label>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-            <Label>Runtime</Label>
+            <Label>{tr("ui.runtime-c4740e")}</Label>
             <Select value={harness} onValueChange={setHarness}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Runtime" />
+                <SelectValue placeholder={tr("ui.runtime-c4740e")} />
               </SelectTrigger>
               <SelectContent>
                 {harnesses.map((h) => (
@@ -108,15 +110,15 @@ export function NewSessionDialog({
             {selected && <p className="text-xs text-muted-foreground">{selected.ok ? selected.description : selected.reason}</p>}
           </div>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-            <Label>Model</Label>
+            <Label>{tr("ui.model-68c2cc")}</Label>
             {loadingModels ? <Loader2 className="size-4 animate-spin" /> : <ModelPicker models={models} value={model} onChange={setModel} />}
           </div>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-            <Label>Reasoning</Label>
+            <Label>{tr("ui.reasoning-e272c5")}</Label>
             <ThinkingPicker value={thinking} onChange={setThinking} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="session-name">Name (optional)</Label>
+            <Label htmlFor="session-name">{tr("ui.name-optional-9c9f03")}</Label>
             <Input id="session-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. refactor auth" />
           </div>
           <Button variant="outline" disabled={!harness || !model || !thinking || loadingModels} onClick={async () => {
@@ -124,15 +126,15 @@ export function NewSessionDialog({
               await saveDefaults({ harness: harness!, model: model!, thinkingLevel: thinking! })
               toast.success("Saved to your settings")
             } catch (error) { toast.error((error as Error).message) }
-          }}>Save to my settings</Button>
-          <p className="text-xs text-muted-foreground">New sessions are private. Share them from the session menu.</p>
+          }}>{tr("ui.save-to-my-settings-694eab")}</Button>
+          <p className="text-xs text-muted-foreground">{tr("ui.new-sessions-are-private-share-them-84ea28")}</p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tr("ui.cancel-77dfd2")}
           </Button>
           <Button onClick={create} disabled={!harness || creating || loadingModels}>
-            {creating && <Loader2 className="animate-spin" />} Create
+            {creating && <Loader2 className="animate-spin" />} {tr("ui.create-6e157c")}
           </Button>
         </DialogFooter>
       </DialogContent>

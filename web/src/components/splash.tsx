@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { useEffect, useState } from "react"
 import { RotateCw } from "lucide-react"
 import { BeezyLogo } from "@/components/beezy-logo"
@@ -6,6 +7,7 @@ import type { Connection } from "@/hooks/use-auth"
 
 /** Shown while the app first reaches the server: a blinking bee and what is going on. */
 export function Splash({ connection, onRetry }: { connection: Connection; onRetry: () => void }) {
+  const { t: tr } = useLocale()
   const [now, setNow] = useState(Date.now)
   const [since] = useState(Date.now)
   useEffect(() => {
@@ -31,7 +33,7 @@ export function Splash({ connection, onRetry }: { connection: Connection; onRetr
       </div>
       {(offline || slow) && (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          <RotateCw /> Try now
+          <RotateCw /> {tr("ui.try-now-ae09ba")}
         </Button>
       )}
     </div>

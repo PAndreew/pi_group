@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Check, Folder, FolderKanban, Link2, Loader2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -39,6 +40,7 @@ function FolderSuggestions({ query, exclude = [], onPick }: { query: string; exc
 
 /** A new project (it gets a new folder of its own), or `project`'s name; either way, the existing folders linked to it. */
 function ProjectDialog({ project, open, onOpenChange }: { project?: Project; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const { reload, setActive } = useProjects()
   const [name, setName] = useState("")
   const [links, setLinks] = useState<string[]>([])
@@ -77,7 +79,7 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{project ? "Project settings" : "New project"}</DialogTitle>
-          <DialogDescription>Sessions and chats are grouped by project. New ones and everything uploaded go to its own folder; linked folders bring the sessions working in them along.</DialogDescription>
+          <DialogDescription>{tr("ui.sessions-and-chats-are-grouped-by-p-3f040e")}</DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4"
@@ -87,15 +89,15 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
           }}
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="project-name">Name</Label>
-            <Input id="project-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Holiday, school project, my app…" autoFocus={!project} />
+            <Label htmlFor="project-name">{tr("ui.name-709a23")}</Label>
+            <Input id="project-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={tr("ui.holiday-school-project-my-app-0c19bc")} autoFocus={!project} />
             <p className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
               <Folder className="size-3 shrink-0" />
               <span className="truncate">{project ? `/${project.folder}` : `New folder: /projects/${slug(name) || "…"}`}</span>
             </p>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="project-link">Linked folders</Label>
+            <Label htmlFor="project-link">{tr("ui.linked-folders-8f50b6")}</Label>
             {links.length > 0 && (
               <ul className="grid gap-1">
                 {links.map((l) => (
@@ -119,11 +121,11 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
                   e.preventDefault()
                   link(adding)
                 }}
-                placeholder="Search folders, e.g. a git repo"
+                placeholder={tr("ui.search-folders-e-g-a-git-repo-c1d172")}
                 className="font-mono text-sm"
               />
               <Button type="button" variant="outline" disabled={!adding.trim()} onClick={() => link(adding)}>
-                Link
+                {tr("ui.link-d05170")}
               </Button>
             </div>
             <FolderSuggestions query={adding} exclude={[...links, ...(project ? [project.folder] : [])]} onPick={link} />
@@ -140,6 +142,7 @@ function ProjectDialog({ project, open, onOpenChange }: { project?: Project; ope
 }
 
 function ShareProjectDialog({ project, onClose }: { project: Project; onClose: () => void }) {
+  const { t: tr } = useLocale()
   const { reload } = useProjects()
   const [users, setUsers] = useState<{ id: string; username: string }[]>([])
   const [members, setMembers] = useState(project.memberIds)
@@ -157,8 +160,8 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
   return <Dialog open onOpenChange={open => !open && onClose()}>
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
-        <DialogTitle>Share project with…</DialogTitle>
-        <DialogDescription>Share “{project.name}” and its linked folders. No sessions are shared automatically, including earlier sessions. Share conversations separately from their session menu.{project.openToTenant && " This project predates sharing and is currently open to everyone in the tenant. Saving limits it to you and the people selected."}</DialogDescription>
+        <DialogTitle>{tr("ui.share-project-with-ca3c69")}</DialogTitle>
+        <DialogDescription>{tr("project.shareDescription", { name: project.name })}{project.openToTenant && ` ${tr("project.legacySharing")}`}</DialogDescription>
       </DialogHeader>
       <div className="grid max-h-64 gap-2 overflow-y-auto">
         {users.map(user => <label key={user.id} className="flex items-center gap-2">
@@ -166,7 +169,7 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
           {user.username}
         </label>)}
       </div>
-      <DialogFooter><Button disabled={busy} onClick={() => void save()}>Save sharing</Button></DialogFooter>
+      <DialogFooter><Button disabled={busy} onClick={() => void save()}>{tr("ui.save-sharing-2bc976")}</Button></DialogFooter>
     </DialogContent>
   </Dialog>
 }
@@ -176,6 +179,7 @@ function ShareProjectDialog({ project, onClose }: { project: Project; onClose: (
  * one, the chat search (`onSearch`), and the active project's sharing, rename and delete.
  */
 export function ProjectSwitcher({ className, onSelect, onSearch }: { className?: string; onSelect?: () => void; onSearch?: () => void }) {
+  const { t: tr } = useLocale()
   const { projects, active, setActive, reload } = useProjects()
   const [editing, setEditing] = useState<Project>()
   const [creating, setCreating] = useState(false)
@@ -200,10 +204,10 @@ export function ProjectSwitcher({ className, onSelect, onSearch }: { className?:
   }
 
   return (
-    <nav className={cn("flex min-w-0 items-center gap-0.5", className)} aria-label="Projects">
+    <nav className={cn("flex min-w-0 items-center gap-0.5", className)} aria-label={tr("ui.projects-53e890")}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="min-w-0 max-w-full text-sm font-normal [&_svg]:size-4" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title="Switch project">
+          <Button variant="ghost" size="sm" className="min-w-0 max-w-full text-sm font-normal [&_svg]:size-4" aria-label={`Switch project: ${active?.name ?? "Projects"}`} title={tr("ui.switch-project-6bb114")}>
             <FolderKanban className="shrink-0" />
             <span className="shrink-0">Project:</span>
             <span className="truncate">{active?.name ?? "Projects"}</span>
@@ -218,7 +222,7 @@ export function ProjectSwitcher({ className, onSelect, onSearch }: { className?:
             e.preventDefault()
           }}
         >
-          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Projects</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{tr("ui.projects-53e890")}</DropdownMenuLabel>
           {projects.map((project) => (
             <DropdownMenuItem key={project.id} onSelect={() => select(project)} title={`/${project.folder}`}>
               {project.id === active?.id ? <Check /> : <Folder />}
@@ -226,7 +230,7 @@ export function ProjectSwitcher({ className, onSelect, onSearch }: { className?:
             </DropdownMenuItem>
           ))}
           <DropdownMenuItem onSelect={() => setCreating(true)}>
-            <Plus /> New project
+            <Plus /> {tr("ui.new-project-e5bcbe")}
           </DropdownMenuItem>
           {active && (onSearch || active.canManage) && (
             <>
@@ -241,19 +245,19 @@ export function ProjectSwitcher({ className, onSelect, onSearch }: { className?:
                 onSearch()
               }}
             >
-              <Search /> Search chats
+              <Search /> {tr("ui.search-chats-9ad51d")}
             </DropdownMenuItem>
           )}
           {active?.canManage && (
             <>
               <DropdownMenuItem onSelect={() => setSharing(active)}>
-                <Users /> Share project with…
+                <Users /> {tr("ui.share-project-with-ca3c69")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setEditing(active)}>
-                <Pencil /> Rename or link folders
+                <Pencil /> {tr("ui.rename-or-link-folders-f732b9")}
               </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(active)}>
-                <Trash2 /> Delete project
+                <Trash2 /> {tr("ui.delete-project-af1456")}
               </DropdownMenuItem>
             </>
           )}
@@ -265,12 +269,12 @@ export function ProjectSwitcher({ className, onSelect, onSearch }: { className?:
       <Dialog open={Boolean(confirmDelete)} onOpenChange={(open) => !open && setConfirmDelete(undefined)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete “{confirmDelete?.name}”?</DialogTitle>
-            <DialogDescription>Its sessions and chats go back to General, or to the project holding their folder. No files or conversations are deleted.</DialogDescription>
+            <DialogTitle>{tr("project.deleteTitle", { name: confirmDelete?.name ?? "" })}</DialogTitle>
+            <DialogDescription>{tr("ui.its-sessions-and-chats-go-back-to-g-d5f80a")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="destructive" onClick={() => confirmDelete && void remove(confirmDelete)}>
-              Delete project
+              {tr("ui.delete-project-af1456")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Quote, Loader2, Monitor, Power, RotateCw, Search, Smartphone, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -34,6 +35,7 @@ export type BrowserAskProps = {
 }
 
 export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sessionKey: string; picks: number; onPick: (ref: ElementRef) => void; onClose: () => void; ask?: BrowserAskProps }) {
+  const { t: tr } = useLocale()
   const [status, setStatus] = useState<Status>({ state: "connecting" })
   const [attempt, setAttempt] = useState(0)
   const [page, setPage] = useState({ url: "", title: "", viewport: DESKTOP, canInput: false })
@@ -318,7 +320,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <nav aria-label="Browser tools" className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 border-b p-1.5">
+      <nav aria-label={tr("ui.browser-tools-87338b")} className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 border-b p-1.5">
         <div className="flex items-center gap-1">
         <Button
           variant="ghost"
@@ -331,7 +333,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           {phone ? <Monitor /> : <Smartphone />}
         </Button>
         {page.canInput && (
-          <Button variant="ghost" size="icon-sm" className="sm:hidden" data-active={typing} onClick={() => setTyping((t) => !t)} aria-label="Type into the page" title="Type into the page">
+          <Button variant="ghost" size="icon-sm" className="sm:hidden" data-active={typing} onClick={() => setTyping((t) => !t)} aria-label={tr("ui.type-into-the-page-ac55de")} title={tr("ui.type-into-the-page-ac55de")}>
             <Keyboard />
           </Button>
         )}
@@ -344,8 +346,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             setPicking((p) => !p)
             setHover(undefined)
           }}
-          aria-label="Pick elements to reference"
-          title="Pick elements: click one, or drag around several (Shift keeps picking). Scroll or ↑/↓ to reach elements underneath."
+          aria-label={tr("ui.pick-elements-to-reference-c4acbe")}
+          title={tr("ui.pick-elements-click-one-or-drag-aro-a7a0f5")}
         >
           {pending ? <Loader2 className="animate-spin" /> : <Crosshair />}
         </Button>
@@ -355,11 +357,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         </span>
         <div className="flex items-center gap-1">
         {page.canInput && (
-          <Button variant="ghost" size="icon-sm" onClick={() => send({ type: "close" })} aria-label="Close the browser for everyone" title="Close the browser for everyone">
+          <Button variant="ghost" size="icon-sm" onClick={() => send({ type: "close" })} aria-label={tr("ui.close-the-browser-for-everyone-0e00e2")} title={tr("ui.close-the-browser-for-everyone-0e00e2")}>
             <Power />
           </Button>
         )}
-        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Hide browser" title="Hide browser">
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={tr("ui.hide-browser-5368bd")} title={tr("ui.hide-browser-5368bd")}>
           <X />
         </Button>
         </div>
@@ -377,9 +379,9 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             setText("")
           }}
         >
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Text for the focused field (empty sends Enter)" className="h-8 text-sm" />
+          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={tr("ui.text-for-the-focused-field-empty-se-37ba91")} className="h-8 text-sm" />
           <Button size="sm" type="submit">
-            Send
+            {tr("ui.send-9bc257")}
           </Button>
         </form>
       )}
@@ -415,12 +417,12 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             {drag && <Outline box={drag} scale={scale} />}
             {status.state === "connecting" && (
               <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" /> Starting the browser…
+                <Loader2 className="size-4 animate-spin" /> {tr("ui.starting-the-browser-d9df2c")}
               </div>
             )}
             {blank && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-neutral-500">
-                Please open a site or search for a keyword
+                {tr("ui.please-open-a-site-or-search-for-a--1f2c13")}
               </div>
             )}
           </div>
@@ -444,26 +446,26 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             folder={ask.folder}
           />
         )}
-        {selectingText && <span className="pointer-events-none absolute top-2 rounded-full bg-background px-3 py-1 text-xs shadow">Drag from the start to the end of the text</span>}
+        {selectingText && <span className="pointer-events-none absolute top-2 rounded-full bg-background px-3 py-1 text-xs shadow">{tr("ui.drag-from-the-start-to-the-end-of-t-8aa54f")}</span>}
         {picks > 0 && (
           <span className="absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground shadow lg:hidden">
-            {picks} picked, added to your message
+            {picks} {tr("ui.picked-added-to-your-message-b9f356")}
           </span>
         )}
       </div>
       <footer className="sticky bottom-0 flex shrink-0 items-center gap-1 border-t bg-background px-2 py-2">
-        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "back" })} aria-label="Back" title="Back">
+        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "back" })} aria-label={tr("ui.back-b52b36")} title={tr("ui.back-b52b36")}>
           <ArrowLeft />
         </Button>
-        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "forward" })} aria-label="Forward" title="Forward">
+        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "forward" })} aria-label={tr("ui.forward-ba4e72")} title={tr("ui.forward-ba4e72")}>
           <ArrowRight />
         </Button>
-        {ask && <Button variant={selectingText ? "default" : "ghost"} size="icon-sm" disabled={!page.canInput || blank} aria-pressed={selectingText} onClick={() => { setPicking(false); setHover(undefined); setSelectingText((active) => !active) }} aria-label="Select text" title="Select text"><Quote /></Button>}
+        {ask && <Button variant={selectingText ? "default" : "ghost"} size="icon-sm" disabled={!page.canInput || blank} aria-pressed={selectingText} onClick={() => { setPicking(false); setHover(undefined); setSelectingText((active) => !active) }} aria-label={tr("ui.select-text-9d4921")} title={tr("ui.select-text-9d4921")}><Quote /></Button>}
         <form onSubmit={navigate} className="relative min-w-0 flex-1">
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input id="browser-address" aria-label="URL or search keyword" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder="Search the web or enter a URL" className="h-8 pl-8 text-sm" title={page.title} />
+          <Input id="browser-address" aria-label={tr("ui.url-or-search-keyword-7f72d7")} value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder={tr("ui.search-the-web-or-enter-a-url-3d058b")} className="h-8 pl-8 text-sm" title={page.title} />
         </form>
-        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label="Refresh" title="Refresh">
+        <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label={tr("ui.refresh-56e3ba")} title={tr("ui.refresh-56e3ba")}>
           <RotateCw />
         </Button>
       </footer>

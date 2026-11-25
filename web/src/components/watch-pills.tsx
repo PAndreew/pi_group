@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Timer, TriangleAlert, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -15,6 +16,7 @@ const what = (w: ProcessWatch) =>
 
 /** "Waiting on…" above the composer: what the agent armed a watch on, how long it has run, and a way to stop watching. Key it by session. */
 export function WatchPills({ sessionKey, canWrite }: { sessionKey: string; canWrite: boolean }) {
+  const { t: tr } = useLocale()
   const [watches, setWatches] = useState<ProcessWatch[]>([])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -38,8 +40,8 @@ export function WatchPills({ sessionKey, canWrite }: { sessionKey: string; canWr
     }
   }
   return (
-    <div className="flex flex-wrap items-center gap-1" aria-label="Waiting on">
-      <span className="text-xs text-muted-foreground">Waiting on</span>
+    <div className="flex flex-wrap items-center gap-1" aria-label={tr("ui.waiting-on-257da8")}>
+      <span className="text-xs text-muted-foreground">{tr("ui.waiting-on-257da8")}</span>
       {armed.map((w) => (
         <Badge
           key={w.id}

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { useState } from "react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
 export function ProfilePictureDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const [busy, setBusy] = useState(false)
   const save = async (file: File | null) => {
@@ -33,10 +35,10 @@ export function ProfilePictureDialog({ open, onOpenChange }: { open: boolean; on
   }
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="grid-cols-[minmax(0,1fr)]">
-      <DialogHeader><DialogTitle>Profile picture</DialogTitle><DialogDescription>Choose a photo for your avatar. Images are cropped to a square.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{tr("ui.profile-picture-aeb837")}</DialogTitle><DialogDescription>{tr("ui.choose-a-photo-for-your-avatar-imag-fae738")}</DialogDescription></DialogHeader>
       {user && <AuthorAvatar id={user.id} name={user.username} />}
-      <input aria-label="Upload profile picture" type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="min-w-0 max-w-full text-sm" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void save(file) }} />
-      <Button variant="outline" disabled={busy} onClick={() => void save(null)}>Remove picture</Button>
+      <input aria-label={tr("ui.upload-profile-picture-b41bbd")} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="min-w-0 max-w-full text-sm" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void save(file) }} />
+      <Button variant="outline" disabled={busy} onClick={() => void save(null)}>{tr("ui.remove-picture-2ebb22")}</Button>
     </DialogContent>
   </Dialog>
 }

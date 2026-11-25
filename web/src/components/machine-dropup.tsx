@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Server, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { StatusDot } from "@/components/remote-machines-dialog"
@@ -6,6 +7,7 @@ import { matchMachines, remoteMachines } from "@/lib/remote-machines"
 
 /** #machine suggestions for the direct-session composer; picking one completes the #name being typed. */
 export function MachineDropup({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t: tr } = useLocale()
   const [machines, setMachines] = useState<RemoteMachine[]>([])
   const [dismissed, setDismissed] = useState<string>()
   const match = /(^|\s)#([\w.-]*)$/.exec(value)
@@ -21,7 +23,7 @@ export function MachineDropup({ value, onChange }: { value: string; onChange: (v
   return (
     <div data-suggestions className="absolute bottom-full left-0 z-20 mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md">
       <div className="flex shrink-0 justify-end px-1 pt-1">
-        <button type="button" aria-label="Dismiss machine suggestions" className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}><X className="size-4" /></button>
+        <button type="button" aria-label={tr("ui.dismiss-machine-suggestions-a5420f")} className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}><X className="size-4" /></button>
       </div>
       <div className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2">
         {found.map((m) => (

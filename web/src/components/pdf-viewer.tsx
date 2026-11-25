@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import "core-js/actual/promise/with-resolvers"
 import { ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -8,6 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worke
 
 /** pdf.js renders PDFs on phones too, where an <iframe> would only offer a download. */
 export default function PdfViewer({ url }: { url: string }) {
+  const { t: tr } = useLocale()
   const [pages, setPages] = useState(0)
   const [page, setPage] = useState(1)
   const [zoom, setZoom] = useState(1)
@@ -52,7 +54,7 @@ export default function PdfViewer({ url }: { url: string }) {
           file={url}
           onLoadSuccess={(doc) => setPages(doc.numPages)}
           loading={<Loader2 className="mx-auto mt-10 animate-spin" />}
-          error={<p className="p-4 text-sm text-destructive">Could not load the PDF.</p>}
+          error={<p className="p-4 text-sm text-destructive">{tr("ui.could-not-load-the-pdf-800d72")}</p>}
         >
           <Page
             suspense={false}
@@ -63,7 +65,7 @@ export default function PdfViewer({ url }: { url: string }) {
               const viewport = loaded.getViewport({ scale: 1 })
               setPageRatio(viewport.height / viewport.width)
             }}
-            error={<p className="p-4 text-sm text-destructive">Could not render this page. Use Download to open it separately.</p>}
+            error={<p className="p-4 text-sm text-destructive">{tr("ui.could-not-render-this-page-use-down-1f2180")}</p>}
             renderTextLayer={false}
             renderAnnotationLayer={false}
             className="mx-auto w-fit shadow"

@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import {
   ChevronRight,
   CornerLeftUp,
@@ -67,6 +68,7 @@ type Count = { total: number; running: number }
 const blockedReason = (s: SessionSummary) => s.deleteBlockedReason || (s.running ? "The agent is running" : !canDelete(s) ? "Only the owner or an admin can delete this session" : undefined)
 
 function SessionRow({ s, selected, onOpen, deletion, indent }: { s: SessionSummary; selected?: string; onOpen: (key: string) => void; deletion: SessionDeletion; indent?: boolean }) {
+  const { t: tr, language } = useLocale()
   return (
     <div className={cn("flex items-center rounded-md hover:bg-accent", selected === s.key && "bg-accent", indent && "ml-6")}>
       {deletion.active && <SessionDeleteCheckbox selection={deletion} target={{ key: s.key, title: s.name || s.firstMessage || "Untitled session" }} blocked={blockedReason(s)} />}
@@ -81,7 +83,7 @@ function SessionRow({ s, selected, onOpen, deletion, indent }: { s: SessionSumma
           <Badge variant="outline" className="px-1 py-0 text-[10px]">
             {s.harness}
           </Badge>
-          <span>{timeAgo(s.updatedAt)}</span>
+          <span>{timeAgo(s.updatedAt, language)}</span>
           {s.messageCount > 0 && (
             <span className="flex items-center gap-0.5">
               <MessageSquare className="size-3" />
@@ -89,8 +91,8 @@ function SessionRow({ s, selected, onOpen, deletion, indent }: { s: SessionSumma
             </span>
           )}
           {s.owner && s.access !== "owner" && <span className="truncate">· {s.owner}</span>}
-          {!s.owner && <span className="text-amber-600">· unclaimed</span>}
-          {s.access === "read" && <span>· view only</span>}
+          {!s.owner && <span className="text-amber-600">{tr("ui.unclaimed-11204e")}</span>}
+          {s.access === "read" && <span>{tr("ui.view-only-84d5e8")}</span>}
         </div>
       </button>
       {!deletion.active && canDelete(s) && (
@@ -99,7 +101,7 @@ function SessionRow({ s, selected, onOpen, deletion, indent }: { s: SessionSumma
           onClick={deletion.start}
           className="shrink-0 self-stretch rounded-md px-2.5 text-red-500/80 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
           aria-label={`Delete ${s.name || s.firstMessage || "session"}`}
-          title="Delete session"
+          title={tr("ui.delete-session-ca5747")}
         >
           <Trash2 className="size-4" />
         </button>
@@ -181,6 +183,7 @@ export function Sidebar({
   creating?: boolean
   version: number
 }) {
+  const { t: tr } = useLocale()
   const [entries, setEntries] = useState<FsEntry[]>()
   const [counts, setCounts] = useState<Record<string, Count>>({})
   const [here, setHere] = useState<Count>()
@@ -278,7 +281,7 @@ export function Sidebar({
         {onQuery && (
           <div className="relative mt-2">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="h-8 pl-8 text-sm" type="search" placeholder="Search files and folders" value={query} onChange={(e) => onQuery(e.target.value)} aria-label="Search files and folders" />
+            <Input className="h-8 pl-8 text-sm" type="search" placeholder={tr("ui.search-files-and-folders-61fe0d")} value={query} onChange={(e) => onQuery(e.target.value)} aria-label={tr("ui.search-files-and-folders-61fe0d")} />
           </div>
         )}
       </div>
@@ -307,12 +310,12 @@ export function Sidebar({
             }}
           />
           <Button size="sm" className="min-w-0 flex-1 lg:h-7 lg:text-xs" disabled={creating} onClick={onNewSession}>
-            {creating ? <Loader2 className="animate-spin" /> : <Plus />} New session
+            {creating ? <Loader2 className="animate-spin" /> : <Plus />} {tr("ui.new-session-5c881d")}
           </Button>
-          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={() => input.current?.click()} disabled={busy} aria-label="Upload files" title="Upload files">
+          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={() => input.current?.click()} disabled={busy} aria-label={tr("ui.upload-files-41aca1")} title={tr("ui.upload-files-41aca1")}>
             {busy ? <Loader2 className="animate-spin" /> : <Upload />}
           </Button>
-          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={mkdir} aria-label="New folder" title="New folder">
+          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={mkdir} aria-label={tr("ui.new-folder-a71199")} title={tr("ui.new-folder-a71199")}>
             <FolderPlus />
           </Button>
           <Button
@@ -322,12 +325,12 @@ export function Sidebar({
               setHidden((h) => !h)
               localStorage.setItem("pi-group:hidden", hidden ? "0" : "1")
             }}
-            aria-label="Toggle hidden files"
+            aria-label={tr("ui.toggle-hidden-files-c9b0d1")}
             title={hidden ? "Hide hidden files" : "Show hidden files"}
           >
             {hidden ? <Eye /> : <EyeOff />}
           </Button>
-          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={load} aria-label="Refresh" title="Refresh">
+          <Button size="icon-sm" variant="outline" className="lg:size-7 lg:[&_svg]:size-3.5" onClick={load} aria-label={tr("ui.refresh-56e3ba")} title={tr("ui.refresh-56e3ba")}>
             <RefreshCw />
           </Button>
         </div>
@@ -337,7 +340,7 @@ export function Sidebar({
             <div className="mb-1 border-b pb-1">
               <button type="button" onClick={() => setHereOpen((o) => !o)} className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent" aria-expanded={hereOpen}>
                 <ChevronRight className={cn("size-3.5 transition-transform", hereOpen && "rotate-90")} />
-                <span className="flex-1 text-left">Sessions in this folder</span>
+                <span className="flex-1 text-left">{tr("ui.sessions-in-this-folder-b30d16")}</span>
                 <CountBadge count={here} />
               </button>
               {hereOpen && <FolderSessions path={folder} selected={selectedSession} onOpen={onSession} deletion={deletion} refresh={refresh + version} />}
@@ -384,10 +387,10 @@ export function Sidebar({
               </div>
             )
           })}
-          {visible?.length === 0 && !needle && <p className="px-2 py-6 text-center text-sm text-muted-foreground">Empty folder. Drop files here to upload.</p>}
+          {visible?.length === 0 && !needle && <p className="px-2 py-6 text-center text-sm text-muted-foreground">{tr("ui.empty-folder-drop-files-here-to-upl-6f9fc5")}</p>}
           {needle && (
             <div className="mt-2 border-t pt-2">
-              <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">Everywhere</div>
+              <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">{tr("ui.everywhere-2f2b74")}</div>
               {!elsewhere && <Loader2 className="mx-auto my-2 size-4 animate-spin text-muted-foreground" />}
               {elsewhere?.length === 0 && <p className="px-2 py-2 text-sm text-muted-foreground">{visible?.length ? "Nothing else matches." : "Nothing matches."}</p>}
               {elsewhere?.map((f) => {

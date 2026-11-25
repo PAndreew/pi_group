@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
@@ -14,6 +15,7 @@ function SheetContent({
   side = "left",
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & { side?: "top" | "right" | "bottom" | "left" }) {
+  const { t: tr } = useLocale()
   return (
     <SheetPrimitive.Portal>
       <SheetPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
@@ -32,7 +34,7 @@ function SheetContent({
         {children}
         <SheetPrimitive.Close className="absolute top-3 right-3 rounded-xs p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-hidden">
           <XIcon className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{tr("ui.close-bbfa77")}</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPrimitive.Portal>

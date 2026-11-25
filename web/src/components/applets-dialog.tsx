@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ChevronRight, LayoutGrid, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +10,7 @@ import { subscribeUserEvents } from "@/lib/user-stream"
 
 /** The applets of this tenant (plus the user's own that wait for approval); each opens its page. */
 export function AppletsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t: tr } = useLocale()
   const nav = useNav()
   const [applets, setApplets] = useState<Applet[]>()
   const [error, setError] = useState<string>()
@@ -42,20 +44,20 @@ export function AppletsDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85dvh] min-w-0 flex-col sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Applets</DialogTitle>
-          <DialogDescription>Forms and dashboards for tasks you do often. Start from a template or ask an agent to make an applet.</DialogDescription>
+          <DialogTitle>{tr("ui.applets-29dfcc")}</DialogTitle>
+          <DialogDescription>{tr("ui.forms-and-dashboards-for-tasks-you--68e0a2")}</DialogDescription>
         </DialogHeader>
         <div className="-mx-2 grid min-h-0 min-w-0 grid-cols-1 gap-2 overflow-y-auto px-2">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!applets && !error && <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
           {applets && !applets.some((a) => a.slug === "todo-dump") && (
-            <Button type="button" variant="outline" disabled={installing} onClick={() => void install()}>Add Todo Dump</Button>
+            <Button type="button" variant="outline" disabled={installing} onClick={() => void install()}>{tr("ui.add-todo-dump-2deb54")}</Button>
           )}
           {applets?.length === 0 && (
             <div className="grid justify-items-center gap-2 px-4 py-6 text-center text-sm text-muted-foreground">
               <LayoutGrid className="size-8 opacity-50" />
-              <p>No applets yet.</p>
-              <p className="text-xs">Ask the agent, for example: “Make me an applet for the docx translator skill: pick documents, choose the target language.”</p>
+              <p>{tr("ui.no-applets-yet-78cc4d")}</p>
+              <p className="text-xs">{tr("ui.ask-the-agent-for-example-make-me-a-33c8dc")}</p>
             </div>
           )}
           {applets && applets.length > 0 && (
@@ -67,8 +69,8 @@ export function AppletsDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                     <span className="grid min-w-0 flex-1 gap-0.5">
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate font-medium">{applet.title}</span>
-                        {!applet.approved && <Badge variant="outline" className="border-amber-500/50 text-amber-600 dark:text-amber-400">Needs approval</Badge>}
-                        {applet.approved && applet.hasDraft && applet.canManage && <Badge variant="outline" className="border-amber-500/50 text-amber-600 dark:text-amber-400">Change waiting</Badge>}
+                        {!applet.approved && <Badge variant="outline" className="border-amber-500/50 text-amber-600 dark:text-amber-400">{tr("ui.needs-approval-a3b425")}</Badge>}
+                        {applet.approved && applet.hasDraft && applet.canManage && <Badge variant="outline" className="border-amber-500/50 text-amber-600 dark:text-amber-400">{tr("ui.change-waiting-b3bd3a")}</Badge>}
                       </span>
                       {applet.description && <span className="line-clamp-2 text-xs text-muted-foreground">{applet.description}</span>}
                       <span className="truncate text-[11px] text-muted-foreground">/apps/{applet.slug} · by {applet.owner}</span>

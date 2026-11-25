@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Search, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
@@ -9,6 +10,7 @@ import { useChatSearch } from "@/lib/chat-search"
  * clears the query, and leaving it empty closes it too.
  */
 export function ChatSearchOverlay({ open, onOpenChange, onSearch }: { open: boolean; onOpenChange: (open: boolean) => void; onSearch?: () => void }) {
+  const { t: tr } = useLocale()
   const { query, setQuery } = useChatSearch()
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -24,7 +26,7 @@ export function ChatSearchOverlay({ open, onOpenChange, onSearch }: { open: bool
       <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         ref={input}
-        aria-label="Search chats"
+        aria-label={tr("ui.search-chats-9ad51d")}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value)
@@ -32,10 +34,10 @@ export function ChatSearchOverlay({ open, onOpenChange, onSearch }: { open: bool
         }}
         onKeyDown={(e) => e.key === "Escape" && close()}
         onBlur={() => !query && onOpenChange(false)}
-        placeholder="Search chats"
+        placeholder={tr("ui.search-chats-9ad51d")}
         className="h-11 rounded-full border bg-background pr-10 pl-10 text-base text-foreground md:text-base dark:bg-popover"
       />
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={close} aria-label="Close search" className="absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-accent">
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={close} aria-label={tr("ui.close-search-0906f9")} className="absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-accent">
         <X className="size-4" />
       </button>
     </div>

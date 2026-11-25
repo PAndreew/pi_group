@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { Check, Copy } from "lucide-react"
 import { createContext, useState, type ComponentProps } from "react"
 import { toast } from "sonner"
@@ -12,6 +13,7 @@ export const InPre = createContext(false)
  * on the value copies too.
  */
 export function CopyCode({ children, ...props }: ComponentProps<"code">) {
+  const { t: tr } = useLocale()
   const [copied, setCopied] = useState(false)
   const copy = (text: string) =>
     void copyText(text).then(
@@ -27,8 +29,8 @@ export function CopyCode({ children, ...props }: ComponentProps<"code">) {
       <code {...props} onClick={(e) => matchMedia("(hover: none)").matches && copy(text(e.currentTarget))}>{children}</code>
       <button
         type="button"
-        aria-label="Copy"
-        title="Copy"
+        aria-label={tr("ui.copy-af74f7")}
+        title={tr("ui.copy-af74f7")}
         className="ml-0.5 inline-flex cursor-pointer rounded p-0.5 align-[-0.2em] text-gray-400 hover:text-gray-600 focus-visible:opacity-100 focus-visible:outline-2 dark:text-gray-500 dark:hover:text-gray-300 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/copy:opacity-100"
         onClick={(e) => copy(text(e.currentTarget))}
       >

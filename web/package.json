@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --experimental-strip-types --test test/*.test.mjs",
+    "test": "node scripts/check-locales.mjs && node --experimental-strip-types --test test/*.test.mjs",
     "test:browser": "node test/chat-mobile.mjs",
     "preview": "vite preview"
   },

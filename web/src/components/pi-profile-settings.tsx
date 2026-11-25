@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { ModelPicker } from "@/components/model-picker"
@@ -7,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { api, type ModelInfo, type SessionDefaults } from "@/lib/api"
 
 export function PiProfileSettings({ onConnected }: { onConnected?: () => void } = {}) {
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const admin = user?.role === "admin"
   const [connected, setConnected] = useState(false)
@@ -28,21 +30,21 @@ export function PiProfileSettings({ onConnected }: { onConnected?: () => void } 
     <form className="grid gap-2" onSubmit={e => { e.preventDefault(); void perform(async () => {
       await api.savePiProfile(provider, key.trim()); setKey(""); setConnected(true); onConnected?.(); toast.success("Connection saved. Choose your model above.")
     }) }}>
-      <h3 className="font-medium">Connect a provider</h3>
-      <p className="text-sm text-muted-foreground">{connected ? "A Pi profile is connected. Saving a key replaces the previous provider in a Beezy-managed profile." : "Connect your own provider, then choose a Pi RPC model above."} Keys use Pi’s native local storage. Use only on a trusted server.</p>
-      <select className="w-full min-w-0 rounded border bg-background p-2" aria-label="Provider" value={provider} onChange={e => { setProvider(e.target.value); setKey("") }}>
-        <option value="anthropic">Anthropic</option><option value="google">Google Gemini</option><option value="openrouter">OpenRouter</option><option value="openai">OpenAI API</option><option value="zai">Zhipu AI (Z.AI)</option><option value="zai-coding-cn">Zhipu AI Coding (China)</option>
+      <h3 className="font-medium">{tr("ui.connect-a-provider-6967f2")}</h3>
+      <p className="text-sm text-muted-foreground">{connected ? "A Pi profile is connected. Saving a key replaces the previous provider in a Beezy-managed profile." : "Connect your own provider, then choose a Pi RPC model above."} {tr("ui.keys-use-pi-s-native-local-storage--2d50c0")}</p>
+      <select className="w-full min-w-0 rounded border bg-background p-2" aria-label={tr("ui.provider-7ceee3")} value={provider} onChange={e => { setProvider(e.target.value); setKey("") }}>
+        <option value="anthropic">Anthropic</option><option value="google">{tr("ui.google-gemini-2f9610")}</option><option value="openrouter">{tr("ui.openrouter-12ecf7")}</option><option value="openai">{tr("ui.openai-api-9a216c")}</option><option value="zai">{tr("ui.zhipu-ai-z-ai-1af895")}</option><option value="zai-coding-cn">{tr("ui.zhipu-ai-coding-china-c404cd")}</option>
       </select>
-      <Input type="password" autoComplete="off" aria-label="Provider API key" placeholder="API key" value={key} maxLength={4096} onChange={e => setKey(e.target.value)}/>
-      <Button disabled={busy || key.trim().length < 8}>Save connection</Button>
+      <Input type="password" autoComplete="off" aria-label={tr("ui.provider-api-key-593b11")} placeholder={tr("ui.api-key-cf678c")} value={key} maxLength={4096} onChange={e => setKey(e.target.value)}/>
+      <Button disabled={busy || key.trim().length < 8}>{tr("ui.save-connection-07796d")}</Button>
     </form>
     <section className="grid gap-2 border-t pt-3">
-      <h3 className="font-medium">Workspace fallback</h3>
-      <p className="text-sm text-muted-foreground">Uses the server’s existing Pi login only when a personal model is unavailable before a turn. It never retries a failed or partially completed turn.</p>
+      <h3 className="font-medium">{tr("ui.workspace-fallback-b35991")}</h3>
+      <p className="text-sm text-muted-foreground">{tr("ui.uses-the-server-s-existing-pi-login-91d8cf")}</p>
       {admin ? <><ModelPicker models={models} value={fallback} onChange={setFallback} showProvider />
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy || !fallback} onClick={() => void perform(async () => { await api.saveSharedPiFallback(fallback!); toast.success("Workspace fallback saved") })}>Save fallback</Button>
-          <Button variant="outline" disabled={busy} onClick={() => void perform(async () => { await api.saveSharedPiFallback(null); setFallback(undefined); toast.success("Workspace fallback disabled") })}>Disable fallback</Button>
+          <Button disabled={busy || !fallback} onClick={() => void perform(async () => { await api.saveSharedPiFallback(fallback!); toast.success("Workspace fallback saved") })}>{tr("ui.save-fallback-2dc3b5")}</Button>
+          <Button variant="outline" disabled={busy} onClick={() => void perform(async () => { await api.saveSharedPiFallback(null); setFallback(undefined); toast.success("Workspace fallback disabled") })}>{tr("ui.disable-fallback-daf2fd")}</Button>
         </div></> : <p className="text-sm break-all">{fallback ? `${fallback.provider} / ${fallback.id}` : "Not configured"}</p>}
     </section>
   </div>

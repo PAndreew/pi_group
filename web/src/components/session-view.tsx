@@ -77,13 +77,13 @@ function readBase64(file: File) {
 }
 
 function UserBubble({ message, text, memory, onRemoveMemory, folder, own }: { message: AgentMessage; text: string; memory?: string; onRemoveMemory?: () => void; folder?: string; own?: boolean }) {
-  const { t } = useLocale()
+  const { t: tr } = useLocale()
   // Uploads show from their files (MessageBody); inline copies only when the prompt names no stored image.
   const images = Array.isArray(message.content) && imageRefs(text, folder).length === 0 ? message.content.filter((c: any) => c?.type === "image").map((img: any) => ({ src: `data:${img.mimeType};base64,${img.data}` })) : []
   return (
     <div className="flex items-start gap-2">
       <AuthorAvatar id={message.author?.id ?? "unknown"} name={message.author?.username ?? "?"} />
-      <ReplyStack text={text} className="max-w-[88%]" header={<MessageHeader name={message.author?.username ?? t("message.unknownAuthor")} at={message.timestamp} />}>
+      <ReplyStack text={text} className="max-w-[88%]" header={<MessageHeader name={message.author?.username ?? tr("message.unknownAuthor")} at={message.timestamp} />}>
         {(body) => (
           <div className="min-w-0">
             <div className={cn("human-bubble rounded-3xl bg-blue-50 px-4 py-2.5 text-sm text-black", own && "own-bubble")}>
@@ -115,6 +115,7 @@ function answerLabel(dialog: ExtensionDialog, answer: DialogAnswer) {
  * conversation scrolls past it once answered. Without write access it is shown but not answerable.
  */
 function InlineQuestion({ dialog, onAnswer }: { dialog: ExtensionDialog; onAnswer?: (answer: DialogAnswer) => void }) {
+  const { t: tr } = useLocale()
   const [value, setValue] = useState(dialog.prefill ?? "")
   useEffect(() => setValue(dialog.prefill ?? ""), [dialog])
   const text = dialog.method === "input" || dialog.method === "editor"
@@ -125,7 +126,7 @@ function InlineQuestion({ dialog, onAnswer }: { dialog: ExtensionDialog; onAnswe
         {dialog.message && <span className="text-xs whitespace-pre-wrap text-muted-foreground">{dialog.message}</span>}
       </div>
       {!onAnswer ? (
-        <span className="text-xs text-muted-foreground">Waiting for someone with write access to answer.</span>
+        <span className="text-xs text-muted-foreground">{tr("ui.waiting-for-someone-with-write-acce-4966bd")}</span>
       ) : (
         <>
           {dialog.method === "select" && (
@@ -144,12 +145,12 @@ function InlineQuestion({ dialog, onAnswer }: { dialog: ExtensionDialog; onAnswe
             </Button>
             {dialog.method === "confirm" && (
               <Button size="sm" onClick={() => onAnswer({ confirmed: true })}>
-                Yes
+                {tr("ui.yes-5397e0")}
               </Button>
             )}
             {text && (
               <Button size="sm" onClick={() => onAnswer({ value })}>
-                Submit
+                {tr("ui.submit-2dacf6")}
               </Button>
             )}
           </div>
@@ -178,7 +179,7 @@ function AgentBubble({
   /** The session folder, for links to files the agent wrote. */
   folder?: string
 }) {
-  const { t } = useLocale()
+  const { t: tr } = useLocale()
   const current = run.steps.findLast((step) => step.status === "running") ?? run.steps.at(-1)
   const Icon = current ? STEP_ICON[current.kind] : Loader2
   const failed = run.steps.filter((step) => step.status === "error")
@@ -188,15 +189,15 @@ function AgentBubble({
       <PiAvatar />
       <div className="max-w-[88%] min-w-0">
         <MessageHeader name="Beezy" at={run.running ? undefined : run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp}>
-          <button type="button" onClick={() => onOpen(null)} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label={t("message.openSteps")} title={t("message.openSteps")}>
+          <button type="button" onClick={() => onOpen(null)} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label={tr("message.openSteps")} title={tr("message.openSteps")}>
             <List className="size-4" />
           </button>
-          {run.running && <span className="running-shimmer">{t("message.running")}</span>}
-          <button type="button" onClick={() => onOpen(null)} className="inline-flex items-center gap-1 rounded px-1 py-1 text-gray-500 hover:bg-accent dark:text-gray-300" title={t("message.allSteps")}>
-            {run.running ? <><Icon className="size-3.5" aria-label={current ? STEP_LABEL[current.kind] : t("message.starting")} />{t("message.stepCount", { count: run.steps.length })}</> : t("message.stepTotal", { count: run.steps.length })}
+          {run.running && <span className="running-shimmer">{tr("message.running")}</span>}
+          <button type="button" onClick={() => onOpen(null)} className="inline-flex items-center gap-1 rounded px-1 py-1 text-gray-500 hover:bg-accent dark:text-gray-300" title={tr("message.allSteps")}>
+            {run.running ? <><Icon className="size-3.5" aria-label={current ? STEP_LABEL[current.kind] : tr("message.starting")} />{tr("message.stepCount", { count: run.steps.length })}</> : tr("message.stepTotal", { count: run.steps.length })}
           </button>
-          <button type="button" onClick={() => onOpen(null, true)} className={cn("rounded px-1 py-1 hover:bg-accent", failed.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300")} title={t("message.openFailedSteps")}>
-            {t(run.running ? "message.failingCount" : "message.failedCount", { count: failed.length })}
+          <button type="button" onClick={() => onOpen(null, true)} className={cn("rounded px-1 py-1 hover:bg-accent", failed.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300")} title={tr("message.openFailedSteps")}>
+            {tr(run.running ? "message.failingCount" : "message.failedCount", { count: failed.length })}
           </button>
         </MessageHeader>
         {buzzing && <div className="agent-message w-fit rounded-3xl px-4 py-2.5"><BusyBee /></div>}
@@ -305,10 +306,10 @@ function RunView({
 }
 
 export function SessionView({ sessionKey, initialBrowserShown = false, header, onDeleted, onSelectSessions }: { sessionKey: string; initialBrowserShown?: boolean; header?: React.ReactNode; onDeleted: (key: string) => void; onSelectSessions: () => void }) {
+  const { t: tr } = useLocale()
   const { user } = useAuth()
   const { uploadFolder } = useProjects()
   const interactions = useInteractions(sessionKey)
-  const { t } = useLocale()
   const { state, connected, deletedBy, browser } = useSessionStream(sessionKey)
   // Short drops (back from the background, a server restart) heal silently; only say so if it lasts.
   const reconnecting = useLasting(!connected, 2500)
@@ -585,13 +586,13 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
               {summary && <span className="shrink-0">· {summary.harness}</span>}
               {summary?.pinned && <Pin className="size-3 shrink-0" />}
               {summary?.visibility === "shared" && <Share2 className="size-3 shrink-0" />}
-              {reconnecting && <span className="shrink-0 text-amber-600">· reconnecting…</span>}
+              {reconnecting && <span className="shrink-0 text-amber-600">{tr("ui.reconnecting-ea67c8")}</span>}
             </div>
           </div>
           {summary && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="Session menu">
+                <Button variant="ghost" size="icon-sm" aria-label={tr("ui.session-menu-956ece")}>
                   <MoreVertical />
                 </Button>
               </DropdownMenuTrigger>
@@ -603,33 +604,33 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     setRenameOpen(true)
                   }}
                 >
-                  <Pencil /> Edit title
+                  <Pencil /> {tr("ui.edit-title-2cd93b")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!canWrite} onSelect={() => act(async () => { await api.generateTitle(sessionKey); setSummary((await api.session(sessionKey)).session) })}>
-                  <WandSparkles /> Generate title
+                  <WandSparkles /> {tr("ui.generate-title-547a38")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setShareOpen(true)}>
-                  <Share2 /> Access & sharing
+                  <Share2 /> {tr("ui.access-sharing-adcaab")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => setMoving({ kind: "session", id: sessionKey, title, projectId: summary.projectId })}>
-                  <FolderInput /> Move to project…
+                  <FolderInput /> {tr("ui.move-to-project-34a4d0")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!canWrite} onSelect={() => act(async () => setSummary((await api.pin(sessionKey, !summary.pinned)).session))}>
-                  {summary.pinned ? <PinOff /> : <Pin />} {summary.pinned ? "Allow idle shutdown" : "Keep running in background"}
+                  {summary.pinned ? <PinOff /> : <Pin />} {tr(summary.pinned ? "session.allowShutdown" : "session.keepRunning")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => act(async () => { await api.sessionRetention(sessionKey, { keepLive: !summary.keepLive }); setSummary((await api.session(sessionKey)).session) })}>
-                  {summary.keepLive ? "Allow automatic archiving" : "Keep live — don't archive"}
+                  {tr(summary.keepLive ? "session.allowArchive" : "session.keepLive")}
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={summary.access !== "owner" && summary.access !== "admin"} onSelect={() => act(async () => { await api.sessionRetention(sessionKey, { memoryPrivate: !summary.memoryPrivate }); setSummary((await api.session(sessionKey)).session) })}>
-                  {summary.memoryPrivate ? "Include in public project memory" : "Make private — exclude from memory"}
+                  {tr(summary.memoryPrivate ? "session.includeMemory" : "session.excludeMemory")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" disabled={!canWrite || !state?.live} onSelect={() => act(() => api.stop(sessionKey), "Session process stopped")}>
-                  <Power /> Stop process
+                <DropdownMenuItem variant="destructive" disabled={!canWrite || !state?.live} onSelect={() => act(() => api.stop(sessionKey), tr("session.stopped"))}>
+                  <Power /> {tr("ui.stop-process-48cb30")}
                 </DropdownMenuItem>
                 {canDelete(summary) && (
                   <DropdownMenuItem variant="destructive" onSelect={onSelectSessions}>
-                    <Trash2 /> Select sessions to delete
+                    <Trash2 /> {tr("ui.select-sessions-to-delete-2b88f8")}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -644,9 +645,9 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
         >
           <div className="mx-auto max-w-3xl space-y-5 px-3 py-4 sm:px-4">
             {!state && <Loader2 className="mx-auto mt-10 animate-spin text-muted-foreground" />}
-            {state && runs.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No messages yet. Ask the agent something.</p>}
-            {authorFilter !== "all" && <p className="text-xs text-muted-foreground">Showing this author’s prompts with their agent responses. <button className="underline" onClick={() => setAuthorFilter("all")}>Show everyone</button></p>}
-            {state && runs.length > 0 && visibleRuns.length === 0 && <p className="text-sm text-muted-foreground">No prompts from this author.</p>}
+            {state && runs.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">{tr("ui.no-messages-yet-ask-the-agent-somet-064cc9")}</p>}
+            {authorFilter !== "all" && <p className="text-xs text-muted-foreground">{tr("ui.showing-this-author-s-prompts-with--a0cd52")} <button className="underline" onClick={() => setAuthorFilter("all")}>{tr("ui.show-everyone-284369")}</button></p>}
+            {state && runs.length > 0 && visibleRuns.length === 0 && <p className="text-sm text-muted-foreground">{tr("ui.no-prompts-from-this-author-b192a7")}</p>}
             {visibleRuns.map(({ run, index }) => {
               const cards = interactions.cards.filter((card) => run.steps.some((step) => step.toolCall?.id === card.toolCallId))
               return <RunView
@@ -656,7 +657,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                 onReply={canWrite ? (target) => selectReply(setReply, target) : undefined}
                 onShare={setForwarding}
                 onEdit={canWrite ? startEdit : undefined}
-                editBlocked={running ? "Wait until the agent has finished" : undefined}
+                editBlocked={running ? tr("session.waitForAgent") : undefined}
                 onRemoveMemory={canWrite && !running && !sending ? removeMemory : undefined}
                 onDelete={canWrite ? (message, text) => void deletePrompt(message, text) : undefined}
                 pendingDelete={Boolean(run.user && state?.pendingDeletes?.some((d) => d.text === messageText(run.user!.content) && (d.timestamp === undefined || d.timestamp === run.user!.timestamp)))}
@@ -750,7 +751,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     hash="session"
                     value={text}
                     onChange={setText}
-                    placeholder={t(editing ? "composer.edit" : "composer.session")}
+                    placeholder={tr(editing ? "composer.edit" : "composer.session")}
                     selfId={user?.id}
                     eligiblePeople={canInvite && !editing ? undefined : isParticipant}
                     controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}
@@ -782,7 +783,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
               </>
             ) : (
               <p className="flex items-center justify-center gap-1.5 py-2 text-sm text-muted-foreground">
-                <Eye className="size-4" /> You have view-only access.
+                <Eye className="size-4" /> {tr("ui.you-have-view-only-access-78d84b")}
               </p>
             )}
           </div>
@@ -802,7 +803,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit session title</DialogTitle>
+            <DialogTitle>{tr("ui.edit-session-title-9d907d")}</DialogTitle>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -815,9 +816,9 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
             }}
             className="grid gap-4"
           >
-            <Input aria-label="Session title" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+            <Input aria-label={tr("ui.session-title-e883c5")} value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
             <DialogFooter>
-              <Button type="submit">Save</Button>
+              <Button type="submit">{tr("ui.save-efc007")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

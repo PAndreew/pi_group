@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ArrowDown } from "lucide-react"
 import { useCallback, useRef, useState } from "react"
 
@@ -31,13 +32,14 @@ export function useJumpToBottom(scroller: React.RefObject<HTMLElement | null>, s
 
 /** Round button floating above the message box (render it inside the box's relative container), back to the newest message. */
 export function JumpToBottom({ show, onClick }: { show: boolean; onClick: () => void }) {
+  const { t: tr } = useLocale()
   if (!show) return null
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label="Jump to the newest message"
-      title="Jump to the newest message"
+      aria-label={tr("ui.jump-to-the-newest-message-c99d87")}
+      title={tr("ui.jump-to-the-newest-message-c99d87")}
       className="absolute bottom-full left-1/2 z-20 mb-3 grid size-11 -translate-x-1/2 place-items-center rounded-full border bg-background text-foreground shadow-md animate-in fade-in zoom-in-90 hover:bg-accent"
     >
       <ArrowDown className="size-5" />

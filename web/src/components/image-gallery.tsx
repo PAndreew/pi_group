@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n"
 import { ChevronLeft, ChevronRight, Download, Play, X } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { useState } from "react"
@@ -31,6 +32,7 @@ export function VideoThumb({ src, name, className }: { src: string; name?: strin
 
 /** Thumbnails under a message; tapping an image opens it full screen, with arrows between several. Videos play in place. */
 export function ImageGallery({ images: media, className }: { images: GalleryImage[]; className?: string }) {
+  const { t: tr } = useLocale()
   const [open, setOpen] = useState<number>()
   if (!media.length) return null
   const images = media.filter((m) => !m.video)
@@ -60,16 +62,16 @@ export function ImageGallery({ images: media, className }: { images: GalleryImag
             }}
           >
             <DialogPrimitive.Title className="sr-only">{current?.name ?? "Image"}</DialogPrimitive.Title>
-            <DialogPrimitive.Description className="sr-only">Full screen image</DialogPrimitive.Description>
+            <DialogPrimitive.Description className="sr-only">{tr("ui.full-screen-image-fd7613")}</DialogPrimitive.Description>
             <div className="flex shrink-0 items-center gap-2 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white">
               <span className="min-w-0 flex-1 truncate text-sm">{current?.name}</span>
               {images.length > 1 && open !== undefined && <span className="text-xs tabular-nums opacity-70">{open + 1} / {images.length}</span>}
               {current?.download && (
-                <a href={current.download} className="grid size-10 place-items-center rounded-full hover:bg-white/15" aria-label="Download image">
+                <a href={current.download} className="grid size-10 place-items-center rounded-full hover:bg-white/15" aria-label={tr("ui.download-image-d6f34a")}>
                   <Download className="size-5" />
                 </a>
               )}
-              <DialogPrimitive.Close className="grid size-10 place-items-center rounded-full hover:bg-white/15" aria-label="Close">
+              <DialogPrimitive.Close className="grid size-10 place-items-center rounded-full hover:bg-white/15" aria-label={tr("ui.close-bbfa77")}>
                 <X className="size-5" />
               </DialogPrimitive.Close>
             </div>
@@ -77,10 +79,10 @@ export function ImageGallery({ images: media, className }: { images: GalleryImag
               {current && <img src={current.src} alt={current.name ?? ""} className="max-h-full max-w-full object-contain" />}
               {images.length > 1 && (
                 <>
-                  <button type="button" onClick={() => step(-1)} className="absolute left-2 grid size-11 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70" aria-label="Previous image">
+                  <button type="button" onClick={() => step(-1)} className="absolute left-2 grid size-11 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70" aria-label={tr("ui.previous-image-46edf0")}>
                     <ChevronLeft className="size-6" />
                   </button>
-                  <button type="button" onClick={() => step(1)} className="absolute right-2 grid size-11 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70" aria-label="Next image">
+                  <button type="button" onClick={() => step(1)} className="absolute right-2 grid size-11 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70" aria-label={tr("ui.next-image-eb89a7")}>
                     <ChevronRight className="size-6" />
                   </button>
                 </>
