@@ -1,8 +1,17 @@
 import { AtSign, AudioLines, LoaderCircle, Square, SendHorizontal, Pause } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { DictationPhase } from "@/hooks/use-silent-dictation"
+import { useLocale } from "@/lib/i18n"
 
 const ICON = "size-[22px] lg:size-[18px]"
+const dictationLabels = {
+  ready: "composer.dictation",
+  loading: "composer.dictationLoading",
+  opening: "composer.dictationOpening",
+  decoding: "composer.dictationDecoding",
+  recording: "composer.dictationStop",
+  unavailable: "composer.dictationRetry",
+} as const satisfies Record<DictationPhase, string>
 
 /**
  * The one message box every screen uses: the text area (`children`) above a row with mentions
@@ -34,10 +43,11 @@ export function ComposerBox({
   onStop?: () => void
   onFiles?: (files: File[]) => void
 }) {
+  const { t } = useLocale()
   const dictate = !canSend && !onStop && !sending && Boolean(onDictate)
   const preparing = dictate && ['loading', 'opening', 'decoding'].includes(dictationPhase)
   const recording = dictate && dictationPhase === 'recording'
-  const label = dictate ? dictationPhase === 'loading' ? 'Preparing silent dictation' : dictationPhase === 'opening' ? 'Opening camera' : dictationPhase === 'decoding' ? 'Transcribing silent dictation' : recording ? 'Stop silent dictation' : dictationPhase === 'unavailable' ? 'Retry silent dictation' : 'Silent dictation' : onStop ? 'Pause the agent' : 'Send'
+  const label = t(dictate ? dictationLabels[dictationPhase] : onStop ? "composer.pause" : "composer.send")
   return (
     <>
     <div
@@ -52,7 +62,7 @@ export function ComposerBox({
     >
       {children}
       <div className="flex items-center gap-1 p-2">
-        <button type="button" className="composer-icon grid size-10 shrink-0 place-items-center rounded hover:bg-accent disabled:opacity-50 lg:size-8" aria-label="Mention participants" title="Mention participants" disabled={sending} onPointerDown={(e) => e.preventDefault()} onClick={onMention}>
+        <button type="button" className="composer-icon grid size-10 shrink-0 place-items-center rounded hover:bg-accent disabled:opacity-50 lg:size-8" aria-label={t("composer.mention")} title={t("composer.mention")} disabled={sending} onPointerDown={(e) => e.preventDefault()} onClick={onMention}>
           <AtSign className={ICON} />
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-evenly">{controls}</div>

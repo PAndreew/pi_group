@@ -55,11 +55,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/hooks/use-auth"
+import { BusyBee } from "@/components/busy-bee"
 import { useSessionStream } from "@/hooks/use-session-stream"
 import { type AgentMessage, api, type ExtensionDialog, type ModelInfo, type SessionSummary } from "@/lib/api"
 import { buildRuns, messageText, type Run } from "@/lib/steps"
 import { ConversationHeader } from "@/lib/nav-slot"
 import { useProjects } from "@/lib/projects"
+import { useLocale } from "@/lib/i18n"
 import { splitProjectMemory } from "@/lib/project-memory"
 import { cn, relativePath } from "@/lib/utils"
 
@@ -75,12 +77,13 @@ function readBase64(file: File) {
 }
 
 function UserBubble({ message, text, memory, onRemoveMemory, folder, own }: { message: AgentMessage; text: string; memory?: string; onRemoveMemory?: () => void; folder?: string; own?: boolean }) {
+  const { t } = useLocale()
   // Uploads show from their files (MessageBody); inline copies only when the prompt names no stored image.
   const images = Array.isArray(message.content) && imageRefs(text, folder).length === 0 ? message.content.filter((c: any) => c?.type === "image").map((img: any) => ({ src: `data:${img.mimeType};base64,${img.data}` })) : []
   return (
     <div className="flex items-start gap-2">
       <AuthorAvatar id={message.author?.id ?? "unknown"} name={message.author?.username ?? "?"} />
-      <ReplyStack text={text} className="max-w-[88%]" header={<MessageHeader name={message.author?.username ?? "Unknown author"} at={message.timestamp} />}>
+      <ReplyStack text={text} className="max-w-[88%]" header={<MessageHeader name={message.author?.username ?? t("message.unknownAuthor")} at={message.timestamp} />}>
         {(body) => (
           <div className="min-w-0">
             <div className={cn("human-bubble rounded-3xl bg-blue-50 px-4 py-2.5 text-sm text-black", own && "own-bubble")}>
@@ -175,51 +178,45 @@ function AgentBubble({
   /** The session folder, for links to files the agent wrote. */
   folder?: string
 }) {
+  const { t } = useLocale()
   const current = run.steps.findLast((step) => step.status === "running") ?? run.steps.at(-1)
   const Icon = current ? STEP_ICON[current.kind] : Loader2
   const failed = run.steps.filter((step) => step.status === "error")
+  const buzzing = run.running && !run.answer?.trim() && !question && !interactions
   return (
     <div className="flex items-start gap-2">
       <PiAvatar />
       <div className="max-w-[88%] min-w-0">
         <MessageHeader name="Beezy" at={run.running ? undefined : run.steps.findLast((step) => step.message?.timestamp)?.message?.timestamp}>
-          <button type="button" onClick={() => onOpen(null)} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label="Open detailed steps" title="Open detailed steps">
+          <button type="button" onClick={() => onOpen(null)} className="rounded p-1 text-gray-500 hover:bg-accent dark:text-gray-300" aria-label={t("message.openSteps")} title={t("message.openSteps")}>
             <List className="size-4" />
           </button>
-          {run.running && <span className="running-shimmer">Running…</span>}
-          <button type="button" onClick={() => onOpen(null)} className="inline-flex items-center gap-1 rounded px-1 py-1 text-gray-500 hover:bg-accent dark:text-gray-300" title="Open all steps">
-            {run.running ? <><Icon className="size-3.5" aria-label={current ? STEP_LABEL[current.kind] : "Starting"} />{run.steps.length} steps</> : <>Total: {run.steps.length}</>}
+          {run.running && <span className="running-shimmer">{t("message.running")}</span>}
+          <button type="button" onClick={() => onOpen(null)} className="inline-flex items-center gap-1 rounded px-1 py-1 text-gray-500 hover:bg-accent dark:text-gray-300" title={t("message.allSteps")}>
+            {run.running ? <><Icon className="size-3.5" aria-label={current ? STEP_LABEL[current.kind] : t("message.starting")} />{t("message.stepCount", { count: run.steps.length })}</> : t("message.stepTotal", { count: run.steps.length })}
           </button>
-          <button type="button" onClick={() => onOpen(null, true)} className={cn("rounded px-1 py-1 hover:bg-accent", failed.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300")} title="Open failed step details">
-            {run.running ? `✕ ${failed.length} failed` : `Failed: ${failed.length}`}
+          <button type="button" onClick={() => onOpen(null, true)} className={cn("rounded px-1 py-1 hover:bg-accent", failed.length > 0 ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-300")} title={t("message.openFailedSteps")}>
+            {t(run.running ? "message.failingCount" : "message.failedCount", { count: failed.length })}
           </button>
         </MessageHeader>
-        {(run.running || run.answer || question || answered.length > 0 || interactions) && (
-          <>
-            <div className="agent-message agent-bubble rounded-3xl px-4 py-2.5 text-sm">
-              {run.running && !run.answer?.trim() && !question && !interactions && (
-                <div role="status" aria-label="Beezy is working" className="py-2 text-black">
-                  <pre aria-hidden="true" className="ascii-bee m-0 font-mono text-xs leading-tight">
-                    <span className="ascii-bee-wing-left" />{"(oo)"}<span className="ascii-bee-wing-right" />
-                  </pre>
-                </div>
-              )}
-              {run.answer && (
-                <div>
-                  <Markdown text={run.answer} base={folder} />
-                  {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current align-middle" />}
-                </div>
-              )}
-              {answered.map((a) => (
-                <div key={a.dialog.id} className="mt-2 rounded-lg bg-current/10 px-2.5 py-1.5 text-xs">
-                  <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
-                  <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
-                </div>
-              ))}
-              {interactions}
-              {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
-            </div>
-          </>
+        {buzzing && <div className="agent-message w-fit rounded-3xl px-4 py-2.5"><BusyBee /></div>}
+        {(run.answer?.trim() || answered.length > 0 || interactions || question) && (
+          <div className="agent-message agent-bubble rounded-3xl px-4 py-2.5 text-sm">
+            {run.answer?.trim() && (
+              <div>
+                <Markdown text={run.answer} base={folder} />
+                {run.answerStreaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current align-middle" />}
+              </div>
+            )}
+            {answered.map((a) => (
+              <div key={a.dialog.id} className="mt-2 rounded-lg bg-current/10 px-2.5 py-1.5 text-xs">
+                <span className="opacity-80">{a.dialog.title ?? a.dialog.message ?? "The agent asked"}</span>
+                <span className="font-medium"> → {answerLabel(a.dialog, a.answer)}</span>
+              </div>
+            ))}
+            {interactions}
+            {question && <InlineQuestion dialog={question} onAnswer={onAnswer} />}
+          </div>
         )}
       </div>
     </div>
@@ -311,6 +308,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
   const { user } = useAuth()
   const { uploadFolder } = useProjects()
   const interactions = useInteractions(sessionKey)
+  const { t } = useLocale()
   const { state, connected, deletedBy, browser } = useSessionStream(sessionKey)
   // Short drops (back from the background, a server restart) heal silently; only say so if it lasts.
   const reconnecting = useLasting(!connected, 2500)
@@ -752,7 +750,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     hash="session"
                     value={text}
                     onChange={setText}
-                    placeholder={editing ? "Edit message…" : "Message the agent… ($ files, # machines)"}
+                    placeholder={t(editing ? "composer.edit" : "composer.session")}
                     selfId={user?.id}
                     eligiblePeople={canInvite && !editing ? undefined : isParticipant}
                     controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}

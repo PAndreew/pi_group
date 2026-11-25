@@ -85,7 +85,7 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
     })
     return (
       <>
-        {body && <div className="whitespace-pre-wrap break-words">
+        {body && <div className="whitespace-pre-wrap wrap-anywhere">
           <TextWithLinks text={body} folder={folder} />
         </div>}
         <BrowserReferenceCards pages={pages} screenshots={screenshots} />
@@ -94,7 +94,7 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
     )
   }
   return (
-    <div className={cn("grid min-w-0 gap-1", tinted && "agent-bubble")}>
+    <div className={cn("grid min-w-0 grid-cols-1 gap-1", tinted && "agent-bubble")}>
       <div className="flex min-w-0 items-center gap-1 text-xs opacity-80">
         <Share className="size-3 shrink-0" />
         <span className="truncate">

@@ -61,7 +61,7 @@ export function ReplyStack({ text, align = "start", className, header, children 
           className={cn("relative z-0 w-full cursor-pointer rounded-t-xl bg-muted px-3 py-2 text-left text-xs text-muted-foreground opacity-65 transition-opacity hover:opacity-90 focus-visible:opacity-90 focus-visible:outline-2 focus-visible:outline-ring")}
         >
           <span className="block font-medium">{reply.author}</span>
-          <span className="line-clamp-3 whitespace-pre-wrap break-words">{reply.quote}</span>
+          <span className="line-clamp-3 whitespace-pre-wrap wrap-anywhere">{reply.quote}</span>
         </button>
       )}
       <div className={cn("relative z-10 max-w-full", reply && "w-full [&>div]:rounded-t-none [&>div>div:first-child]:rounded-t-none")}>{children(reply ? reply.body : text)}</div>

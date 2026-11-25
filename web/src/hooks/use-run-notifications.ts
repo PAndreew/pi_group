@@ -34,9 +34,9 @@ export const notificationsSupported = () => typeof Notification !== "undefined" 
 
 /** Why the notifications toggle is unavailable, for the menu label. */
 export function notificationsUnavailable() {
-  if (!window.isSecureContext) return "Notifications need HTTPS"
-  if (iOS() && !standalone()) return "Add to Home Screen for notifications"
-  return "Notifications unsupported here"
+  if (!window.isSecureContext) return "profile.notificationsHttps"
+  if (iOS() && !standalone()) return "profile.notificationsHomeScreen"
+  return "profile.notificationsUnsupported"
 }
 
 /** Push delivers while the app is closed or frozen in the background. */

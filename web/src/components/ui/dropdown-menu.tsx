@@ -51,6 +51,11 @@ function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typ
 }
 
 const DropdownMenuSub = DropdownMenuPrimitive.Sub
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+
+function DropdownMenuRadioItem({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return <DropdownMenuPrimitive.RadioItem className={cn("flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent [&_svg]:size-4", className)} {...props} />
+}
 
 function DropdownMenuSubTrigger({ className, children, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
   return <DropdownMenuPrimitive.SubTrigger className={cn("flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent data-[state=open]:bg-accent [&_svg]:size-4", className)} {...props}>{children}<ChevronRight className="ml-auto" /></DropdownMenuPrimitive.SubTrigger>
@@ -60,4 +65,4 @@ function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<ty
   return <DropdownMenuPrimitive.Portal><DropdownMenuPrimitive.SubContent className={cn("z-50 min-w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-md", className)} {...props} /></DropdownMenuPrimitive.Portal>
 }
 
-export { DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger }
+export { DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger }

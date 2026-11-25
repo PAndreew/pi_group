@@ -6,7 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+import { useLocale } from "@/lib/i18n"
+
 export function Login() {
+  const { t } = useLocale()
   const { login } = useAuth()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -33,21 +36,21 @@ export function Login() {
           <CardTitle className="text-xl">
             <img src="/beezy-logo.svg" alt="" className="size-8" /> beezy
           </CardTitle>
-          <CardDescription>Sign in to your shared agent workspace.</CardDescription>
+          <CardDescription>{t("login.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">{t("login.username")}</Label>
               <Input id="username" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={busy}>
-              {busy && <Loader2 className="animate-spin" />} Sign in
+              {busy && <Loader2 className="animate-spin" />} {t("login.signIn")}
             </Button>
           </form>
         </CardContent>

@@ -140,7 +140,7 @@ html[data-editing] body { padding-bottom: 0; }
 
 /* Markdown rendering without the typography plugin. */
 .prose-pi {
-  @apply text-sm leading-relaxed break-words;
+  @apply min-w-0 text-sm leading-relaxed wrap-anywhere;
 }
 .prose-pi :where(p, ul, ol, pre, blockquote, table) {
   @apply my-2;
@@ -158,6 +158,7 @@ html[data-editing] body { padding-bottom: 0; }
    header row and only horizontal dividers. The tints mix the text colour, so they work on every bubble and theme. */
 .prose-pi .md-table {
   @apply my-2 max-w-full overflow-x-auto rounded-xl text-xs;
+  overflow-wrap: break-word;
   background-color: color-mix(in oklch, currentColor 6%, transparent);
 }
 .prose-pi .md-table table { @apply m-0 w-full border-collapse; }

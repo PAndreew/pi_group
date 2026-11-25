@@ -329,6 +329,7 @@ export function mountChats(router: Router, deps: ChatDeps) {
 				addMembers(chat, []);
 				pending.sessionKey = meta.key;
 				update(pending);
+				fanOut(chat, "chat_update", pending);
 				const people = memberIds(chat.id).map((id) => store.userById(id)?.username ?? "unknown");
 				intro = `You are pi, taking part in a group chat with ${people.join(", ")}. Each message below is prefixed with its author. Reply to what is asked of you; your reply is posted back to the chat.\n\n`;
 			}
