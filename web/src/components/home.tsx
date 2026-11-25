@@ -5,7 +5,7 @@ import { UploadedPreviews } from "@/components/attachment-preview"
 import { ChatList } from "@/components/chat-list"
 import { ComposerControls, type ComposerConfig } from "@/components/composer-controls"
 import { ComposerTools } from "@/components/composer-tools"
-import { MentionComposer, parseMessage, withFolder } from "@/components/mention-composer"
+import { MentionComposer } from "@/components/mention-composer"
 import { useAuth } from "@/hooks/use-auth"
 import { useOverlayOpen } from "@/hooks/use-overlay-open"
 import { uploadDir } from "@/lib/attachments"
@@ -16,7 +16,7 @@ import { useProjects } from "@/lib/projects"
 
 /**
  * Home: the active project's chats, and a message box that starts a new one in it. Mention @pi, one
- * or more people, or both; add /folder to pick where pi works (the project's folder otherwise; for
+ * or more people, or both; use $ to pick where pi works (the project's folder otherwise; for
  * General, the shared chat folder).
  */
 export function Home({ selectSessions, creatingSession }: { selectSessions?: boolean; creatingSession?: boolean }) {
@@ -25,6 +25,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
   const nav = useNav()
   const { active: project } = useProjects()
   const [text, setText] = useState("")
+  const [selectedFolder, setSelectedFolder] = useState<string>()
   const [busy, setBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const attach = async (files: File[]) => {
@@ -60,8 +61,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
     }, () => {})
   }, [base, project])
 
-  // The icons act on the /folder being typed, or the project's folder.
-  const folder = parseMessage(text, []).folder ?? base
+  const folder = selectedFolder ?? base
 
   return (
     <div className="mx-auto flex h-full min-w-0 w-full max-w-2xl flex-col lg:max-w-none">
@@ -78,7 +78,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
                 title={t("home.startIn", { folder: f })}
                 data-active={folder === f}
                 onClick={() => {
-                  setText((t) => withFolder(t, f))
+                  setSelectedFolder(f)
                   requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-composer-box] textarea")?.focus())
                 }}
                 className="flex min-w-0 max-w-[40%] shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-foreground"
@@ -93,6 +93,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
         <UploadedPreviews text={text} />
         <MentionComposer
           folder={folder}
+          folderSelection={{ value: selectedFolder, onChange: setSelectedFolder }}
           value={text}
           onChange={setText}
           busy={busy}
@@ -108,10 +109,11 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
             if (!message.text) return void toast.info(t("composer.empty"))
             setBusy(true)
             try {
-              const started = await api.startChat({ text: message.text, pi, userIds: message.people.map((p) => p.id), folder: message.folder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(pi ? composerConfig : {}) })
+              const started = await api.startChat({ text: message.text, pi, userIds: message.people.map((p) => p.id), folder: selectedFolder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(pi ? composerConfig : {}) })
               setText("")
+              setSelectedFolder(undefined)
               if (started.chat) nav.openChat(started.chat)
-              else if (started.session) nav.openSession(started.session, message.folder ?? base)
+              else if (started.session) nav.openSession(started.session, folder)
             } catch (error) {
               toast.error((error as Error).message)
             } finally {

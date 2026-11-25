@@ -1,10 +1,11 @@
 import { useLocale } from "@/lib/i18n"
-import { File, Folder, Trash2, X } from "lucide-react"
+import { File, Folder, Trash2 } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { MachineOption } from "@/components/machine-dropup"
 import { ComposerBox } from "@/components/composer-box"
+import { SuggestionHeader } from "@/components/suggestion-header"
 import { useSilentDictation } from "@/hooks/use-silent-dictation"
 import { Textarea } from "@/components/ui/textarea"
 import { api, type RemoteMachine } from "@/lib/api"
@@ -19,38 +20,28 @@ export interface Person {
 export interface ParsedMessage {
   /** What was typed, mentions included. */
   raw: string
-  /** Without the @ and /folder mentions. */
+  /** Without the recognized @mentions. */
   text: string
   pi: boolean
   people: Person[]
-  folder?: string
 }
 
-/** Folder mentions keep spaces as no-break spaces so a /path stays one token. */
+/** When unwrapping a folder pill, keep its spaces inside the editable token. */
 const NBSP = "\u00a0"
 const MENTION = /(^|\s)@([\w.-]+)/g
-const FOLDER = /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)/g
 
 let directory: Promise<Person[]> | undefined
 const people = () => (directory ??= api.directory().then((d) => d.users, () => { directory = undefined; return [] }))
 
-/** `raw` with its /folder mention (if any) replaced by `folder`, placed first. */
-export function withFolder(raw: string, folder: string): string {
-  const rest = raw.replace(FOLDER, (_all, lead) => lead).replace(/^[ 	]+/, "")
-  return `/${folder.replaceAll(" ", NBSP)} ${rest}`
-}
-
 export function parseMessage(raw: string, everyone: Person[]): ParsedMessage {
   const names = [...raw.matchAll(MENTION)].map((m) => m[2].toLowerCase())
   const mentioned = everyone.filter((p) => names.includes(p.username.toLowerCase()))
-  const folders = [...raw.matchAll(FOLDER)].map((m) => m[2].replaceAll(NBSP, " "))
   const known = new Set(["pi", ...mentioned.map((p) => p.username.toLowerCase())])
   const text = raw
     .replace(MENTION, (all, lead, name) => (known.has(String(name).toLowerCase()) ? lead : all))
-    .replace(FOLDER, (_all, lead) => lead)
     .replace(/[ \t]+/g, " ")
     .trim()
-  return { raw: raw.trim(), text, pi: names.includes("pi"), people: mentioned, folder: folders.at(-1) }
+  return { raw: raw.trim(), text, pi: names.includes("pi"), people: mentioned }
 }
 
 type Suggestion =
@@ -63,23 +54,24 @@ type Suggestion =
 
 /** The token being typed at the caret, if it is a mention. */
 function activeToken(value: string, caret: number) {
-  const match = /(^|\s)([@/#])((?:[^\s@#]|\u00a0)*)$/.exec(value.slice(0, caret))
-  return match ? { trigger: match[2] as "@" | "/" | "#", query: match[3], start: caret - match[3].length - 1 } : undefined
+  const match = /(^|\s)([@/#$])((?:[^\s@#$]|\u00a0)*)$/.exec(value.slice(0, caret))
+  return match ? { trigger: match[2] as "@" | "/" | "#" | "$", query: match[3], start: caret - match[3].length - 1 } : undefined
 }
 
 /**
- * A message box with @ (pi and people), / (fuzzy folders or files), /skill: (skills) and # (remote machines) suggestions.
+ * A message box with @ (pi and people), $ (fuzzy folders or files), /skill: (skills) and # (remote machines) suggestions.
  * Enter sends, Shift+Enter adds a line; while suggestions are open, arrows pick and Enter/Tab inserts.
  */
 export function MentionComposer({
-  value: rawValue,
-  onChange: onRawChange,
+  value,
+  onChange,
   onSubmit,
   placeholder,
   busy,
   selfId,
   hash = "folder",
   folder = "",
+  folderSelection,
   sessionKey,
   controls,
   children,
@@ -97,12 +89,13 @@ export function MentionComposer({
   onStop?: () => void
   selfId?: string
   /**
-   * What / offers: "folder" picks the folder for a new chat (/path token), "paths" mentions files and
+   * What $ offers: "folder" picks the folder for a new chat, "paths" mentions files and
    * folders, inserted as `paths` relative to `folder` so pi can open them. "session" only handles
    * @, keeping the session's dedicated pickers and multiline Enter on touch screens.
    */
   hash?: "folder" | "paths" | "off" | "session"
   folder?: string
+  folderSelection?: { value: string | undefined; onChange: (folder: string | undefined) => void }
   sessionKey?: string
   controls?: React.ReactNode
   children?: React.ReactNode
@@ -113,13 +106,7 @@ export function MentionComposer({
   onFiles?: (files: File[]) => void
 }) {
   const { t: tr } = useLocale()
-  const [editingFolder, setEditingFolder] = useState(false)
-  useEffect(() => { if (!rawValue) setEditingFolder(false) }, [rawValue])
-  // Backspacing a pill unwraps it into ordinary text until another folder is picked.
-  const folderToken = hash === "folder" && !editingFolder ? /(^|\s)\/(?!skill:)((?:[^\s]|\u00a0)+)[ \t\n]/.exec(rawValue) : null
-  const selectedFolder = folderToken?.[2].replaceAll(NBSP, " ")
-  const value = folderToken ? rawValue.slice(0, folderToken.index) + folderToken[1] + rawValue.slice(folderToken.index + folderToken[0].length) : rawValue
-  const onChange = (next: string) => onRawChange(selectedFolder ? withFolder(next, selectedFolder) : next)
+  const selectedFolder = folderSelection?.value
   const input = useRef<HTMLTextAreaElement>(null)
   const submitting = useRef(false)
   // The folder pill sits over the start of the first line; only that line is indented, so text flows under it.
@@ -145,7 +132,10 @@ export function MentionComposer({
   const [index, setIndex] = useState(0)
   const tokenAt = (next: string, caret: number) => {
     const found = activeToken(next, caret)
-    return hash === "session" && found?.trigger !== "@" ? undefined : found
+    if (hash === "session" && found?.trigger !== "@") return undefined
+    if (found?.trigger === "/" && !found.query.startsWith("skill:")) return undefined
+    if (found?.trigger === "$" && (hash === "off" || (hash === "folder" && !folderSelection))) return undefined
+    return found
   }
 
   useEffect(() => {
@@ -153,7 +143,9 @@ export function MentionComposer({
   }, [])
 
   useEffect(() => {
-    if (!token) return setOptions([])
+    setOptions([])
+    setIndex(0)
+    if (!token) return
     const q = token.query.toLowerCase()
     if (token.trigger === "@") {
       const matches = everyone.filter((p) => p.id !== selfId && p.username.toLowerCase().includes(q)).map((person) => ({ kind: "person" as const, person }))
@@ -236,17 +228,15 @@ export function MentionComposer({
             ? `/skill:${s.name} `
             : s.kind === "path"
               ? `\`${relativePath(folder, s.path)}${s.type === "dir" ? "/" : ""}\` `
-              : `/${s.path.replaceAll(" ", NBSP)} `
+              : ""
     const suffix = value.slice(caret)
-    const next = value.slice(0, token.start) + insert + (token.trigger === "@" ? suffix.replace(/^ /, "") : suffix)
-    const at = s.kind === "folder" ? token.start : token.start + insert.length
+    const next = value.slice(0, token.start) + insert + (token.trigger === "@" || s.kind === "folder" ? suffix.replace(/^ /, "") : suffix)
+    const at = token.start + insert.length
     // Commit the new value before restoring the caret, within the original gesture.
     if (document.activeElement !== input.current) input.current?.focus({ preventScroll: true })
     flushSync(() => {
-      if (s.kind === "folder") {
-        setEditingFolder(false)
-        onRawChange(withFolder(value.slice(0, token.start) + value.slice(caret), s.path))
-      } else onChange(next)
+      if (s.kind === "folder") folderSelection?.onChange(s.path)
+      onChange(next)
       setToken(undefined)
     })
     input.current?.setSelectionRange(at, at)
@@ -258,8 +248,8 @@ export function MentionComposer({
     submitting.current = true
     setToken(undefined)
     try {
-      const directory = rawValue.includes("@") ? await people() : []
-      await onSubmit(parseMessage(rawValue, directory.filter((person) => person.id !== selfId)))
+      const directory = value.includes("@") ? await people() : []
+      await onSubmit(parseMessage(value, directory.filter((person) => person.id !== selfId)))
     } finally {
       submitting.current = false
     }
@@ -283,7 +273,7 @@ export function MentionComposer({
     >
       {open && (
         <div data-suggestions className="absolute bottom-full left-0 z-[100] mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md" style={token?.trigger === "@" ? { maxHeight: "clamp(5rem, calc(var(--app-height, 100dvh) - 9rem), 16rem)" } : undefined} onPointerDown={(e) => e.preventDefault()}>
-        <div className="flex shrink-0 justify-end px-1 pt-1"><button type="button" aria-label={tr("ui.dismiss-suggestions-ce900c")} className="rounded p-1.5 hover:bg-accent" onMouseDown={(e) => e.preventDefault()} onClick={() => setToken(undefined)}><X className="size-4" /></button></div>
+        <SuggestionHeader title={token?.trigger === "@" ? tr("composer.mentionSomeone") : token?.trigger === "$" ? tr("composer.chooseFolder") : undefined} dismissLabel={tr("ui.dismiss-suggestions-ce900c")} onDismiss={() => setToken(undefined)} />
         {/* Rows scrolled past the edges fade out, like the chat list. */}
         <ul className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2" role="listbox">
           {suggestions.map((s, i) => (
@@ -331,7 +321,7 @@ export function MentionComposer({
       <div className="relative min-w-0 px-3">
       {selectedFolder && (
         <div ref={pill} className="absolute top-2 left-3 z-10 max-w-[50%]">
-          <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { onRawChange(value); setToken(undefined); input.current?.focus() }}>
+          <button type="button" aria-label={`Remove folder ${selectedFolder}`} title={`Remove folder /${selectedFolder}`} className="inline-flex max-w-full items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-accent" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { folderSelection?.onChange(undefined); setToken(undefined); input.current?.focus() }}>
             <Folder className="size-3.5 shrink-0" />
             <span className="truncate">{selectedFolder}</span>
             <Trash2 className="size-3.5 shrink-0 text-muted-foreground" />
@@ -352,9 +342,9 @@ export function MentionComposer({
           if (e.nativeEvent.isComposing) return
           if (e.key === "Backspace" && selectedFolder && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
             e.preventDefault()
-            const editable = `/${selectedFolder.replaceAll(" ", NBSP)}`.slice(0, -1)
-            setEditingFolder(true)
-            onRawChange(`${editable} ${value}`)
+            const editable = `$${selectedFolder.replaceAll(" ", NBSP)}`.slice(0, -1)
+            folderSelection?.onChange(undefined)
+            onChange(`${editable} ${value}`)
             setToken(activeToken(editable, editable.length))
             requestAnimationFrame(() => {
               input.current?.setSelectionRange(editable.length, editable.length)

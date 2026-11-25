@@ -66,7 +66,7 @@ On the home screen, a message with no people mentioned goes to Beezy. Tap **@** 
 - **With people:** `@Sam @Alice What should we work on?`
 - **Together:** `@Sam @pi /weekend-planner Let’s plan something together.`
 
-`/folder` picks where the agent works; otherwise Beezy uses the project's folder or, in General, the shared chat folder. In a group chat, mention `@pi` when you want the agent to respond. In an agent session, owners and admins can mention new people and confirm sharing the full session with them. Add accounts from your user menu → **Manage users**.
+Type `$` and choose a folder to set where the agent works; otherwise Beezy uses the project's folder or, in General, the shared chat folder. In a group chat, mention `@pi` when you want the agent to respond. In an agent session, owners and admins can mention new people and confirm sharing the full session with them. Add accounts from your user menu → **Manage users**.
 
 ![Starting a chat with a person, the agent and a working folder](screenshots/start-chat.png)
 

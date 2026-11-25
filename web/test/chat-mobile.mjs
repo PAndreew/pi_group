@@ -64,7 +64,7 @@ try {
       }
     })), Array.from({ length: expectedTables }, () => ({ tableScrolls: true, bubbleFits: true, chatFits: true })))
   }
-  let sent
+  let sent, started
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
     let body = {}
@@ -87,11 +87,14 @@ try {
     } else if (path === '/api/chats/test') body = { chat, messages }
     else if (path === '/api/chats/test/messages') body = { messages: [] }
     else if (path === '/api/jobs') body = { jobs: [{ id: 'job', name: 'Mobile job', owner: 'Tester', schedule: '@daily', folder: '', approved: false, enabled: true, canApprove: true, steps: [{ type: 'http', method: 'DELETE', url: 'https://example.com/' + 'a'.repeat(200), headers: {}, timeoutSec: 30 }], lastRun: { at: new Date().toISOString(), ok: false, ms: 10, output: 'x'.repeat(400) } }] }
-    else if (path === '/api/chats') body = { chats: [] }
+    else if (path === '/api/chats' && route.request().method() === 'POST') {
+      started = route.request().postDataJSON()
+      body = { chat: 'test' }
+    } else if (path === '/api/chats') body = { chats: [] }
     else if (path === '/api/users/directory') body = { users: [user, ...people] }
     else if (path === '/api/projects') body = { projects: [] }
     else if (path === '/api/projects/moves') body = { moves: [] }
-    else if (path === '/api/folders/search') body = { folders: [], chatFolder: 'pi-chat' }
+    else if (path === '/api/folders/search') body = { folders: ['my project/src'], chatFolder: 'pi-chat', entries: [{ path: 'my project/src', type: 'dir' }] }
     else if (path === '/api/harnesses') body = { harnesses: [{ id: 'pi', ok: true }] }
     else if (path.endsWith('/watches')) body = { watches: [] }
     else if (path === '/api/applets') body = { applets: [] }
@@ -114,8 +117,21 @@ try {
     const navigation = page.getByRole('dialog', { name: 'Menu' })
     if (await navigation.isVisible()) await navigation.getByRole('button', { name: 'Close', exact: true }).click()
   }
-  await page.goto(`${base}/#c=test`)
+  const editor = page.locator('[data-chat-composer] textarea')
+  const dropup = page.locator('[data-suggestions]')
+  await editor.fill('$src')
+  await dropup.getByText('Choose folder', { exact: true }).waitFor()
+  await dropup.getByRole('option', { name: '/my project/src' }).tap()
+  await editor.fill('Check /tmp and $50')
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
   await page.getByText('Assistant answer 59:', { exact: false }).waitFor()
+  assert.equal(started.folder, 'my project/src', 'chosen folder is sent separately from the text')
+  assert.equal(started.text, 'Check /tmp and $50')
+  await editor.fill('$src')
+  await dropup.getByText('Choose folder', { exact: true }).waitFor()
+  await dropup.getByRole('option', { name: '/my project/src' }).tap()
+  assert.equal(await editor.inputValue(), '`my project/src/` ', 'group chat also inserts a path with $')
+  await editor.fill('')
   for (const width of [320, 390, 1024, 390]) {
     await page.setViewportSize({ width, height: 844 })
     await checkMessageOverflow(2)
@@ -155,7 +171,6 @@ try {
   assert.equal((await header.boundingBox()).y, top)
   await page.getByRole('button', { name: 'Reply to message', exact: true }).nth(1).click()
   await page.getByRole('region', { name: 'Reply preview' }).waitFor()
-  const editor = page.locator('[data-chat-composer] textarea')
   assert.equal(await editor.evaluate(el => el === document.activeElement), true)
   await editor.fill('My question')
   await page.getByRole('button', { name: 'Cancel reply' }).click()
@@ -196,6 +211,11 @@ try {
   await page.evaluate(() => { delete window.visualViewport.height })
   await page.goto(`${base}/#s=test-session`)
   await page.getByText('Session assistant answer', { exact: true }).waitFor()
+  await editor.fill('$src')
+  await dropup.getByText('Choose folder', { exact: true }).waitFor()
+  await dropup.getByRole('button', { name: '/my project/src' }).tap()
+  await page.getByRole('button', { name: 'Remove my project/src/' }).waitFor()
+  await page.getByRole('button', { name: 'Remove my project/src/' }).tap()
   await page.getByRole('button', { name: 'Reply to message', exact: true }).last().click()
   await page.getByRole('region', { name: 'Reply preview' }).waitFor()
   await page.locator('[data-chat-composer] textarea').fill('Session follow-up')

@@ -12,14 +12,13 @@ const js = ts.transpile(parser.replaceAll('export ', ''))
 const context = vm.createContext({})
 vm.runInContext(js, context)
 
-test('slash folders round-trip with spaces; skill commands remain message text', () => {
-  const raw = context.withFolder('@pi hello /old /skill:review', 'my project/src')
-  assert.equal(raw, '/my\u00a0project/src @pi hello  /skill:review')
-  const parsed = context.parseMessage(raw, [])
-  assert.equal(parsed.folder, 'my project/src')
-  assert.equal(parsed.text, 'hello /skill:review')
+test('only recognized people and agent mentions are removed from message text', () => {
+  const raw = '@pi @alex hello $50 /old /skill:review @unknown'
+  const parsed = context.parseMessage(raw, [{ id: 'alex', username: 'alex' }])
+  assert.equal(parsed.raw, raw)
+  assert.equal(parsed.text, 'hello $50 /old /skill:review @unknown')
   assert.equal(parsed.pi, true)
-  assert.equal(context.parseMessage('$money hello', []).folder, undefined)
+  assert.equal(parsed.people[0].id, 'alex')
 })
 
 test('suggestion surface uses opaque composer background and foreground', () => {

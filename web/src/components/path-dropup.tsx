@@ -1,5 +1,6 @@
 import { useLocale } from "@/lib/i18n"
-import { File, Folder, X } from "lucide-react"
+import { File, Folder } from "lucide-react"
+import { SuggestionHeader } from "@/components/suggestion-header"
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
 import { relativePath } from "@/lib/utils"
@@ -31,11 +32,7 @@ export function PathDropup({ value, folder, onPick }: { value: string; folder: s
 
   return (
     <div data-suggestions className="absolute bottom-full left-0 z-20 mb-1 flex max-h-64 w-full max-w-sm flex-col rounded-md border bg-[var(--composer-background)] text-[var(--composer-foreground)] shadow-md">
-      <div className="flex shrink-0 justify-end px-1 pt-1">
-        <button type="button" aria-label={tr("ui.dismiss-file-suggestions-f6c731")} className="rounded p-1.5 hover:bg-accent" onClick={() => setDismissed(value)}>
-          <X className="size-4" />
-        </button>
-      </div>
+      <SuggestionHeader title={tr("composer.chooseFolder")} dismissLabel={tr("ui.dismiss-file-suggestions-f6c731")} onDismiss={() => setDismissed(value)} />
       <div className="chat-scroll-fade min-h-0 flex-1 overflow-y-auto px-1 py-2">
       {entries.map((e) => (
         <button
