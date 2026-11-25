@@ -1,9 +1,10 @@
 import { useLocale } from "@/lib/i18n"
-import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Quote, Loader2, Monitor, Power, RotateCw, Search, Smartphone, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Quote, Loader2, Monitor, Power, RotateCw, Scan, Search, Smartphone, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { BrowserAsk, type BrowserAnswer } from "@/components/browser-ask"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { api } from "@/lib/api"
 import type { ElementRef } from "@/lib/element-refs"
@@ -14,6 +15,8 @@ type Status = { state: "connecting" | "open" } | { state: "closed"; reason: stri
 
 const DESKTOP = { width: 1280, height: 800 }
 const PHONE = { width: 390, height: 844 }
+const PHONE_SCREEN = "(max-width: 639px), (pointer: coarse) and (max-width: 959px)"
+type ViewportMode = "auto" | "phone" | "panel"
 const clamp = (value: number, min: number, max: number) => Math.round(Math.min(Math.max(value, min), max))
 
 /** CDP modifier bits: Alt 1, Ctrl 2, Meta 4, Shift 8. */
@@ -38,7 +41,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const { t: tr } = useLocale()
   const [status, setStatus] = useState<Status>({ state: "connecting" })
   const [attempt, setAttempt] = useState(0)
-  const [page, setPage] = useState({ url: "", title: "", viewport: DESKTOP, canInput: false })
+  const [page, setPage] = useState({ url: "", title: "", viewport: DESKTOP, canInput: false, canResize: false })
   const [address, setAddress] = useState("")
   const [picking, setPicking] = useState(false)
   const [hover, setHover] = useState<{ box: Box; label: string; depth: number; count: number }>()
@@ -47,7 +50,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState("")
   const [scale, setScale] = useState(1)
-  const [phoneMode, setPhoneMode] = useState(false)
+  const [viewportMode, setViewportMode] = useState<ViewportMode>("auto")
   const [quote, setQuote] = useState("")
   const [selectingText, setSelectingText] = useState(false)
   const [asking, setAsking] = useState(false)
@@ -78,7 +81,6 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     const socket = new WebSocket(api.browserUrl(sessionKey))
     socket.binaryType = "blob"
     ws.current = socket
-    socket.onopen = () => setStatus({ state: "open" })
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") {
         void createImageBitmap(event.data as Blob).then((frame) => {
@@ -93,8 +95,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
       }
       const message = JSON.parse(event.data)
       if (message.type === "state") {
-        setPage((p) => ({ url: message.url, title: message.title, viewport: message.viewport, canInput: message.canInput ?? p.canInput }))
+        setPage((p) => ({ url: message.url, title: message.title, viewport: message.viewport, canInput: message.canInput ?? p.canInput, canResize: message.canResize ?? (message.canInput === undefined ? p.canResize : message.canInput) }))
+        setStatus((s) => s.state === "open" ? s : { state: "open" })
         setAddress((a) => (document.activeElement?.id === "browser-address" ? a : message.url === "about:blank" ? "" : message.url))
+      } else if (message.type === "viewport-control") {
+        setPage((p) => ({ ...p, canResize: message.canResize }))
       } else if (message.type === "hover") {
         if (message.box) depth.current = message.depth ?? 0
         setHover(message.box ? { box: message.box, label: message.label, depth: message.depth ?? 0, count: message.count ?? 1 } : undefined)
@@ -123,14 +128,15 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   useEffect(() => {
     const host = area.current
     const socket = ws.current
-    if (!host || !socket || !page.canInput || status.state !== "open") return
+    if (!host || !socket || !page.canResize || status.state !== "open") return
+    const phone = window.matchMedia(PHONE_SCREEN)
     let timer: number | undefined
     const resize = () => {
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {
         if (!host.clientWidth || !host.clientHeight || socket.readyState !== WebSocket.OPEN) return
-        const size = phoneMode ? PHONE : {
-          width: clamp(host.clientWidth, 320, 1920),
+        const size = viewportMode === "phone" ? PHONE : {
+          width: clamp(host.clientWidth, 320, viewportMode === "auto" && phone.matches ? PHONE.width : 1920),
           height: clamp(host.clientHeight, 320, 1600),
         }
         const current = pageRef.current.viewport
@@ -141,12 +147,14 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     }
     resize()
     const observer = new ResizeObserver(resize)
-    if (!phoneMode) observer.observe(host)
+    if (viewportMode !== "phone") observer.observe(host)
+    if (viewportMode === "auto") phone.addEventListener("change", resize)
     return () => {
       observer.disconnect()
+      phone.removeEventListener("change", resize)
       window.clearTimeout(timer)
     }
-  }, [page.canInput, status.state, phoneMode, sessionKey])
+  }, [page.canResize, status.state, viewportMode, sessionKey])
 
   // Fit the page into the panel, keeping its aspect ratio.
   useEffect(() => {
@@ -315,23 +323,25 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     surface.current?.focus()
   }
 
-  const phone = phoneMode
   const blank = status.state === "open" && (!page.url || page.url === "about:blank")
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <nav aria-label={tr("ui.browser-tools-87338b")} className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 border-b p-1.5">
-        <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!page.canInput}
-          onClick={() => setPhoneMode((mode) => !mode)}
-          aria-label={phone ? "Fit to panel" : "Phone size"}
-          title={phone ? "Fit to panel" : "Phone size"}
-        >
-          {phone ? <Monitor /> : <Smartphone />}
-        </Button>
+      <nav aria-label={tr("ui.browser-tools-87338b")} className="flex shrink-0 items-center justify-around border-b p-1.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" disabled={!page.canResize || status.state !== "open"} aria-label={tr("browser.viewport")} title={tr("browser.viewport")}>
+              {viewportMode === "auto" ? <Scan /> : viewportMode === "phone" ? <Smartphone /> : <Monitor />}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup value={viewportMode} onValueChange={(mode) => setViewportMode(mode as ViewportMode)}>
+              <DropdownMenuRadioItem value="auto">{tr("browser.viewportAuto")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="phone">{tr("browser.viewportPhone")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="panel">{tr("browser.viewportPanel")}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {page.canInput && (
           <Button variant="ghost" size="icon-sm" className="sm:hidden" data-active={typing} onClick={() => setTyping((t) => !t)} aria-label={tr("ui.type-into-the-page-ac55de")} title={tr("ui.type-into-the-page-ac55de")}>
             <Keyboard />
@@ -351,11 +361,6 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         >
           {pending ? <Loader2 className="animate-spin" /> : <Crosshair />}
         </Button>
-        </div>
-        <span className="min-w-0 truncate px-1 text-center text-xs text-muted-foreground" title={page.url && page.url !== "about:blank" ? page.url : undefined}>
-          {page.url && page.url !== "about:blank" ? page.url : "Please open a site or search for a keyword"}
-        </span>
-        <div className="flex items-center gap-1">
         {page.canInput && (
           <Button variant="ghost" size="icon-sm" onClick={() => send({ type: "close" })} aria-label={tr("ui.close-the-browser-for-everyone-0e00e2")} title={tr("ui.close-the-browser-for-everyone-0e00e2")}>
             <Power />
@@ -364,7 +369,6 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={tr("ui.hide-browser-5368bd")} title={tr("ui.hide-browser-5368bd")}>
           <X />
         </Button>
-        </div>
       </nav>
       {typing && page.canInput && (
         <form
@@ -460,11 +464,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "forward" })} aria-label={tr("ui.forward-ba4e72")} title={tr("ui.forward-ba4e72")}>
           <ArrowRight />
         </Button>
-        {ask && <Button variant={selectingText ? "default" : "ghost"} size="icon-sm" disabled={!page.canInput || blank} aria-pressed={selectingText} onClick={() => { setPicking(false); setHover(undefined); setSelectingText((active) => !active) }} aria-label={tr("ui.select-text-9d4921")} title={tr("ui.select-text-9d4921")}><Quote /></Button>}
         <form onSubmit={navigate} className="relative min-w-0 flex-1">
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input id="browser-address" aria-label={tr("ui.url-or-search-keyword-7f72d7")} value={address} onChange={(e) => setAddress(e.target.value)} disabled={!page.canInput} placeholder={tr("ui.search-the-web-or-enter-a-url-3d058b")} className="h-8 pl-8 text-sm" title={page.title} />
         </form>
+        {ask && <Button variant={selectingText ? "default" : "ghost"} size="icon-sm" disabled={!page.canInput || blank} aria-pressed={selectingText} onClick={() => { setPicking(false); setHover(undefined); setSelectingText((active) => !active) }} aria-label={tr("ui.select-text-9d4921")} title={tr("ui.select-text-9d4921")}><Quote /></Button>}
         <Button variant="ghost" size="icon-sm" disabled={!page.canInput} onClick={() => send({ type: "reload" })} aria-label={tr("ui.refresh-56e3ba")} title={tr("ui.refresh-56e3ba")}>
           <RotateCw />
         </Button>

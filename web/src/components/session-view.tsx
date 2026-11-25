@@ -790,7 +790,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
       </div>
       {browserShown && (
         // Beside the chat on wide screens; over it on phones.
-        <div className="fixed inset-0 z-40 lg:static lg:z-auto lg:w-[55%] lg:max-w-[calc(100%-22rem)] lg:shrink-0 lg:border-l">
+        <div className="max-lg:browser-phone-overlay lg:w-[55%] lg:max-w-[calc(100%-22rem)] lg:shrink-0 lg:border-l">
           <BrowserPanel sessionKey={sessionKey} picks={refs.length} onPick={addRef} onClose={() => setBrowserShown(false)} ask={browserAsk} />
         </div>
       )}

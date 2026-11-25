@@ -402,7 +402,7 @@ export function ChatView({ chatId }: { chatId: string }) {
           />
         )}
       </div>
-      {browserShown && chat?.sessionKey && <div className="h-[50vh] shrink-0 border-t"><BrowserPanel sessionKey={chat.sessionKey} picks={0} onPick={(ref) => setText((text) => `${text}${text ? "\n" : ""}${JSON.stringify(ref)}`)} onClose={() => setBrowserShown(false)} /></div>}
+      {browserShown && chat?.sessionKey && <div className="max-lg:browser-phone-overlay lg:h-[50vh] lg:shrink-0 lg:border-t"><BrowserPanel sessionKey={chat.sessionKey} picks={0} onPick={(ref) => setText((text) => `${text}${text ? "\n" : ""}${JSON.stringify(ref)}`)} onClose={() => setBrowserShown(false)} /></div>}
       <ForwardDialog text={forwarding} from={{ kind: "chat", id: chatId }} onOpenChange={(o) => !o && setForwarding(undefined)} />
     </div>
   )

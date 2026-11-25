@@ -63,12 +63,35 @@ $$`
     const body = {
       '/api/auth/me': { user }, '/api/tenants': { active: 'work', tenants: [{ id: 'work', name: 'Work' }] },
       '/api/sessions/s': { session }, '/api/harnesses/pi/models': { models: [model] },
+      '/api/chats/c': { chat: { id: 'c', title: 'Test chat', folder: 'workspace', members: [user], sessionKey: 's' }, messages: [] },
       '/api/sessions/s/browser': { open: false }, '/api/projects': { projects: [] }, '/api/projects/moves': { moves: [] },
     }[path] ?? { chats: [], jobs: [], applets: [], watches: [], users: [], sessions: [], interactions: [], folders: [], tools: [], commands: [], resources: [] }
     await route.fulfill({ json: body })
   })
-  await page.goto(`${process.env.TEST_URL || 'http://127.0.0.1:15173'}/#s=s`)
+  const base = process.env.TEST_URL || 'http://127.0.0.1:15173'
   const globe = page.getByRole('button', { name: 'Shared browser', exact: true })
+  const tools = page.getByRole('navigation', { name: 'Browser tools' })
+  const address = page.getByRole('textbox', { name: 'URL or search keyword' })
+  for (const route of ['c=c', 's=s']) {
+    await page.goto(`${base}/#${route}`)
+    await globe.click()
+    await address.waitFor()
+    const top = await tools.boundingBox()
+    const bottom = await address.boundingBox()
+    assert.ok(top.y <= 1 && top.width === 390 && bottom.y + bottom.height > 810, `${route}: browser must fill the phone viewport (toolbar y=${top.y})`)
+    assert.equal(await tools.textContent(), '', 'the toolbar should contain icons only')
+    const positions = (await tools.getByRole('button').all()).map(button => button.boundingBox())
+    const centers = (await Promise.all(positions)).map(({ x, width }) => x + width / 2)
+    const gaps = centers.slice(1).map((center, index) => center - centers[index])
+    assert.ok(Math.max(...gaps) - Math.min(...gaps) <= 1, 'toolbar icons should be evenly spaced')
+    if (route === 's=s') {
+      const quote = await page.getByRole('button', { name: 'Select text' }).boundingBox()
+      assert.ok(quote.x >= bottom.x + bottom.width, 'quote button should be right of the address input')
+    }
+    await tools.getByRole('button', { name: 'Hide browser' }).click()
+    await tools.waitFor({ state: 'hidden' })
+    assert.equal(await globe.isVisible(), true)
+  }
   const openBrowser = async () => {
     await globe.click()
     await page.getByRole('button', { name: 'Ask about this page' }).waitFor()

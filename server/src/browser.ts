@@ -23,6 +23,8 @@ import { isTenantMember, tenantOf } from "./tenants.js";
  */
 
 const VIEWPORT = { width: 1280, height: 800 };
+const MAX_VIEWPORT = { width: 1920, height: 1600 };
+const PIXEL_RATIO = 2;
 const IDLE_MS = Number(process.env.BROWSER_IDLE_MIN || 10) * 60_000;
 const MAX_SESSIONS = Number(process.env.BROWSER_MAX_SESSIONS || 4);
 
@@ -49,7 +51,8 @@ function launch(): Promise<Browser> {
 		}
 		const executablePath = process.env.BROWSER_EXECUTABLE || CANDIDATES.find((file) => existsSync(file));
 		try {
-			const browser = await playwright.chromium.launch({ executablePath, headless: process.env.BROWSER_HEADED !== "1", args: ["--disable-dev-shm-usage"] });
+			// A context DPR alone does not raise the compositor resolution used by Page.startScreencast.
+			const browser = await playwright.chromium.launch({ executablePath, headless: process.env.BROWSER_HEADED !== "1", args: ["--disable-dev-shm-usage", `--force-device-scale-factor=${PIXEL_RATIO}`] });
 			browser.on("disconnected", () => (chromium = undefined));
 			return browser;
 		} catch (error) {
@@ -189,6 +192,7 @@ interface Pick {
 
 class SessionBrowser {
 	private viewers = new Map<WebSocket, { canInput: boolean }>();
+	private viewportOwner?: WebSocket;
 	private cdp?: CDPSession;
 	private frame?: Buffer;
 	private searchHistory = new Map<string, string>();
@@ -206,7 +210,7 @@ class SessionBrowser {
 
 	static async open(key: string) {
 		const browser = await launch();
-		const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1.5, acceptDownloads: false });
+		const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: PIXEL_RATIO, acceptDownloads: false });
 		const page = await context.newPage();
 		const session = new SessionBrowser(key, context, page);
 		await session.init();
@@ -219,9 +223,10 @@ class SessionBrowser {
 			await route.fulfill({ status: body ? 200 : 404, contentType: body ? "text/html; charset=utf-8" : "text/plain", body: body ?? "Enter a keyword in the address bar to search.", headers: { "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "cache-control": "no-store" } });
 		});
 		this.cdp = await this.context.newCDPSession(this.page);
-		this.cdp.on("Page.screencastFrame", ({ data, sessionId }) => {
+		this.cdp.on("Page.screencastFrame", ({ data, sessionId, metadata }) => {
 			void this.cdp?.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
-			if (this.capturingPick) return;
+			const viewport = this.page.viewportSize() ?? VIEWPORT;
+			if (this.capturingPick || metadata.deviceWidth !== viewport.width || metadata.deviceHeight !== viewport.height) return;
 			this.frame = Buffer.from(data, "base64");
 			for (const ws of this.viewers.keys()) {
 				// A slow viewer skips frames rather than queueing them.
@@ -265,13 +270,14 @@ class SessionBrowser {
 	private async screencast(on: boolean) {
 		if ((on && this.capturingPick) || on === this.screencasting || !this.cdp) return;
 		this.screencasting = on;
-		const viewport = this.page.viewportSize() ?? VIEWPORT;
-		if (on) await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 82, maxWidth: Math.ceil(viewport.width * 1.5), maxHeight: Math.ceil(viewport.height * 1.5) }).catch(() => {});
+		if (on) await this.cdp.send("Page.startScreencast", { format: "jpeg", quality: 90, maxWidth: MAX_VIEWPORT.width * PIXEL_RATIO, maxHeight: MAX_VIEWPORT.height * PIXEL_RATIO }).catch(() => {});
 		else await this.cdp.send("Page.stopScreencast").catch(() => {});
 	}
 
 	async join(ws: WebSocket, canInput: boolean) {
+		if (ws.readyState !== ws.OPEN || this.closed) return;
 		this.viewers.set(ws, { canInput });
+		if (canInput) this.viewportOwner ??= ws;
 		// Listen before the first await, or messages sent right after the state arrives are lost.
 		ws.on("message", (raw, binary) => {
 			if (binary) return;
@@ -287,9 +293,22 @@ class SessionBrowser {
 		});
 		ws.on("close", () => {
 			this.viewers.delete(ws);
+			if (this.viewportOwner === ws) {
+				this.viewportOwner = undefined;
+				if (!this.closed) {
+					for (const [viewer, access] of this.viewers) {
+						if (!access.canInput || viewer.readyState !== viewer.OPEN) continue;
+						this.viewportOwner = viewer;
+						send(viewer, { type: "viewport-control", canResize: true });
+						break;
+					}
+				}
+			}
 			if (this.viewers.size === 0) void this.screencast(false);
 		});
-		send(ws, { type: "state", ...this.status(), title: await this.page.title().catch(() => ""), canInput });
+		const title = await this.page.title().catch(() => "");
+		if (ws.readyState !== ws.OPEN) return;
+		send(ws, { type: "state", ...this.status(), title, canInput, canResize: ws === this.viewportOwner });
 		if (this.frame) ws.send(this.frame);
 		await this.screencast(true);
 	}
@@ -335,12 +354,17 @@ class SessionBrowser {
 			case "reload":
 				await this.page.reload().catch(() => {});
 				break;
-			case "viewport":
-				await this.screencast(false);
-				await this.page.setViewportSize({ width: message.width, height: message.height });
-				await this.screencast(this.viewers.size > 0);
+			case "viewport": {
+				if (ws !== this.viewportOwner) break;
+				const { width, height } = message;
+				const current = this.page.viewportSize();
+				if (current?.width === width && current.height === height) break;
+				// Keep the stream running: restarting can capture the old surface at the new limits.
+				this.frame = undefined;
+				await this.page.setViewportSize({ width, height });
 				await this.announce();
 				break;
+			}
 			case "mouse":
 				await this.cdp?.send("Input.dispatchMouseEvent", {
 					type: message.action === "down" ? "mousePressed" : message.action === "up" ? "mouseReleased" : message.action === "wheel" ? "mouseWheel" : "mouseMoved",
@@ -426,7 +450,7 @@ const clientMessage = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("navigate"), url: z.string().min(1).max(4000) }),
 	z.object({ type: z.enum(["back", "forward", "reload", "close", "quote"]) }),
 	z.object({ type: z.literal("select-text"), start: z.object(point), end: z.object(point) }),
-	z.object({ type: z.literal("viewport"), width: z.number().int().min(320).max(1920), height: z.number().int().min(320).max(1600) }),
+	z.object({ type: z.literal("viewport"), width: z.number().int().min(320).max(MAX_VIEWPORT.width), height: z.number().int().min(320).max(MAX_VIEWPORT.height) }),
 	z.object({
 		type: z.literal("mouse"),
 		action: z.enum(["move", "down", "up", "wheel"]),

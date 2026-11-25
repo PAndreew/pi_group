@@ -135,6 +135,18 @@
 /* The idle composer floats above the home indicator; editing needs no extra lift. */
 html[data-editing] body { padding-bottom: 0; }
 
+/* Match the app's visible viewport when the mobile keyboard opens. */
+@utility browser-phone-overlay {
+  position: fixed;
+  inset-inline: 0;
+  top: var(--app-top, 0px);
+  height: var(--app-height, 100dvh);
+  z-index: 40;
+  background: var(--background);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: var(--app-safe-bottom, env(safe-area-inset-bottom, 0px));
+}
+
 /* Avoid Safari's focus zoom while retaining user pinch zoom. */
 @media (pointer: coarse) {
   textarea, input, select { font-size: 16px; }
