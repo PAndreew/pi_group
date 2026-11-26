@@ -76,7 +76,7 @@ export function ComposerBox({
       onInputCapture={poke}
       onKeyDownCapture={poke}
       onCompositionUpdateCapture={poke}
-      className="relative min-w-0 rounded-[12px] bg-muted shadow-[0_2px_8px_rgba(0,0,0,0.12)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
+      className="relative min-w-0 rounded-[18px] bg-muted shadow-[0_2px_8px_rgba(0,0,0,0.12)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
       onPaste={(e) => {
         const files = Array.from(e.clipboardData.files)
         if (!files.length || !onFiles) return

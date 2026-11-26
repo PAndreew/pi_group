@@ -242,7 +242,7 @@ function Workspace() {
 
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-60 rounded-xl [&>[role=menuitem]]:gap-3 [&>[role=menuitem]]:rounded-md">
               <DropdownMenuLabel className="text-xs text-muted-foreground">
                 {user?.username} · {t(user?.role === "admin" ? "profile.admin" : "profile.user")}
               </DropdownMenuLabel>
@@ -251,10 +251,10 @@ function Workspace() {
               </DropdownMenuItem>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger><Languages /> {t("profile.language")}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
+                <DropdownMenuSubContent className="rounded-xl">
                   <DropdownMenuRadioGroup value={language} onValueChange={setLanguage}>
                     {languages.map(({ code, name }) => (
-                      <DropdownMenuRadioItem key={code} lang={code} value={code}>
+                      <DropdownMenuRadioItem key={code} lang={code} value={code} className="gap-3 rounded-md">
                         <Check aria-hidden="true" className={code === language ? "" : "invisible"} /> {name}
                       </DropdownMenuRadioItem>
                     ))}

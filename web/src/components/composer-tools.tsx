@@ -21,6 +21,8 @@ const TerminalDialog = lazy(() => import("@/components/terminal-dialog"))
 
 type Panel = "links" | "terminal" | "tools" | "jobs" | "applets" | "monitor" | "vault" | "models" | "machines"
 
+const drawerRow = "h-auto min-h-10 gap-3 px-3 py-2"
+
 /**
  * The menu items of the left sidebar and mobile drawer, each opening its own modal: links, jobs and
  * applets directly, everything else under "More".
@@ -46,12 +48,12 @@ export function ComposerTools({
   const pendingApplets = usePendingApplets()
   const openChange = (name: Panel) => (open: boolean) => setPanel(open ? name : undefined)
   const icon = (name: Panel | "explorer", label: string, node: React.ReactNode) => (
-    <Button key={name} variant="ghost" size="icon" className="h-auto min-h-10 w-full justify-start gap-3 whitespace-normal px-3 py-2 text-left font-normal [&_svg]:size-4" data-active={panel === name} onClick={() => (name === "explorer" ? nav.openExplorer(folder) : setPanel(name))} aria-label={label} title={label}>
+    <Button key={name} variant="ghost" size="icon" className={`${drawerRow} w-full justify-start whitespace-normal text-left font-normal [&_svg]:size-4`} data-active={panel === name} onClick={() => (name === "explorer" ? nav.openExplorer(folder) : setPanel(name))} aria-label={label} title={label}>
       {node}<span>{label}</span>
     </Button>
   )
   const item = (name: Panel | "explorer", label: string, node: React.ReactNode) => (
-    <DropdownMenuItem key={name} onSelect={() => (name === "explorer" ? nav.openExplorer(folder) : setPanel(name))}>
+    <DropdownMenuItem key={name} className={drawerRow} onSelect={() => (name === "explorer" ? nav.openExplorer(folder) : setPanel(name))}>
       {node}
       {label}
     </DropdownMenuItem>
@@ -73,13 +75,13 @@ export function ComposerTools({
         {icon("applets", pendingApplets ? tr("tools.appletsPending", { count: pendingApplets }) : tr("ui.applets-29dfcc"), dot(pendingApplets > 0, <LayoutGrid />))}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-auto min-h-10 w-full justify-start gap-3 px-3 py-2 text-left font-normal [&_svg]:size-4" aria-label={tr("ui.more-4bab2d")}>
+            <Button variant="ghost" className={`${drawerRow} w-full justify-start text-left font-normal [&_svg]:size-4`} aria-label={tr("ui.more-4bab2d")}>
               <MoreHorizontal />
               <span className="flex-1">{tr("ui.more-4bab2d")}</span>
               <ChevronDown className="text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
+          <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56 space-y-1">
             {user?.role === "admin" && item("terminal", tr("tools.terminal"), <SquareTerminal />)}
             {item("tools", tr("tools.tools"), <Hammer />)}
             {item("monitor", tr("tools.monitor"), <Gauge />)}
