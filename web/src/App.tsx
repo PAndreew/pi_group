@@ -147,6 +147,13 @@ function Workspace() {
   // Desktop sidebar: open by default, the header icon hides it; remembered per browser.
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem("pi-group:sidebar") !== "0")
   const toggleSidebar = () => setSidebarOpen((open) => { localStorage.setItem("pi-group:sidebar", open ? "0" : "1"); return !open })
+  // Keep the sidebar mounted while it slides shut, then drop it.
+  const [sidebarMounted, setSidebarMounted] = useState(sidebarOpen)
+  useEffect(() => {
+    if (sidebarOpen) return setSidebarMounted(true)
+    const timer = setTimeout(() => setSidebarMounted(false), 250)
+    return () => clearTimeout(timer)
+  }, [sidebarOpen])
   const [selectSessions, setSelectSessions] = useState(false)
   useEffect(() => setDrawerOpen(false), [route.chat, route.session, route.file, route.app])
   const [creating, setCreating] = useState(false)
@@ -293,7 +300,11 @@ function Workspace() {
         </Sheet>
 
         <div className="flex min-h-0 flex-1">
-          {wide && sidebarOpen && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="w-64 shrink-0"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
+          {wide && (
+            <div className={`shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none ${sidebarOpen ? "w-64 opacity-100" : "w-0 opacity-0"}`} inert={!sidebarOpen} aria-hidden={!sidebarOpen || undefined}>
+              {(sidebarOpen || sidebarMounted) && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="h-full w-64"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
+            </div>
+          )}
           {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex lg:hidden 2xl:flex 2xl:w-72" />}
           <main className={`min-h-0 min-w-0 flex-1 ${inside ? "overflow-hidden" : "overflow-visible"}`}>
             {route.chat ? (

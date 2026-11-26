@@ -55,6 +55,7 @@ export default function (pi) {
       "List the secrets stored in beezy's vault for you: each key with a short description and whether it is the user's own (personal) or shared with this project, never the values.",
       "Use it when a task needs credentials (API tokens, passwords, connection strings) before asking the user for them.",
       "You never see values. Write {{vault:KEY}} (or {{vault:project:KEY}}) wherever a value belongs: in files you write or edit, in bash commands, in any tool argument. It is filled in just before the tool runs. Values in files and output are shown to you as the same placeholders, so edit them as they appear.",
+      "Encoded values show up labelled, e.g. {{vault:KEY:json}}, {{vault:KEY:url}}, {{vault:KEY:base64}} or {{vault:KEY:hex}}; written that way, they are filled in with the same encoding.",
     ].join("\n"),
     parameters: { type: "object", additionalProperties: false, properties: {} },
     async execute(_toolCallId, _params, signal) {

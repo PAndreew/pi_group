@@ -330,6 +330,9 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
   const [paths, setPaths] = useState<string[]>([])
   const [browserShown, setBrowserShown] = useState(initialBrowserShown)
   const [browserLive, setBrowserLive] = useState(false)
+  const [browserFull, setBrowserFull] = useState(false)
+  /** Opened with the browser from the start page: deleted again on closing the browser if nothing was said. */
+  const discardable = useRef(initialBrowserShown)
   const [mode, setMode] = useState<"steer" | "followUp">("steer")
   const [sending, setSending] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
@@ -367,6 +370,20 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
       return browser.open
     })
   }, [browser])
+
+  useEffect(() => {
+    if (state?.messages.length || state?.running) discardable.current = false
+  }, [state?.messages.length, state?.running])
+
+  /** Hide (or shut down) the browser; an untouched session started for it goes away with it. */
+  const closeBrowser = () => {
+    setBrowserShown(false)
+    setBrowserFull(false)
+    const unused = discardable.current && state && !state.messages.length && !state.running && !sending && summary?.access === "owner"
+    if (!unused) return
+    discardable.current = false
+    api.deleteSessions([sessionKey]).then(({ deleted }) => deleted.includes(sessionKey) && onDeleted(sessionKey), () => {})
+  }
 
   // Someone else deleted the session while we were looking at it.
   useEffect(() => {
@@ -753,7 +770,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
                     onChange={setText}
                     selfId={user?.id}
                     eligiblePeople={canInvite && !editing ? undefined : isParticipant}
-                    controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => setBrowserShown((s) => !s) }} />}
+                    controls={<ComposerControls sessionKey={sessionKey} disabled={sending} onCamera={(photos) => setFiles((fs) => [...fs, ...photos])} onAttach={() => fileInput.current?.click()} browser={{ live: browserLive, shown: browserShown, toggle: () => (browserShown ? closeBrowser() : setBrowserShown(true)) }} />}
                     onFiles={(pasted) => setFiles((fs) => [...fs, ...pasted])}
                     onSubmit={send}
                     editing={Boolean(editing)}
@@ -790,8 +807,9 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
       </div>
       {browserShown && (
         // Beside the chat on wide screens; over it on phones.
-        <div className="max-lg:browser-phone-overlay lg:w-[55%] lg:max-w-[calc(100%-22rem)] lg:shrink-0 lg:border-l">
-          <BrowserPanel sessionKey={sessionKey} picks={refs.length} onPick={addRef} onClose={() => setBrowserShown(false)} ask={browserAsk} />
+        // Full screen (desktop) covers everything below the header, the left sidebar included.
+        <div className={cn("max-lg:browser-phone-overlay", browserFull ? "lg:fixed lg:inset-x-0 lg:top-12 lg:bottom-0 lg:z-40" : "lg:w-[55%] lg:max-w-[calc(100%-22rem)] lg:shrink-0 lg:border-l")}>
+          <BrowserPanel sessionKey={sessionKey} picks={refs.length} onPick={addRef} onClose={closeBrowser} onShutDown={closeBrowser} fullscreen={browserFull} onFullscreen={setBrowserFull} ask={browserAsk} />
         </div>
       )}
 

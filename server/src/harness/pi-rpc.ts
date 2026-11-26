@@ -13,6 +13,7 @@ const agentEnvironment = (): NodeJS.ProcessEnv => ({ ...process.env });
 import { platform, type SandboxProcess } from "../ports/index.js";
 import { expireInteractions, interactionEnvironment } from "../interactions.js";
 import { applyAssistantDelta, contentText, LiveSessionBase } from "./live-base.js";
+import { redactLive } from "../live-redaction.js";
 import type { AgentMessage, CommandInfo, CreateOptions, ExtensionDialog, HarnessAdapter, ModelInfo, PromptInput, SessionInventory, SessionListing, SessionUsage, ToolInfo, UsageRecord } from "./types.js";
 
 type RpcRecord = Record<string, any>;
@@ -83,7 +84,7 @@ class RpcProcess {
 	onRecord: (record: RpcRecord) => void = () => {};
 	onExit: (code: number | null) => void = () => {};
 
-	constructor(args: string[], cwd: string, sessionKey?: string, readonly authProfile?: string) {
+	constructor(args: string[], cwd: string, readonly sessionKey?: string, readonly authProfile?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
 		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs")];
 		const { command, argv, shell } = piCommand(args);
@@ -281,9 +282,13 @@ class PiLiveSession extends LiveSessionBase {
 				this.emitStatus();
 				break;
 			case "tool_execution_update": {
-				const text = contentText(record.partialResult?.content);
-				this.state.toolOutputs[record.toolCallId] = text;
-				this.toolOutputChanged(record.toolCallId);
+				// Redacted before anyone sees it (vault values); updates resolve in order, late ones after the tool ended are dropped.
+				const id = record.toolCallId;
+				void redactLive(this.rpc.sessionKey, contentText(record.partialResult?.content)).then((text) => {
+					if (!this.state.runningTools.includes(id)) return;
+					this.state.toolOutputs[id] = text;
+					this.toolOutputChanged(id);
+				});
 				break;
 			}
 			case "tool_execution_end":

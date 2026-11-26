@@ -236,6 +236,26 @@ html[data-editing] body { padding-bottom: 0; }
   .running-shimmer { animation: none; background: none; -webkit-text-fill-color: currentColor; }
 }
 
+/* A light sweep across a round button every few seconds: the agent is still working on it. */
+@keyframes step-shimmer {
+  0% { transform: translateX(-120%); }
+  45%, 100% { transform: translateX(120%); }
+}
+.step-shimmer { position: relative; overflow: hidden; isolation: isolate; }
+.step-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 25%, color-mix(in oklab, white 55%, transparent) 50%, transparent 75%);
+  transform: translateX(-120%);
+  animation: step-shimmer 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-shimmer::after { animation: none; display: none; }
+  .step-shimmer { animation: pause-shimmer 1.5s ease-in-out infinite; }
+}
+
 @keyframes bee-wing-left {
   0%, 100% { content: "-"; }
   50% { content: ">"; }

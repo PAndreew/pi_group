@@ -1,11 +1,12 @@
 import { useLocale } from "@/lib/i18n"
-import { ArrowLeft, ArrowRight, Crosshair, Keyboard, Quote, Loader2, Monitor, Power, RotateCw, Scan, Search, Smartphone, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, ClipboardPaste, Copy, Crosshair, Keyboard, Maximize2, Minimize2, Quote, Loader2, Monitor, Power, RotateCw, Scan, Search, Smartphone, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { BrowserAsk, type BrowserAnswer } from "@/components/browser-ask"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { copyText, copyTextLater } from "@/lib/clipboard"
 import { api } from "@/lib/api"
 import type { ElementRef } from "@/lib/element-refs"
 import { cn } from "@/lib/utils"
@@ -37,7 +38,18 @@ export type BrowserAskProps = {
   folder?: string
 }
 
-export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sessionKey: string; picks: number; onPick: (ref: ElementRef) => void; onClose: () => void; ask?: BrowserAskProps }) {
+export function BrowserPanel({ sessionKey, picks, onPick, onClose, onShutDown, fullscreen, onFullscreen, ask }: {
+  sessionKey: string
+  picks: number
+  onPick: (ref: ElementRef) => void
+  onClose: () => void
+  /** The user closed the browser for everyone. */
+  onShutDown?: () => void
+  /** Desktop only: the panel covers the whole workspace below the header. */
+  fullscreen?: boolean
+  onFullscreen?: (full: boolean) => void
+  ask?: BrowserAskProps
+}) {
   const { t: tr } = useLocale()
   const [status, setStatus] = useState<Status>({ state: "connecting" })
   const [attempt, setAttempt] = useState(0)
@@ -47,8 +59,8 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   const [hover, setHover] = useState<{ box: Box; label: string; depth: number; count: number }>()
   const [drag, setDrag] = useState<Box>()
   const [pending, setPending] = useState(0)
-  const [typing, setTyping] = useState(false)
-  const [text, setText] = useState("")
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const [remoteFocus, setRemoteFocus] = useState<RemoteFocus>({ editable: false })
   const [scale, setScale] = useState(1)
   const [viewportMode, setViewportMode] = useState<ViewportMode>("auto")
   const [quote, setQuote] = useState("")
@@ -73,6 +85,12 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
   onPickRef.current = onPick
   const pageRef = useRef(page)
   pageRef.current = page
+  // The native keyboard on touch screens types into a hidden field over the page.
+  const ime = useRef<HTMLTextAreaElement>(null)
+  const imeValue = useRef(SENTINEL)
+  const composing = useRef(false)
+  const editables = useRef<Box[]>([])
+  const copies = useRef(new Map<string, { resolve: (text: string) => void; reject: (error: Error) => void }>())
 
   const send = (message: object) => ws.current?.readyState === WebSocket.OPEN && ws.current.send(JSON.stringify(message))
 
@@ -156,6 +174,21 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         setPage((p) => ({ url: message.url, title: message.title, viewport: message.viewport, canInput: message.canInput ?? p.canInput, canResize: message.canResize ?? (message.canInput === undefined ? p.canResize : message.canInput) }))
         setStatus((s) => s.state === "open" ? s : { state: "open" })
         setAddress((a) => (document.activeElement?.id === "browser-address" ? a : message.url === "about:blank" ? "" : message.url))
+      } else if (message.type === "focus") {
+        setRemoteFocus(message)
+        // The tap that opened the keyboard did not land in a text field after all.
+        if (!message.editable && document.activeElement === ime.current) ime.current?.blur()
+      } else if (message.type === "editables") {
+        editables.current = message.boxes
+      } else if (message.type === "copied") {
+        copies.current.get(message.id)?.resolve(message.text)
+        copies.current.delete(message.id)
+      } else if (message.type === "clipboard") {
+        const text = message.text as string
+        copyText(text).then(
+          () => toast.success(tr("browser.pageCopied")),
+          () => toast(tr("browser.pageCopied"), { action: { label: tr("ui.copy-af74f7"), onClick: () => void copyText(text).catch((error) => toast.error((error as Error).message)) } }),
+        )
       } else if (message.type === "viewport-control") {
         setPage((p) => ({ ...p, canResize: message.canResize }))
       } else if (message.type === "hover") {
@@ -175,7 +208,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         }
       } else if (message.type === "error") {
         setPending(0)
-        toast.error(message.message)
+        // A failed copy reports through its own request.
+        if (copies.current.size) {
+          for (const copy of copies.current.values()) copy.reject(new Error(message.message))
+          copies.current.clear()
+        } else toast.error(message.message)
       }
     }
     socket.onclose = (event) => setStatus({ state: "closed", reason: event.reason || (event.code === 1006 ? "Connection lost" : `Closed (${event.code})`) })
@@ -261,6 +298,86 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     return () => el.removeEventListener("wheel", wheel)
   }, [status.state])
 
+  // Taps on a touch screen must not move focus, or they would close the native keyboard.
+  useEffect(() => {
+    const el = surface.current
+    if (!el) return
+    const touch = (e: TouchEvent) => e.preventDefault()
+    el.addEventListener("touchstart", touch, { passive: false })
+    return () => el.removeEventListener("touchstart", touch)
+  }, [status.state])
+
+  /** Copy (or cut) the page's selection to this device's clipboard. */
+  const copyFromPage = (cut = false, announce = false) => {
+    const id = Math.random().toString(36).slice(2)
+    const text = new Promise<string>((resolve, reject) => {
+      copies.current.set(id, { resolve, reject })
+      window.setTimeout(() => copies.current.delete(id) && reject(new Error(tr("browser.copyTimeout"))), 4000)
+    })
+    send({ type: "copy", id, cut })
+    copyTextLater(text).then(
+      () => announce && toast.success(tr("browser.copied")),
+      (error) => toast.error((error as Error).message),
+    )
+  }
+  const pasteIntoPage = () => {
+    if (!navigator.clipboard?.readText) return void toast.error(tr("browser.pasteUnavailable"))
+    navigator.clipboard.readText().then(
+      (text) => text && send({ type: "text", text }),
+      () => toast.error(tr("browser.pasteUnavailable")),
+    )
+  }
+
+  const resetIme = () => {
+    const el = ime.current
+    if (!el) return
+    el.value = SENTINEL
+    imeValue.current = SENTINEL
+    el.setSelectionRange(SENTINEL.length, SENTINEL.length)
+  }
+  /** Open the native keyboard over the field at `at` (page pixels), or the focused one. Must run inside a tap. */
+  const openKeyboard = (at?: { x: number; y: number }) => {
+    const el = ime.current
+    if (!el) return
+    const box = (at && editables.current.find((b) => inside(b, at))) ?? remoteFocus.box
+    // Over the field, so the phone scrolls it into view above the keyboard.
+    const { width, height } = pageRef.current.viewport
+    const place = box ?? { x: width / 2, y: height / 3, width: 1, height: 20 }
+    Object.assign(el.style, { left: `${place.x * scale}px`, top: `${place.y * scale}px`, width: `${Math.max(1, place.width * scale)}px`, height: `${Math.max(16, place.height * scale)}px` })
+    resetIme()
+    el.focus({ preventScroll: !box })
+    setKeyboardOpen(true)
+  }
+  /** What the keyboard changed in the hidden field since last time, as backspaces and text. */
+  const onImeInput = () => {
+    const el = ime.current
+    if (!el) return
+    const before = Array.from(imeValue.current)
+    const after = Array.from(el.value)
+    let same = 0
+    while (same < before.length && same < after.length && before[same] === after[same]) same++
+    for (let i = same; i < before.length; i++) send({ type: "press", key: "Backspace" })
+    const added = after.slice(same).join("").replaceAll(SENTINEL, "")
+    if (added) send({ type: "text", text: added })
+    imeValue.current = el.value
+    if (!composing.current && (!el.value.startsWith(SENTINEL) || el.value.length > 64 || el.selectionStart !== el.value.length)) resetIme()
+  }
+  const onImeKey = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || e.key === "Unidentified" || e.key === "Process" || e.keyCode === 229) return
+    const mod = e.ctrlKey || e.metaKey
+    if (mod && (e.key === "c" || e.key === "x")) {
+      e.preventDefault()
+      return copyFromPage(e.key === "x")
+    }
+    // Text, Backspace and pasting arrive as changes to the field.
+    if ((mod && e.key.toLowerCase() === "v") || (e.key === "Backspace" && !mod)) return
+    if (e.key.length === 1 && !mod) return
+    if (["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(e.key)) return
+    e.preventDefault()
+    send({ type: "press", key: [e.ctrlKey && "Control", e.altKey && "Alt", e.metaKey && "Meta", e.shiftKey && "Shift", e.key].filter(Boolean).join("+") })
+    resetIme()
+  }
+
   const pick = (target: object) => {
     const id = crypto.randomUUID()
     // Below lg the browser covers the session composer, so picks go to the floating draft.
@@ -276,7 +393,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!picking) setAsking(false)
-    surface.current?.focus()
+    if (e.pointerType !== "touch") surface.current?.focus()
     e.currentTarget.setPointerCapture(e.pointerId)
     const at = toPage(e)
     pointer.current = { ...at, clientX: e.clientX, clientY: e.clientY, moved: false, shift: e.shiftKey }
@@ -357,6 +474,7 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
         send({ type: "mouse", action: "move", ...at })
         send({ type: "mouse", action: "down", ...at, button: "left", buttons: 1, clickCount: 1 })
         send({ type: "mouse", action: "up", ...at, button: "left", buttons: 0, clickCount: 1 })
+        if (editables.current.some((b) => inside(b, at))) openKeyboard(at)
       }
       return
     }
@@ -377,6 +495,11 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
     if (!page.canInput || e.nativeEvent.isComposing || e.key === "Unidentified" || e.key === "Process") return
     // Let the paste event bring the clipboard text.
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return
+    if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "x")) {
+      e.preventDefault()
+      if (action === "down") copyFromPage(e.key === "x")
+      return
+    }
     e.preventDefault()
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (action === "down") send({ type: "text", text: e.key })
@@ -409,8 +532,25 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           </DropdownMenuContent>
         </DropdownMenu>
         {page.canInput && (
-          <Button variant="ghost" size="icon-sm" className="sm:hidden" data-active={typing} onClick={() => setTyping((t) => !t)} aria-label={tr("ui.type-into-the-page-ac55de")} title={tr("ui.type-into-the-page-ac55de")}>
+          <Button
+            variant={keyboardOpen ? "default" : "ghost"}
+            size="icon-sm"
+            className={cn("[@media(hover:hover)]:hidden", remoteFocus.editable && !keyboardOpen && "text-primary")}
+            disabled={status.state !== "open"}
+            aria-pressed={keyboardOpen}
+            onClick={() => (keyboardOpen ? ime.current?.blur() : openKeyboard())}
+            aria-label={tr("ui.type-into-the-page-ac55de")}
+            title={tr("ui.type-into-the-page-ac55de")}
+          >
             <Keyboard />
+          </Button>
+        )}
+        <Button variant="ghost" size="icon-sm" className="[@media(hover:hover)]:hidden" disabled={status.state !== "open"} onClick={() => copyFromPage(false, true)} aria-label={tr("browser.copy")} title={tr("browser.copy")}>
+          <Copy />
+        </Button>
+        {page.canInput && (
+          <Button variant="ghost" size="icon-sm" className="[@media(hover:hover)]:hidden" disabled={status.state !== "open"} onClick={pasteIntoPage} aria-label={tr("browser.paste")} title={tr("browser.paste")}>
+            <ClipboardPaste />
           </Button>
         )}
         <Button
@@ -428,33 +568,19 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
           {pending ? <Loader2 className="animate-spin" /> : <Crosshair />}
         </Button>
         {page.canInput && (
-          <Button variant="ghost" size="icon-sm" onClick={() => send({ type: "close" })} aria-label={tr("ui.close-the-browser-for-everyone-0e00e2")} title={tr("ui.close-the-browser-for-everyone-0e00e2")}>
+          <Button variant="ghost" size="icon-sm" onClick={() => { send({ type: "close" }); onShutDown?.() }} aria-label={tr("ui.close-the-browser-for-everyone-0e00e2")} title={tr("ui.close-the-browser-for-everyone-0e00e2")}>
             <Power />
+          </Button>
+        )}
+        {onFullscreen && (
+          <Button variant="ghost" size="icon-sm" className="max-lg:hidden" aria-pressed={Boolean(fullscreen)} onClick={() => onFullscreen(!fullscreen)} aria-label={tr(fullscreen ? "browser.exitFullscreen" : "browser.fullscreen")} title={tr(fullscreen ? "browser.exitFullscreen" : "browser.fullscreen")}>
+            {fullscreen ? <Minimize2 /> : <Maximize2 />}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={tr("ui.hide-browser-5368bd")} title={tr("ui.hide-browser-5368bd")}>
           <X />
         </Button>
       </nav>
-      {typing && page.canInput && (
-        <form
-          className="flex gap-1 border-b p-1.5 sm:hidden"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (text) send({ type: "text", text })
-            else {
-              send({ type: "key", action: "down", key: "Enter" })
-              send({ type: "key", action: "up", key: "Enter" })
-            }
-            setText("")
-          }}
-        >
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={tr("ui.text-for-the-focused-field-empty-se-37ba91")} className="h-8 text-sm" />
-          <Button size="sm" type="submit">
-            {tr("ui.send-9bc257")}
-          </Button>
-        </form>
-      )}
       <div ref={area} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/40">
         {status.state === "closed" ? (
           <div className="grid justify-items-center gap-2 p-6 text-center text-sm text-muted-foreground">
@@ -483,6 +609,41 @@ export function BrowserPanel({ sessionKey, picks, onPick, onClose, ask }: { sess
             onContextMenu={(e) => e.preventDefault()}
           >
             <canvas ref={canvas} className="block h-full w-full" />
+            {page.canInput && (
+              <textarea
+                ref={ime}
+                aria-label={tr("ui.type-into-the-page-ac55de")}
+                tabIndex={-1}
+                rows={1}
+                defaultValue={SENTINEL}
+                inputMode={(remoteFocus.inputMode as React.HTMLAttributes<HTMLTextAreaElement>["inputMode"]) || "text"}
+                enterKeyHint={(remoteFocus.enterKeyHint as React.HTMLAttributes<HTMLTextAreaElement>["enterKeyHint"]) || undefined}
+                autoCapitalize={remoteFocus.password || ["email", "url"].includes(remoteFocus.inputMode ?? "") ? "off" : "sentences"}
+                autoCorrect={remoteFocus.password || ["email", "url"].includes(remoteFocus.inputMode ?? "") ? "off" : "on"}
+                autoComplete="off"
+                spellCheck={false}
+                // 16px keeps iOS from zooming in on focus.
+                className="pointer-events-none absolute top-0 left-0 resize-none overflow-hidden border-0 bg-transparent p-0 text-[16px] text-transparent caret-transparent opacity-0 outline-none"
+                onInput={onImeInput}
+                onCompositionStart={() => (composing.current = true)}
+                onCompositionEnd={() => {
+                  composing.current = false
+                  onImeInput()
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  onImeKey(e)
+                }}
+                onKeyUp={(e) => e.stopPropagation()}
+                onPaste={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const pasted = e.clipboardData.getData("text")
+                  if (pasted) send({ type: "text", text: pasted })
+                }}
+                onBlur={() => setKeyboardOpen(false)}
+              />
+            )}
             {hover && picking && <Outline box={hover.box} scale={scale} label={hover.count > 1 ? `${hover.depth + 1}/${hover.count} ${hover.label}` : hover.label} />}
             {drag && <Outline box={drag} scale={scale} />}
             {status.state === "connecting" && (
@@ -553,3 +714,10 @@ function Outline({ box, scale, label }: { box: Box; scale: number; label?: strin
     </div>
   )
 }
+
+type RemoteFocus = { editable: boolean; box?: Box; inputMode?: string; enterKeyHint?: string; multiline?: boolean; password?: boolean }
+
+/** Kept in the hidden keyboard field, so a backspace in an otherwise empty field still shows up. */
+const SENTINEL = "\u200b"
+
+const inside = (box: Box, at: { x: number; y: number }) => at.x >= box.x && at.x <= box.x + box.width && at.y >= box.y && at.y <= box.y + box.height

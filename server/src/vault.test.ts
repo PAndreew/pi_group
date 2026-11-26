@@ -75,8 +75,14 @@ test("people manage their own and their projects' vault secrets; an agent reads 
 		assert.deepEqual((await agent("?values=1")).body.secrets, [{ key: "GITHUB_TOKEN", scope: "personal", value: "ghp_anna" }], "the extension gets all values, to fill and redact them");
 		assert.equal((await agent("/GITHUB_TOKEN", "forged")).status, 403);
 
+		// Output streamed live while a tool runs is redacted by the server, plain and encoded.
+		const { redactLive } = await import("./live-redaction.js");
+		assert.equal(await redactLive("pi:s1", "push with ghp_anna"), "push with {{vault:GITHUB_TOKEN}}");
+		assert.equal(await redactLive("pi:s1", Buffer.from("ghp_anna").toString("base64")), "{{vault:GITHUB_TOKEN:base64}}");
+
 		assert.equal((await call(annaCookie, "DELETE", "/vault/secrets/GITHUB_TOKEN")).status, 200);
 		assert.equal((await agent("/GITHUB_TOKEN")).status, 404);
+		assert.equal(await redactLive("pi:s1", "push with ghp_anna"), "push with ghp_anna", "a change in the vault takes effect at once");
 
 		// Project secrets: shared with the project's members, readable by agents of sessions in it.
 		const at = new Date().toISOString();

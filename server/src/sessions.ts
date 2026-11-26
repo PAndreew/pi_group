@@ -1048,6 +1048,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			}
 			saveNow();
 			hub.broadcast(key, { type: "deleted", by: user.username });
+			// Imported lazily: browser.ts depends on this module.
+			void import("./browser.js").then(({ closeSessionBrowser }) => closeSessionBrowser(key)).catch(() => {});
 		} finally {
 			deleting.delete(key);
 		}

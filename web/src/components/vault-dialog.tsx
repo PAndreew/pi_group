@@ -1,5 +1,5 @@
 import { useLocale } from "@/lib/i18n"
-import { ArrowRightLeft, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react"
+import { ArrowRightLeft, Check, Copy, Eye, EyeOff, Loader2, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { api, type VaultSecret } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import { useProjects } from "@/lib/projects"
 
 const KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
@@ -25,6 +26,15 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const [status, setStatus] = useState<{ configured: boolean; reachable: boolean }>()
   const [secrets, setSecrets] = useState<VaultSecret[]>()
   const [revealed, setRevealed] = useState<Record<string, string>>({})
+  const [copied, setCopied] = useState<string>()
+  const copySecret = (key: string, value: string) =>
+    void copyText(value).then(
+      () => {
+        setCopied(key)
+        setTimeout(() => setCopied((c) => (c === key ? undefined : c)), 1500)
+      },
+      (error) => toast.error((error as Error).message),
+    )
   /** The secret being edited, or "new" for the add form. */
   const [editing, setEditing] = useState<VaultSecret | "new">()
   const { projects } = useProjects()
@@ -171,7 +181,14 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
                       </Button>
                     </div>
                     {s.description && <p className="text-xs text-muted-foreground">{s.description}</p>}
-                    {revealed[s.key] !== undefined && <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-1.5 text-xs break-all whitespace-pre-wrap">{revealed[s.key]}</pre>}
+                    {revealed[s.key] !== undefined && (
+                      <div className="mt-1 flex items-start gap-1">
+                        <pre className="max-h-32 min-w-0 flex-1 overflow-auto rounded bg-muted p-1.5 text-xs break-all whitespace-pre-wrap">{revealed[s.key]}</pre>
+                        <Button variant="ghost" size="icon-sm" onClick={() => copySecret(s.key, revealed[s.key])} aria-label={`Copy ${s.key}`} title={tr("ui.copy-af74f7")}>
+                          {copied === s.key ? <Check className="text-green-600" /> : <Copy />}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ),
               )}

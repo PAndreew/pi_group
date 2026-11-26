@@ -185,6 +185,117 @@ export const PICK = String.raw`(arg) => {
   return { box: d.box, elements: [d] };
 }`;
 
+/**
+ * Runs in every page before its own scripts (top frame only) and reports to the server through the
+ * `__beezyReport` binding: which element has focus and whether it takes text, where the editable
+ * fields are (so a tap on a phone can open the native keyboard right away), and text the page
+ * copies, for the viewer's clipboard. Copies are kept off Chromium's clipboard, which every
+ * session's browser shares.
+ */
+export const HOOKS = String.raw`(() => {
+  if (window !== window.top || window.__beezyHooked) return;
+  window.__beezyHooked = true;
+  const report = (data) => { try { window.__beezyReport(JSON.stringify(data)) } catch {} };
+  const EDITABLE = "input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=image]):not([type=hidden]), textarea, [contenteditable]:not([contenteditable=false]), [role=textbox]";
+  const editable = (el) => !!el && el.nodeType === 1 && (el.isContentEditable || (el.matches(EDITABLE) && !el.disabled && !el.readOnly));
+  const active = () => { let el = document.activeElement; while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement; return el };
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } };
+  const MODES = { email: "email", tel: "tel", url: "url", number: "decimal", search: "search" };
+  let lastFocus = "";
+  const focus = (force) => {
+    const el = active();
+    const info = editable(el)
+      ? { editable: true, box: box(el), inputMode: el.inputMode || MODES[el.type] || "text", enterKeyHint: el.enterKeyHint || "", multiline: el.localName === "textarea" || el.isContentEditable, password: el.type === "password" }
+      : { editable: false };
+    const text = JSON.stringify(info);
+    if (text === lastFocus && !force) return;
+    lastFocus = text;
+    report({ kind: "focus", ...info });
+  };
+  let lastAreas = "";
+  const areas = () => {
+    const boxes = [];
+    for (const el of document.querySelectorAll(EDITABLE)) {
+      if (!editable(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
+      boxes.push(box(el));
+      if (boxes.length >= 300) break;
+    }
+    const text = JSON.stringify(boxes);
+    if (text === lastAreas) return;
+    lastAreas = text;
+    report({ kind: "editables", boxes });
+  };
+  let timer = 0;
+  const schedule = () => { if (!timer) timer = setTimeout(() => { timer = 0; areas(); focus() }, 250) };
+  addEventListener("scroll", schedule, { capture: true, passive: true });
+  addEventListener("resize", schedule);
+  addEventListener("focusin", () => setTimeout(() => focus()), true);
+  addEventListener("focusout", () => setTimeout(() => focus()), true);
+  // After every click, so a viewer who opened the keyboard on a guess learns whether it was right.
+  addEventListener("mouseup", () => setTimeout(() => focus(true), 30), true);
+  new MutationObserver(schedule).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden", "disabled", "readonly", "contenteditable"] });
+  addEventListener("DOMContentLoaded", schedule);
+  addEventListener("load", schedule);
+
+  const selected = () => {
+    const el = active();
+    if (el && (el.localName === "input" || el.localName === "textarea")) return el.type === "password" ? "" : el.value.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0);
+    return String(getSelection() || "");
+  };
+  const clip = (text, extra) => text && report({ kind: "clipboard", text: String(text).slice(0, 100000), ...extra });
+  const onCopy = (e) => {
+    if (e.defaultPrevented) {
+      // The page put its own data on the clipboard.
+      try { clip(e.clipboardData.getData("text/plain")) } catch {}
+      return;
+    }
+    // Kept off the shared clipboard. For a cut, the server then deletes the selection with a key press.
+    clip(selected(), e.type === "cut" ? { remove: true } : undefined);
+    e.preventDefault();
+  };
+  addEventListener("copy", onCopy);
+  addEventListener("cut", onCopy);
+  const clipboard = navigator.clipboard;
+  if (clipboard) {
+    clipboard.writeText = async (text) => clip(text);
+    clipboard.write = async (items) => {
+      for (const item of items || []) if (item.types.includes("text/plain")) return clip(await (await item.getType("text/plain")).text());
+    };
+  }
+})()`;
+
+/** Runs in the page: the selected text, or the selection in the focused field (never a password). */
+const SELECTED_TEXT = String.raw`(() => {
+  let el = document.activeElement;
+  while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+  if (el && (el.localName === "input" || el.localName === "textarea")) return el.type === "password" ? "" : el.value.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0);
+  return String(getSelection() || "");
+})()`;
+
+export interface FocusInfo {
+	editable: boolean;
+	box?: PickedElement["box"];
+	inputMode?: string;
+	enterKeyHint?: string;
+	multiline?: boolean;
+	password?: boolean;
+}
+
+export interface LogEntry {
+	at: number;
+	kind: "console" | "pageerror" | "request";
+	level: string;
+	text: string;
+}
+
+const report = z.discriminatedUnion("kind", [
+	z.object({ kind: z.literal("focus"), editable: z.boolean(), box: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).optional(), inputMode: z.string().max(20).optional(), enterKeyHint: z.string().max(20).optional(), multiline: z.boolean().optional(), password: z.boolean().optional() }),
+	z.object({ kind: z.literal("editables"), boxes: z.array(z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })).max(300) }),
+	z.object({ kind: z.literal("clipboard"), text: z.string().max(100_000), remove: z.boolean().optional() }),
+]);
+
 interface Pick {
 	box: PickedElement["box"];
 	elements: PickedElement[];
@@ -201,6 +312,13 @@ class SessionBrowser {
 	private castQueue = Promise.resolve();
 	private capturingPick = false;
 	private queue = Promise.resolve();
+	private focus: FocusInfo = { editable: false };
+	private editables: PickedElement["box"][] = [];
+	/** Who last drove the page by hand, to receive what the page copies. */
+	private lastInput?: { ws: WebSocket; at: number };
+	private pendingCopy?: (copied: { text: string; remove?: boolean }) => void;
+	/** Recent console messages, page errors and failed requests, for browser_console. */
+	readonly log: LogEntry[] = [];
 	closed = false;
 
 	constructor(
@@ -219,6 +337,23 @@ class SessionBrowser {
 	}
 
 	private async init() {
+		await this.context.exposeBinding("__beezyReport", (source, raw) => {
+			if (source.page !== this.page || source.frame !== this.page.mainFrame()) return;
+			try {
+				this.onReport(report.parse(JSON.parse(String(raw))));
+			} catch {
+				// A page can call the binding itself; ignore what does not fit.
+			}
+		});
+		await this.context.addInitScript(HOOKS);
+		const record = (kind: LogEntry["kind"], level: string, text: string) => {
+			this.log.push({ at: Date.now(), kind, level, text: text.slice(0, 2000) });
+			if (this.log.length > 300) this.log.splice(0, this.log.length - 300);
+		};
+		this.page.on("console", (message) => record("console", message.type(), message.text()));
+		this.page.on("pageerror", (error) => record("pageerror", "error", error.stack || error.message));
+		this.page.on("requestfailed", (request) => record("request", "error", `${request.method()} ${request.url()} failed: ${request.failure()?.errorText ?? "unknown error"}`));
+		this.page.on("response", (response) => response.status() >= 400 && record("request", "error", `${response.request().method()} ${response.url()} → ${response.status()}`));
 		await this.page.route((url) => url.origin === new URL(SEARCH_PAGE).origin, async (route) => {
 			const body = this.searchHistory.get(route.request().url());
 			await route.fulfill({ status: body ? 200 : 404, contentType: body ? "text/html; charset=utf-8" : "text/plain", body: body ?? "Enter a keyword in the address bar to search.", headers: { "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "cache-control": "no-store" } });
@@ -247,6 +382,42 @@ class SessionBrowser {
 		this.page.on("load", () => this.announce());
 		this.page.on("close", () => void close(this.key));
 		this.touch();
+	}
+
+	private onReport(data: z.infer<typeof report>) {
+		if (data.kind === "clipboard") {
+			if (this.pendingCopy) return this.pendingCopy(data);
+			const recent = this.lastInput;
+			if (recent && Date.now() - recent.at < 5000) send(recent.ws, { type: "clipboard", text: data.text });
+			return;
+		}
+		if (data.kind === "focus") {
+			const { kind: _, ...focus } = data;
+			this.focus = focus;
+			for (const [ws, viewer] of this.viewers) if (viewer.canInput) send(ws, { type: "focus", ...focus });
+			return;
+		}
+		this.editables = data.boxes;
+		for (const [ws, viewer] of this.viewers) if (viewer.canInput) send(ws, { type: "editables", boxes: data.boxes });
+	}
+
+	/** Copies (or cuts) the page's selection as the page itself would, and returns the text. */
+	private async copySelection(cut: boolean) {
+		const reported = new Promise<{ text: string; remove?: boolean } | undefined>((resolve) => {
+			this.pendingCopy = resolve;
+			setTimeout(() => resolve(undefined), 500);
+		});
+		try {
+			// A user gesture, so the page's own copy handlers (code editors, rich text) run.
+			await this.cdp?.send("Runtime.evaluate", { expression: `document.execCommand(${JSON.stringify(cut ? "cut" : "copy")})`, userGesture: true }).catch(() => {});
+			const copied = await reported;
+			const text = copied?.text || ((await this.page.evaluate(SELECTED_TEXT).catch(() => "")) as string);
+			if (!text) throw new Error("Select text on the page first.");
+			if (cut && (!copied || copied.remove)) await this.page.keyboard.press("Delete");
+			return text;
+		} finally {
+			this.pendingCopy = undefined;
+		}
 	}
 
 	status() {
@@ -337,6 +508,10 @@ class SessionBrowser {
 		const title = await this.page.title().catch(() => "");
 		if (ws.readyState !== ws.OPEN) return;
 		send(ws, { type: "state", ...this.status(), title, canInput, canResize: ws === this.viewportOwner });
+		if (canInput) {
+			send(ws, { type: "focus", ...this.focus });
+			send(ws, { type: "editables", boxes: this.editables });
+		}
 		if (this.frame && this.viewers.get(ws)?.visible) ws.send(this.frame);
 		await this.updateScreencast();
 	}
@@ -361,7 +536,12 @@ class SessionBrowser {
 			const pick = await this.pick(message.rect ?? { x: message.x ?? 0, y: message.y ?? 0, depth: message.depth });
 			return send(ws, { type: "picked", id: message.id, ...pick });
 		}
+		if (message.type === "copy" && !message.cut) {
+			return send(ws, { type: "copied", id: message.id, text: await this.copySelection(false) });
+		}
 		if (!canInput) throw new Error("You have view-only access to this browser.");
+		if (message.type === "mouse" || message.type === "key" || message.type === "text" || message.type === "press" || message.type === "copy") this.lastInput = { ws, at: Date.now() };
+		if (message.type === "copy") return send(ws, { type: "copied", id: message.id, text: await this.copySelection(true) });
 		if (message.type === "quote" || message.type === "select-text") {
 			const text = await this.page.evaluate((range) => {
 				if (range) {
@@ -422,6 +602,9 @@ class SessionBrowser {
 				break;
 			case "text":
 				await this.page.keyboard.insertText(message.text);
+				break;
+			case "press":
+				await this.page.keyboard.press(message.key).catch(() => {});
 				break;
 			case "close":
 				await close(this.key);
@@ -502,7 +685,10 @@ const clientMessage = z.discriminatedUnion("type", [
 		modifiers: z.number().int().min(0).max(15).optional(),
 	}),
 	z.object({ type: z.literal("key"), action: z.enum(["down", "up"]), key: z.string().min(1).max(40) }),
-	z.object({ type: z.literal("text"), text: z.string().max(10_000) }),
+	z.object({ type: z.literal("text"), text: z.string().max(100_000) }),
+	// A key or combination for Playwright, e.g. "Backspace" or "Control+a".
+	z.object({ type: z.literal("press"), key: z.string().min(1).max(60) }),
+	z.object({ type: z.literal("copy"), id: z.string().max(100), cut: z.boolean().optional() }),
 ]);
 
 import { SEARCH_PAGE, searchPage, searchUrl } from "./browser-search.js";
@@ -556,6 +742,9 @@ async function close(key: string) {
 	}
 }
 
+/** Close a session's browser, e.g. when the session is deleted. */
+export const closeSessionBrowser = (key: string) => close(key);
+
 export async function closeBrowsers() {
 	await Promise.allSettled([...sessions.keys()].map(close));
 }
@@ -570,7 +759,7 @@ async function status(key: string) {
  * frames (binary) and JSON messages; client frames are the JSON messages `clientMessage` accepts.
  */
 export function attachBrowser(server: Server) {
-	const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+	const wss = new WebSocketServer({ noServer: true, maxPayload: 512 * 1024 });
 
 	server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
 		const url = new URL(req.url ?? "/", "http://localhost");
@@ -603,14 +792,37 @@ export function attachBrowser(server: Server) {
 	});
 }
 
+const selector = z.string().min(1).max(2000);
 const bridgeAction = z.discriminatedUnion("action", [
 	z.object({ action: z.literal("open"), url: z.string().min(1).max(4000) }),
-	z.object({ action: z.literal("snapshot") }),
-	z.object({ action: z.literal("screenshot") }),
-	z.object({ action: z.literal("click"), selector: z.string().min(1).max(2000) }),
-	z.object({ action: z.literal("type"), selector: z.string().min(1).max(2000), text: z.string().max(10_000), submit: z.boolean().optional() }),
+	z.object({ action: z.literal("snapshot"), selector: selector.optional() }),
+	z.object({ action: z.literal("screenshot"), selector: selector.optional(), fullPage: z.boolean().optional() }),
+	z.object({ action: z.literal("click"), selector, button: z.enum(["left", "right", "middle"]).optional(), clickCount: z.number().int().min(1).max(3).optional() }),
+	z.object({ action: z.literal("type"), selector, text: z.string().max(10_000), submit: z.boolean().optional(), append: z.boolean().optional() }),
+	z.object({ action: z.literal("press"), key: z.string().min(1).max(60), selector: selector.optional() }),
+	z.object({ action: z.literal("hover"), selector }),
+	z.object({ action: z.literal("select"), selector, values: z.array(z.string().max(1000)).min(1).max(50) }),
+	z.object({ action: z.literal("scroll"), selector: selector.optional(), to: z.enum(["top", "bottom"]).optional(), dx: z.number().finite().optional(), dy: z.number().finite().optional() }),
+	z.object({
+		action: z.literal("wait"),
+		selector: selector.optional(),
+		state: z.enum(["visible", "hidden", "attached", "detached"]).optional(),
+		text: z.string().min(1).max(1000).optional(),
+		url: z.string().min(1).max(4000).optional(),
+		load: z.enum(["load", "domcontentloaded", "networkidle"]).optional(),
+		timeoutMs: z.number().int().min(0).max(30_000).optional(),
+	}),
+	z.object({ action: z.literal("history"), go: z.enum(["back", "forward", "reload"]) }),
+	z.object({ action: z.literal("evaluate"), expression: z.string().min(1).max(20_000) }),
+	z.object({ action: z.literal("console"), errorsOnly: z.boolean().optional(), limit: z.number().int().min(1).max(300).optional(), clear: z.boolean().optional() }),
 	z.object({ action: z.literal("close") }),
 ]);
+
+const stringify = (value: unknown) => {
+	if (value === undefined) return "undefined";
+	const text = typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? String(value);
+	return text.length > 20_000 ? `${text.slice(0, 20_000)}\n…(truncated)` : text;
+};
 
 export function browserRoutes(): Router {
 	const router = express.Router();
@@ -648,19 +860,89 @@ export function browserRoutes(): Router {
 					await session.goto(body.url);
 					return void (await done());
 				case "snapshot": {
-					const snapshot = await page.locator("body").ariaSnapshot({ timeout: 5000 });
+					const snapshot = await page.locator(body.selector ?? "body").first().ariaSnapshot({ timeout: 5000 });
 					return void (await done({ snapshot: snapshot.length > 20_000 ? `${snapshot.slice(0, 20_000)}\n…(truncated)` : snapshot }));
 				}
-				case "screenshot":
-					return void (await done({ image: (await page.screenshot({ type: "jpeg", quality: 70 })).toString("base64") }));
+				case "screenshot": {
+					const image = body.selector
+						? await page.locator(body.selector).first().screenshot({ type: "jpeg", quality: 70, timeout: 5000 })
+						: await page.screenshot({ type: "jpeg", quality: 70, fullPage: body.fullPage });
+					return void (await done({ image: image.toString("base64") }));
+				}
 				case "click":
-					await page.click(body.selector, { timeout: 5000 });
+					await page.click(body.selector, { timeout: 5000, button: body.button, clickCount: body.clickCount });
 					await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
 					return void (await done());
 				case "type":
-					await page.fill(body.selector, body.text, { timeout: 5000 });
+					if (body.append) {
+						await page.focus(body.selector, { timeout: 5000 });
+						await page.keyboard.press("End");
+						await page.keyboard.insertText(body.text);
+					} else await page.fill(body.selector, body.text, { timeout: 5000 });
 					if (body.submit) await page.press(body.selector, "Enter");
 					return void (await done());
+				case "press":
+					if (body.selector) await page.press(body.selector, body.key, { timeout: 5000 });
+					else await page.keyboard.press(body.key);
+					await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+					return void (await done());
+				case "hover":
+					await page.hover(body.selector, { timeout: 5000 });
+					return void (await done());
+				case "select": {
+					const selected = await page.selectOption(body.selector, body.values, { timeout: 5000 });
+					return void (await done({ selected }));
+				}
+				case "scroll": {
+					const by = { dx: body.dx ?? 0, dy: body.dy ?? 0 };
+					if (body.selector && !body.to && !by.dx && !by.dy) await page.locator(body.selector).first().scrollIntoViewIfNeeded({ timeout: 5000 });
+					else if (body.selector) {
+						// That element's own scroll area, e.g. a list or a panel in an app.
+						await page.locator(body.selector).first().evaluate((el, { to, dx, dy }) => (to ? el.scrollTo({ top: to === "top" ? 0 : el.scrollHeight }) : el.scrollBy(dx, dy)), { to: body.to, ...by }, { timeout: 5000 });
+					} else if (body.to) {
+						await page.evaluate((to) => {
+							// The page, or the largest scrolling element when the page itself does not scroll (app shells).
+							const root = document.scrollingElement ?? document.documentElement;
+							const scrollers = [root, ...document.querySelectorAll("*")].filter((el) => el.scrollHeight > el.clientHeight + 1 && (el === root || /auto|scroll/.test(getComputedStyle(el).overflowY)));
+							const target = scrollers.sort((a, b) => b.clientHeight * b.clientWidth - a.clientHeight * a.clientWidth)[0] ?? root;
+							target.scrollTo({ top: to === "top" ? 0 : target.scrollHeight });
+						}, body.to);
+					} else {
+						const size = page.viewportSize() ?? VIEWPORT;
+						await page.mouse.move(size.width / 2, size.height / 2);
+						await page.mouse.wheel(by.dx, by.dy || 600);
+					}
+					await page.waitForTimeout(200);
+					const position = await page.evaluate(() => ({ scrollX: Math.round(scrollX), scrollY: Math.round(scrollY), scrollHeight: document.documentElement.scrollHeight, viewportHeight: innerHeight }));
+					return void (await done(position));
+				}
+				case "wait": {
+					const timeout = body.timeoutMs ?? 10_000;
+					const started = Date.now();
+					if (body.selector) await page.waitForSelector(body.selector, { state: body.state ?? "visible", timeout });
+					if (body.text) await page.getByText(body.text).first().waitFor({ state: body.state === "hidden" || body.state === "detached" ? body.state : "visible", timeout });
+					if (body.url) await page.waitForURL((url) => url.href.includes(body.url!), { timeout, waitUntil: "commit" });
+					if (body.load) await page.waitForLoadState(body.load, { timeout });
+					if (!body.selector && !body.text && !body.url && !body.load) await page.waitForTimeout(Math.min(timeout, 10_000));
+					return void (await done({ waitedMs: Date.now() - started }));
+				}
+				case "history": {
+					const go = { back: () => page.goBack({ timeout: 10_000 }), forward: () => page.goForward({ timeout: 10_000 }), reload: () => page.reload({ timeout: 10_000 }) }[body.go];
+					await go();
+					return void (await done());
+				}
+				case "evaluate": {
+					const result = await Promise.race([
+						page.evaluate(body.expression),
+						new Promise((_, reject) => setTimeout(() => reject(new Error("The script did not finish within 10 seconds.")), 10_000)),
+					]);
+					return void (await done({ result: stringify(result) }));
+				}
+				case "console": {
+					const entries = session.log.filter((entry) => !body.errorsOnly || entry.level === "error" || entry.level === "warning").slice(-(body.limit ?? 50));
+					if (body.clear) session.log.length = 0;
+					return void (await done({ entries }));
+				}
 			}
 		} catch (error) {
 			throw new HttpError(400, (error as Error).message.split("\n")[0]);

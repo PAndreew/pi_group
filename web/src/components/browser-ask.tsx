@@ -94,7 +94,7 @@ export function BrowserAsk({
       {replies.length > 0 && (
         <div aria-label={tr("ui.browser-conversation-history-51085c")} role="group" className="pointer-events-auto flex max-w-full gap-1.5 overflow-x-auto rounded-full bg-background/95 p-1 shadow">
           {replies.map((reply, index) => (
-            <Button key={reply.id} type="button" size="icon-sm" variant={answer?.id === reply.id ? "default" : "outline"} className="shrink-0 rounded-full" aria-expanded={answer?.id === reply.id} aria-label={`Question ${index + 1}: ${reply.question.slice(0, 100)}`} title={reply.question.slice(0, 100)} onClick={() => setExpanded(answer?.id === reply.id ? null : reply.id)}>
+            <Button key={reply.id} type="button" size="icon-sm" variant={answer?.id === reply.id ? "default" : "outline"} className={cn("shrink-0 rounded-full", reply.running && "step-shimmer")} aria-busy={reply.running || undefined} aria-expanded={answer?.id === reply.id} aria-label={`Question ${index + 1}: ${reply.question.slice(0, 100)}`} title={reply.question.slice(0, 100)} onClick={() => setExpanded(answer?.id === reply.id ? null : reply.id)}>
               {index + 1}
             </Button>
           ))}
