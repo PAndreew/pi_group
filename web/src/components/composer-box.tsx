@@ -1,4 +1,5 @@
 import { AtSign, AudioLines, LoaderCircle, Square, SendHorizontal, Pause } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { DictationPhase } from "@/hooks/use-silent-dictation"
 import { useLocale } from "@/lib/i18n"
@@ -12,6 +13,24 @@ const dictationLabels = {
   recording: "composer.dictationStop",
   unavailable: "composer.dictationRetry",
 } as const satisfies Record<DictationPhase, string>
+
+/** The edge glow only shows after the box has gone this long without typing. */
+const GLOW_IDLE_MS = 15_000
+
+function useIdle(ms: number) {
+  const [idle, setIdle] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const poke = useCallback(() => {
+    setIdle(false)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setIdle(true), ms)
+  }, [ms])
+  useEffect(() => {
+    poke()
+    return () => clearTimeout(timer.current)
+  }, [poke])
+  return { idle, poke }
+}
 
 /**
  * The one message box every screen uses: the text area (`children`) above a row with mentions
@@ -44,6 +63,7 @@ export function ComposerBox({
   onFiles?: (files: File[]) => void
 }) {
   const { t } = useLocale()
+  const { idle, poke } = useIdle(GLOW_IDLE_MS)
   const dictate = !canSend && !onStop && !sending && Boolean(onDictate)
   const preparing = dictate && ['loading', 'opening', 'decoding'].includes(dictationPhase)
   const recording = dictate && dictationPhase === 'recording'
@@ -52,6 +72,10 @@ export function ComposerBox({
     <>
     <div
       data-composer-box
+      data-idle={idle || undefined}
+      onInputCapture={poke}
+      onKeyDownCapture={poke}
+      onCompositionUpdateCapture={poke}
       className="relative min-w-0 rounded-[12px] bg-muted shadow-[0_2px_8px_rgba(0,0,0,0.12)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
       onPaste={(e) => {
         const files = Array.from(e.clipboardData.files)

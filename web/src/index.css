@@ -349,7 +349,7 @@ html[data-editing] body { padding-bottom: 0; }
 
 @media (prefers-reduced-motion: no-preference) {
   /* Keep the light on the rounded edge, without clipping the dropups. */
-  [data-composer-box]::after {
+  [data-composer-box][data-idle]::after {
     content: "";
     position: absolute;
     inset: 0;

@@ -16,7 +16,7 @@ export function ProjectMemoryPill({ memory, onRemove }: { memory: string; onRemo
           <Trash2 className="size-3.5" />
         </button>
       </span>
-      <pre id={detailsId} hidden={!expanded} className="mt-1 max-h-48 max-w-full overflow-auto rounded-lg border border-slate-300 bg-white/70 p-2 text-xs whitespace-pre-wrap wrap-anywhere">{expanded ? memory : null}</pre>
+      <pre id={detailsId} hidden={!expanded} className="mt-1 max-h-48 max-w-full overflow-auto rounded-lg border border-slate-300 bg-white/70 p-2 text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-xs whitespace-pre-wrap wrap-anywhere">{expanded ? memory : null}</pre>
     </div>
   )
 }
