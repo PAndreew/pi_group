@@ -2,9 +2,8 @@ import { Loader2 } from "lucide-react"
 import { useState } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { BeezyLogo } from "@/components/beezy-logo"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 
 import { useLocale } from "@/lib/i18n"
 
@@ -30,31 +29,36 @@ export function Login() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-xl">
-            <img src="/beezy-logo.svg" alt="" className="size-8" /> beezy
-          </CardTitle>
-          <CardDescription>{t("login.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={submit} className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="username">{t("login.username")}</Label>
-              <Input id="username" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">{t("login.password")}</Label>
-              <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={busy}>
-              {busy && <Loader2 className="animate-spin" />} {t("login.signIn")}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-[#fdf2a6] p-4 text-neutral-900">
+      <BeezyLogo blink className="size-40" />
+      <form onSubmit={submit} className="grid w-full max-w-xs gap-3">
+        <Input
+          id="username"
+          aria-label={t("login.username")}
+          placeholder={t("login.username")}
+          autoComplete="username"
+          autoCapitalize="none"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+          className="h-10 border-black/15 bg-white text-neutral-900 placeholder:text-neutral-500 dark:bg-white"
+        />
+        <Input
+          id="password"
+          type="password"
+          aria-label={t("login.password")}
+          placeholder={t("login.password")}
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          className="h-10 border-black/15 bg-white text-neutral-900 placeholder:text-neutral-500 dark:bg-white"
+        />
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        <Button type="submit" disabled={busy} className="h-10 bg-neutral-900 text-white hover:bg-neutral-800">
+          {busy && <Loader2 className="animate-spin" />} {t("login.signIn")}
+        </Button>
+      </form>
     </div>
   )
 }
