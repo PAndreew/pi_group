@@ -1,5 +1,5 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, Languages, KeyRound, LogOut, Monitor, Moon, PanelLeft, Search, Sun, Users } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Activity, ArrowLeft, Check, ChevronDown, X, Bell, BellOff, Languages, KeyRound, LogOut, Monitor, Moon, PanelLeft, Search, Sun, Users } from "lucide-react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
 import { ChatList } from "@/components/chat-list"
@@ -23,7 +23,7 @@ import { ChatSearchProvider } from "@/lib/chat-search"
 import { NavSlotContext } from "@/lib/nav-slot"
 import { SessionView } from "@/components/session-view"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ProfilePictureDialog } from "@/components/profile-picture-dialog"
 import { AuthorAvatar } from "@/components/author-avatar"
@@ -138,9 +138,41 @@ function ActiveSessions({ onOpen }: { onOpen: (s: SessionSummary) => void }) {
   )
 }
 
+function ProfileLanguageMenu() {
+  const { language, setLanguage, t } = useLocale()
+  const [expanded, setExpanded] = useState(false)
+  const optionsId = useId()
+  const label = t("profile.language")
+
+  return (
+    <>
+      <DropdownMenuItem
+        aria-expanded={expanded}
+        aria-controls={expanded ? optionsId : undefined}
+        onSelect={(event) => {
+          event.preventDefault()
+          setExpanded((open) => !open)
+        }}
+      >
+        <Languages /> {label}
+        <ChevronDown aria-hidden="true" className={expanded ? "ml-auto rotate-180" : "ml-auto"} />
+      </DropdownMenuItem>
+      {expanded && (
+        <DropdownMenuRadioGroup id={optionsId} aria-label={label} value={language} onValueChange={setLanguage}>
+          {languages.map(({ code, name }) => (
+            <DropdownMenuRadioItem key={code} lang={code} value={code} className="gap-3 rounded-md pl-7">
+              <Check aria-hidden="true" className={code === language ? "" : "invisible"} /> {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      )}
+    </>
+  )
+}
+
 function Workspace() {
   const { user, logout } = useAuth()
-  const { language, setLanguage, t } = useLocale()
+  const { t } = useLocale()
   const [theme, setTheme] = useTheme()
   const [route, setRoute] = useRoute()
   const { active: project } = useProjects()
@@ -292,18 +324,7 @@ function Workspace() {
               <DropdownMenuItem onSelect={() => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")}>
                 {theme === "light" ? <Sun /> : theme === "dark" ? <Moon /> : <Monitor />} {t("profile.theme", { theme: t(`profile.theme.${theme}`) })}
               </DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger><Languages /> {t("profile.language")}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="rounded-xl">
-                  <DropdownMenuRadioGroup value={language} onValueChange={setLanguage}>
-                    {languages.map(({ code, name }) => (
-                      <DropdownMenuRadioItem key={code} lang={code} value={code} className="gap-3 rounded-md">
-                        <Check aria-hidden="true" className={code === language ? "" : "invisible"} /> {name}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              <ProfileLanguageMenu />
               <DropdownMenuItem
                 disabled={!notifications.supported}
                 onSelect={(e) => {
