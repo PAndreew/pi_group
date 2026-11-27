@@ -560,6 +560,15 @@
     "ui.personal-access-token-for-github-co-92321c": "Personal access token for github.com/acme, repo scope",
     "ui.waiting-on-257da8": "Waiting on",
     "ui.watch-results-f29160": "Watch results",
-    "ui.copy-link-2f84ee": "Copy link"
+    "ui.copy-link-2f84ee": "Copy link",
+    "surfaces.newSession": "New session",
+    "palette.title": "Go to…",
+    "palette.placeholder": "Type a page, chat, session or applet…",
+    "palette.goTo": "Go to",
+    "palette.actions": "Actions",
+    "palette.conversations": "Chats and sessions",
+    "palette.nothing": "Nothing found.",
+    "palette.searchChats": "Search messages in chats",
+    "palette.theme": "Switch theme"
   }
 }

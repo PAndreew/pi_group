@@ -11,6 +11,7 @@ import { CopyCode, InPre } from "@/components/copy-code"
 import { ImageGallery } from "@/components/image-gallery"
 import { WebLink } from "@/components/web-link"
 import { Chart, LinkPreviewCard } from "@/components/rich-blocks"
+import { SurfaceActionBlock } from "@/components/surface-actions"
 import { api } from "@/lib/api"
 import { fileLinkPath } from "@/lib/file-link"
 import { NavContext } from "@/lib/nav"
@@ -79,6 +80,7 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
           pre: ({ node, children, ...props }) => {
             const block = fence(node)
             if (block?.language === "chart") return <ChartBlock source={block.source} />
+            if (block?.language === "beezy-action") return <SurfaceActionBlock source={block.source} />
             if (block?.language === "preview") {
               const urls = previewUrls(block.source)
               if (urls.length) return <div className="grid gap-2">{urls.map((url) => <LinkPreviewCard key={url} url={url} />)}</div>

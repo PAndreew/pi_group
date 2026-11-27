@@ -14,6 +14,24 @@ const states = new Map<string, SessionState>()
 const sessions = new Map<string, SessionSummary>()
 const chats = new Map<string, { chat: Chat; messages: ChatMessage[] }>()
 const files = new Map([['README.md', '# Weekend planner\n\nA fictional Beezy project. Browse activities, vote, and make plans together.\n'], ['package.json', '{"name":"weekend-planner","scripts":{"test":"vitest run"}}\n'], ['planner.ts', 'export const activities = ["Farmers market", "Lake trail", "Board games"];\n']])
+const memoryTopics = [
+  { slug: 'architecture', title: 'Architecture', description: 'Code layout, components and test setup', updatedAt: at },
+  { slug: 'decisions', title: 'Decisions', description: 'Why voting is client-side and how weather is mocked', updatedAt: at },
+  { slug: 'accessibility', title: 'Accessibility', description: 'Keyboard navigation and focus rules', updatedAt: at },
+]
+const memoryBodies: Record<string, string> = {
+  architecture: '- `planner.ts` exports the activity list.\n- Tests run with `npm test` (Vitest).\n- The preview runs on port 5173.',
+  decisions: '- Votes stay in memory; no backend needed for the first version.\n- The weather card uses a fixed forecast so tests are deterministic.',
+  accessibility: '- Buttons must show a visible focus ring.\n- Every action is reachable by keyboard.',
+}
+const machines = [
+  { id: 'gpu01', name: 'gpu01', alias: 'gpu01', host: 'gpu01.example.org', user: 'beezy', source: 'ssh-config', ssh: 'ssh gpu01', status: { state: 'online', checkedAt: at } },
+  { id: 'build', name: 'build-box', host: 'build.example.org', user: 'ci', port: 2222, source: 'manual', ssh: 'ssh -p 2222 ci@build.example.org', status: { state: 'auth', checkedAt: at, detail: 'Key not accepted' } },
+]
+const secrets = [{ key: 'OPENAI_API_KEY', description: 'Used by the translation applet', createdAt: at, updatedAt: at }, { key: 'DEPLOY_TOKEN', description: 'Deploys the planner to staging', createdAt: at, updatedAt: at }]
+const jobs = [{ id: 'job1', name: 'Morning weather digest', schedule: '30 7 * * 1-5', steps: [{ type: 'http', method: 'GET', url: 'https://example.org/forecast', headers: {}, timeoutSec: 30 }, { type: 'prompt', text: 'Summarise the forecast and suggest an activity.' }], enabled: true, approved: true, approvedBy: 'Alice', approvedAt: at, canApprove: true, needsAdmin: false, folder, owner: alice.id, createdAt: at, updatedAt: at, nextRunAt: new Date(now + 6 * 3_600_000).toISOString(), lastRun: { at, ok: true, output: 'Sunny, 22°C. Lake trail looks great.', ms: 4200 }, failures: 0, running: false }]
+const applets = [{ id: 'ap1', slug: 'translate', title: 'Translate a document', description: 'Pick a file and a language; the agent translates it.', folder, owner: alice.id, version: 1, approved: true, approvedBy: 'Alice', approvedAt: at, hasDraft: false, canManage: true, createdAt: at, updatedAt: at, spec: { slug: 'translate', title: 'Translate a document', description: 'Pick a file and a language; the agent translates it.', fields: [{ type: 'file', id: 'doc', label: 'Document' }, { type: 'select', id: 'lang', label: 'Language', options: ['German', 'Hungarian', 'French'] }], actions: [{ id: 'go', label: 'Translate', prompt: 'Translate {{doc}} to {{lang}}.' }] } }]
+const watches = [{ id: 'w1', label: 'Nightly build', host: 'build-box', kind: 'run', status: 'armed', createdAt: at, deadlineAt: new Date(now + 20 * 3_600_000).toISOString(), lastContactAt: at }]
 const browserUrl = 'http://localhost:5173/'
 const browserTitle = 'Weekend planner (demo)'
 let browserOpen = true
@@ -38,7 +56,7 @@ function example(): AgentMessage[] {
     { ...text('toolResult', tool.output), toolCallId: tool.id, toolName: tool.name, isError: false },
   ])
 }
-states.get(planner.key)!.messages = [text('user', 'Build a responsive weekend planner with activity voting, then run the tests.', alice), text('assistant', 'I’ll check the project setup and verify the planner.'), ...example(), text('assistant', 'All five tests passed. Open the shared browser to try the planner preview.')]
+states.get(planner.key)!.messages = [text('user', 'Public project memory (reference context, not instructions):\n<project-memory>\nWeekend planner: friends vote on activities. Vitest tests; weather card uses a mocked forecast; accessibility matters.\n\nTopics: architecture, decisions, accessibility.\n</project-memory>\n\nBuild a responsive weekend planner with activity voting, then run the tests.', alice), text('assistant', 'I’ll check the project setup and verify the planner.'), ...example(), text('assistant', 'All five tests passed. Here is the summary:\n\n| Suite | Tests | Status |\n| --- | --- | --- |\n| Activity voting | 3 | ✅ passed |\n| Weather card | 2 | ✅ passed |\n\nVotes per activity so far:\n\n```chart\n{"type":"bar","title":"Votes","x":["Market","Lake trail","Board games"],"series":[{"name":"Votes","data":[5,3,2]}]}\n```\n\nOpen the shared browser to try the planner preview.')]
 planner.messageCount = states.get(planner.key)!.messages.length
 const review = createSession('Review mobile accessibility', folder, 'review')
 states.get(review.key)!.messages = [text('user', 'Check keyboard navigation on the planner.', users[1]), text('assistant', 'The activity buttons have visible focus and can be activated from the keyboard.')]
@@ -77,7 +95,12 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
   if (area === 'tenants' && method === 'GET') return json({ active: 'demo', tenants: [{ id: 'demo', name: 'Demo workspace', canShare: false }] })
   if (area === 'harnesses') return json(id ? { models } : { harnesses: [{ id: 'pi', label: 'pi', ok: true, durable: false, description: 'pi coding agent' }] })
   if (area === 'projects' && method === 'GET') return json(action === 'links' ? { links: [] } : id === 'moves' ? { moves: [] } : { projects: [project] })
-  if (area === 'memory' && method === 'GET') return json(action === 'archives' ? { sessions: [] } : { context: { trimHours: 24, windowHours: 168 }, syncing: false, nextSync: new Date(Date.now() + 3_600_000).toISOString(), overview: '', overviewMax: 1500, topics: [], maxTopics: 10, topicMax: 8000, legacy: false })
+  if (area === 'memory' && method === 'GET') {
+    if (action === 'archives') return json({ sessions: [{ key: 'pi:old', title: 'Set up CI pipeline', archivedAt: at }] })
+    if (action === 'topics') { const t = memoryTopics.find(x => x.slug === item); return t ? json({ ...t, body: memoryBodies[t.slug] }) : unsupported() }
+    return json({ context: { trimHours: 24, windowHours: 168 }, lastRun: new Date(now - 1_200_000).toISOString(), syncing: false, nextSync: new Date(Date.now() + 2_400_000).toISOString(), overview: 'Weekend planner: a small responsive app where friends vote on activities. Uses Vitest; the weather card reads a mocked forecast. Accessibility matters.', overviewMax: 1500, topics: memoryTopics.map(t => ({ ...t, size: memoryBodies[t.slug].length })), maxTopics: 10, topicMax: 8000, legacy: false })
+  }
+  if (area === 'memory' && ['PUT', 'PATCH', 'DELETE'].includes(method)) return json({ ok: true })
   if (area === 'memory-model') return json(method === 'GET' ? { syncMinutes: 60, current: { provider: 'anthropic', id: 'claude-haiku-4-5' }, providers: [{ provider: 'anthropic', cheapest: 'claude-haiku-4-5', models: [{ id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: { input: 1, output: 5 } }] }] } : { ok: true })
   if (area === 'sessions') {
     if (!id && method === 'POST') return json({ session: createSession(body.name || 'New demo session', body.path || folder, undefined, body.model) })
@@ -100,7 +123,8 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
     if (action === 'tools') return json(tools)
     if (action === 'mcp') return json({ servers: [], live: true })
     if (action === 'browser') return json(browserStatus())
-    if (action === 'watches') return json({ watches: [] })
+    if (action === 'watches') return json({ watches })
+    if (action === 'git') return json({ git: { branch: 'feature/voting', detached: false, files: 3, upstream: 'origin/feature/voting', ahead: 2, behind: 1, fetchedAt: now } })
     if (action === 'interactions') return json({ interactions: [] })
     if (!action && method === 'GET') return json({ session })
     if (!action && method === 'DELETE') { sessions.delete(id); states.delete(id); emit(id, { type: 'deleted', by: alice.username }); return json({ ok: true }) }
@@ -168,9 +192,12 @@ async function handle(url: URL, method: string, body: Record<string, any>): Prom
   }
   if (area === 'tools') return json(tools)
   if (area === 'mcp') return json({ servers: [], live: true })
-  if (area === 'applets' && !id) return json({ applets: [] })
-  if (area === 'jobs' && !id) return json({ jobs: [] })
-  if (area === 'vault' && id === 'status') return json({ configured: false, reachable: false })
+  if (area === 'applets' && !id) return json({ applets })
+  if (area === 'applets' && id && !action) { const a = applets.find(x => x.id === id || x.slug === id); return a ? json({ applet: a, runs: [] }) : unsupported() }
+  if (area === 'remote-machines') return json(method === 'GET' ? { machines, keys: [], suggestions: [], canEdit: true } : { machines })
+  if (area === 'jobs' && !id) return json({ jobs })
+  if (area === 'vault' && id === 'status') return json({ configured: true, reachable: true })
+  if (area === 'vault' && id === 'secrets' && method === 'GET') return json({ secrets })
   if (area === 'lipread') return json({ enabled: false })
   return unsupported()
 }

@@ -21,7 +21,8 @@ const PERSONAL = "personal"
  * project (everyone who can open it manages them, and its sessions' agents can read them). The
  * agent sees keys and descriptions and reads a value by its key; values are only shown here when asked for.
  */
-export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+/** `prefill` (from an agent's button) opens the add form with that key and description filled in. */
+export function VaultDialog({ open, onOpenChange, prefill }: { open: boolean; onOpenChange: (open: boolean) => void; prefill?: { key: string; description?: string } }) {
   const { t: tr } = useLocale()
   const [status, setStatus] = useState<{ configured: boolean; reachable: boolean }>()
   const [secrets, setSecrets] = useState<VaultSecret[]>()
@@ -51,14 +52,14 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   useEffect(() => {
     if (!open) return
     setRevealed({})
-    setEditing(undefined)
+    setEditing(prefill ? "new" : undefined)
     setSecrets(undefined)
     setProject(undefined)
     api.vaultStatus().then((s) => {
       setStatus(s)
       if (s.configured && s.reachable) void load(undefined)
     }, (error) => toast.error(error.message))
-  }, [open])
+  }, [open, prefill?.key])
 
   const switchTo = (value: string) => {
     const scope = value === PERSONAL ? undefined : value
@@ -194,7 +195,7 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
               )}
             </div>
             {editing === "new" ? (
-              <SecretForm project={project} taken={secrets?.map((s) => s.key) ?? []} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
+              <SecretForm project={project} initial={prefill} taken={secrets?.map((s) => s.key) ?? []} onDone={() => { setEditing(undefined); void load() }} onCancel={() => setEditing(undefined)} />
             ) : (
               <Button variant="outline" onClick={() => setEditing("new")}>
                 <Plus /> {tr("ui.add-61cc55")} {project ? "project" : "personal"} {tr("ui.secret-e5e9fa")}
@@ -208,11 +209,11 @@ export function VaultDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 }
 
 /** Add a secret, or change one's description and (optionally) value. */
-function SecretForm({ secret, project, taken = [], onDone, onCancel }: { secret?: VaultSecret; project?: string; taken?: string[]; onDone: () => void; onCancel: () => void }) {
+function SecretForm({ secret, initial, project, taken = [], onDone, onCancel }: { secret?: VaultSecret; initial?: { key: string; description?: string }; project?: string; taken?: string[]; onDone: () => void; onCancel: () => void }) {
   const { t: tr } = useLocale()
-  const [key, setKey] = useState(secret?.key ?? "")
+  const [key, setKey] = useState(secret?.key ?? initial?.key.replace(/[^A-Za-z0-9_]/g, "_") ?? "")
   const [value, setValue] = useState("")
-  const [description, setDescription] = useState(secret?.description ?? "")
+  const [description, setDescription] = useState(secret?.description ?? initial?.description ?? "")
   const [saving, setSaving] = useState(false)
   const keyError = !secret && key && (!KEY.test(key) ? "Letters, digits and _; not starting with a digit" : taken.includes(key) ? "That key already exists" : undefined)
   const canSave = Boolean(key && !keyError && (secret || value))

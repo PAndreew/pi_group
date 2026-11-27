@@ -31,7 +31,8 @@ const defaultName = (host: string) => host.split(".")[0].replace(/[^\w.-]/g, "-"
  * Machines this server reaches over SSH: hosts of the server's ~/.ssh/config appear on their own,
  * others are added by hand. Each gets a name people refer to as #name in messages.
  */
-export function RemoteMachinesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+/** `prefill` (from an agent's button) opens the add form with that host (and name) filled in, for admins. */
+export function RemoteMachinesDialog({ open, onOpenChange, prefill }: { open: boolean; onOpenChange: (open: boolean) => void; prefill?: { host: string; name?: string } }) {
   const { t: tr, language } = useLocale()
   const [data, setData] = useState<Awaited<ReturnType<typeof api.remoteMachines>>>()
   const [checking, setChecking] = useState(false)
@@ -50,11 +51,11 @@ export function RemoteMachinesDialog({ open, onOpenChange }: { open: boolean; on
   useEffect(() => {
     if (!open) return
     setRenaming(undefined)
-    setAdding(false)
+    setAdding(Boolean(prefill))
     void load().then(() => check())
     const timer = setInterval(() => void load(), 20_000)
     return () => clearInterval(timer)
-  }, [open, load, check])
+  }, [open, load, check, prefill?.host])
 
   const rename = async () => {
     if (!renaming) return
@@ -119,7 +120,7 @@ export function RemoteMachinesDialog({ open, onOpenChange }: { open: boolean; on
           ))}
         </ul>
         {edit && (adding ? (
-          <MachineForm keys={data!.keys} suggestions={data!.suggestions} taken={data!.machines.map((m) => m.name.toLowerCase())} onCancel={() => setAdding(false)} onDone={() => { setAdding(false); void load() }} />
+          <MachineForm initial={prefill} keys={data!.keys} suggestions={data!.suggestions} taken={data!.machines.map((m) => m.name.toLowerCase())} onCancel={() => setAdding(false)} onDone={() => { setAdding(false); void load() }} />
         ) : (
           <Button variant="outline" onClick={() => setAdding(true)}><Plus /> {tr("ui.add-machine-14a862")}</Button>
         ))}
@@ -139,12 +140,14 @@ export function RemoteMachinesDialog({ open, onOpenChange }: { open: boolean; on
 
 const CUSTOM = "__custom"
 
-function MachineForm({ keys, suggestions, taken, onDone, onCancel }: { keys: Keys; suggestions: string[]; taken: string[]; onDone: () => void; onCancel: () => void }) {
+function MachineForm({ initial, keys, suggestions, taken, onDone, onCancel }: { initial?: { host: string; name?: string }; keys: Keys; suggestions: string[]; taken: string[]; onDone: () => void; onCancel: () => void }) {
   const { t: tr } = useLocale()
-  const [host, setHost] = useState("")
-  const [user, setUser] = useState("")
-  const [port, setPort] = useState("")
-  const [name, setName] = useState<string>()
+  // user@host:port is split into its fields, as when typed.
+  const given = /^(?:([^@\s]+)@)?([^:\s]+)(?::(\d+))?$/.exec(initial?.host.trim() ?? "")
+  const [host, setHost] = useState(given?.[2] ?? initial?.host.trim() ?? "")
+  const [user, setUser] = useState(given?.[1] ?? "")
+  const [port, setPort] = useState(given?.[3] ?? "")
+  const [name, setName] = useState<string | undefined>(initial?.name?.replace(/\s/g, "-"))
   const [key, setKey] = useState("")
   const [customKey, setCustomKey] = useState("")
   const [saving, setSaving] = useState(false)

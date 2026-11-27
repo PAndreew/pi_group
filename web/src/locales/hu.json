@@ -560,6 +560,15 @@
     "ui.personal-access-token-for-github-co-92321c": "Személyes hozzáférési token a github.com/acme, repo hatókörhöz",
     "ui.waiting-on-257da8": "Várakozás",
     "ui.watch-results-f29160": "Folyamatfigyelés eredményei",
-    "ui.copy-link-2f84ee": "Link másolása"
+    "ui.copy-link-2f84ee": "Link másolása",
+    "surfaces.newSession": "Új munkamenet",
+    "palette.title": "Ugrás…",
+    "palette.placeholder": "Írj be egy oldalt, csevegést, munkamenetet vagy appletet…",
+    "palette.goTo": "Ugrás",
+    "palette.actions": "Műveletek",
+    "palette.conversations": "Csevegések és munkamenetek",
+    "palette.nothing": "Nincs találat.",
+    "palette.searchChats": "Keresés a csevegések üzeneteiben",
+    "palette.theme": "Téma váltása"
   }
 }

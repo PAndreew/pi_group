@@ -1,6 +1,6 @@
 # Interactive GitHub Pages demo
 
-The demo runs Beezy's real frontend against an in-memory API, event stream, and browser transport. It opens to a prefilled session; use **Open detailed steps** to inspect `npm test` and its scripted output. It includes fictional accounts, sessions, expandable tool results, scripted chat replies, an interactive browser preview, and illustrative model/host usage. State lives only in React memory and resets on reload. It does not execute commands, connect to models, authenticate accounts, or open a real shared browser.
+The demo runs Beezy's real frontend against an in-memory API, event stream, and browser transport. It opens to a prefilled session; use **Open detailed steps** to inspect `npm test` and its scripted output. It showcases the current UI: markdown tables and charts in replies, the git status indicator, a project-memory pill on the first message, a pending process watch, project memory topics, remote machines, vault secrets, scheduled jobs and applets. It includes fictional accounts, sessions, expandable tool results, scripted chat replies, an interactive browser preview, and illustrative model/host usage. State lives only in React memory and resets on reload. It does not execute commands, connect to models, authenticate accounts, or open a real shared browser.
 
 ## Run locally
 

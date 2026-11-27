@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Check, X, Bell, BellOff, Languages, KeyRound, LogOut, Monitor, Moon, PanelLeft, Sun, Users } from "lucide-react"
+import { Activity, ArrowLeft, Check, X, Bell, BellOff, Languages, KeyRound, LogOut, Monitor, Moon, PanelLeft, Search, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { AppletView } from "@/components/applet-view"
@@ -11,6 +11,8 @@ import { Home } from "@/components/home"
 import { Login } from "@/components/login"
 import { NewSessionDialog } from "@/components/new-session-dialog"
 import { ChatSearchOverlay } from "@/components/chat-search-box"
+import { CommandPalette, type PaletteCommand } from "@/components/command-palette"
+import { SurfaceDialogs, type OpenSurface } from "@/components/surface-dialogs"
 import { FilePreviewDialog, FilePreviewPanel, useLastEdit } from "@/components/file-preview-panel"
 import { ProjectSwitcher } from "@/components/project-bar"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
@@ -32,6 +34,8 @@ import { notificationsUnavailable, useRunNotifications } from "@/hooks/use-run-n
 import { api, type SessionSummary } from "@/lib/api"
 import { type Nav, NavContext } from "@/lib/nav"
 import { ProjectsProvider, useProjects } from "@/lib/projects"
+import { SurfaceContext, type Surfaces } from "@/lib/surface-context"
+import { surface as surfaceInfo } from "@/lib/surfaces"
 
 type Theme = "light" | "dark" | "system"
 
@@ -161,6 +165,8 @@ function Workspace() {
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [surface, setSurface] = useState<OpenSurface>()
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const [explorer, setExplorer] = useState<ExplorerState>({ open: false, folder: "", query: "" })
   /** Where closing the file preview goes back to, and whether the explorer it was opened from reopens. */
@@ -197,6 +203,41 @@ function Workspace() {
     [setRoute, route],
   )
 
+  const folder = route.folder || project?.folder || ""
+  const isAdmin = user?.role === "admin"
+  /** Opens a part of the app (lib/surfaces.ts) for the sidebar, agent buttons and the command palette. */
+  const surfaces: Surfaces = useMemo(() => {
+    const path = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim().replace(/^\/+|\/+$/g, "") : folder)
+    return {
+      open: (id, params = {}) => {
+        setDrawerOpen(false)
+        setPaletteOpen(false)
+        if (surfaceInfo(id)?.admin && !isAdmin) return
+        if (id === "files") return nav.openExplorer(path(params.folder))
+        if (id === "new-session") return nav.newSession(path(params.folder), { browser: params.browser === true || params.browser === "true" })
+        if (id === "users") return setUsersOpen(true)
+        setSurface({ id, params })
+      },
+      openPalette: () => setPaletteOpen(true),
+    }
+  }, [nav, folder, isAdmin])
+  // Ctrl/⌘+K anywhere but a terminal (where it is the shell's kill-line).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "k" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+      if (e.target instanceof Element && e.target.closest(".xterm")) return
+      e.preventDefault()
+      setPaletteOpen((open) => !open)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+  const paletteCommands: PaletteCommand[] = [
+    { id: "search-chats", label: t("palette.searchChats"), keywords: "find messages", icon: <Search />, run: () => setSearchOpen(true) },
+    { id: "theme", label: t("palette.theme"), keywords: "dark light mode", icon: theme === "dark" ? <Moon /> : theme === "light" ? <Sun /> : <Monitor />, run: () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light") },
+    { id: "password", label: t("profile.password"), icon: <KeyRound />, run: () => setPasswordOpen(true) },
+  ]
+
   /** Create with the saved defaults, or ask for the runtime and model first. */
   useEffect(() => {
     if (!newSession || !user?.sessionDefaults || creating) return
@@ -226,6 +267,7 @@ function Workspace() {
 
   return (
     <NavContext.Provider value={nav}>
+      <SurfaceContext.Provider value={surfaces}>
       <NavSlotContext.Provider value={null}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <header className="relative flex h-12 shrink-0 items-center justify-between gap-1 px-2 text-base lg:border-b sm:px-3">
@@ -234,6 +276,7 @@ function Workspace() {
           </div>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} onSearch={() => setSearchOpen(true)} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="icon-sm" onClick={() => setPaletteOpen(true)} aria-label={t("palette.title")} title={`${t("palette.title")} (${/Mac|iP(hone|ad)/.test(navigator.platform) ? "⌘" : "Ctrl"}+K)`}><Search /></Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -295,14 +338,14 @@ function Workspace() {
         <Sheet open={!wide && drawerOpen} onOpenChange={setDrawerOpen}>
           <SheetContent className="gap-0" aria-describedby={undefined}>
             <SheetTitle className="border-b px-4 py-3 font-normal">{t("nav.menu")}</SheetTitle>
-            <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} className="min-h-0 flex-1"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>
+            <WorkspaceSidebar folder={folder} sessionKey={route.session} selectedFile={route.file} className="min-h-0 flex-1"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>
           </SheetContent>
         </Sheet>
 
         <div className="flex min-h-0 flex-1">
           {wide && (
             <div className={`shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none ${sidebarOpen ? "w-64 opacity-100" : "w-0 opacity-0"}`} inert={!sidebarOpen} aria-hidden={!sidebarOpen || undefined}>
-              {(sidebarOpen || sidebarMounted) && <WorkspaceSidebar folder={route.folder || project?.folder || ""} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="h-full w-64"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
+              {(sidebarOpen || sidebarMounted) && <WorkspaceSidebar folder={folder} sessionKey={route.session} selectedFile={route.file} lastEdit={previewPanel ? undefined : lastEdit.file ?? undefined} onLastEdit={() => setPreviewOpen(true)} className="h-full w-64"><ActiveSessions onOpen={(s) => nav.openSession(s.key, s.path)} /></WorkspaceSidebar>}
             </div>
           )}
           {inside && <ChatList key={project?.id} selected={route.chat ?? route.session} className="hidden w-80 shrink-0 border-r md:flex lg:hidden 2xl:flex 2xl:w-72" />}
@@ -334,6 +377,8 @@ function Workspace() {
         />
         <FilePreviewDialog lastEdit={lastEdit} open={previewOpen && !previewPanel} onOpenChange={setPreviewOpen} />
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
+        <SurfaceDialogs current={surface} onClose={() => setSurface(undefined)} sessionKey={route.session} folder={folder} />
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={paletteCommands} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
         <ChatSearchOverlay open={searchOpen} onOpenChange={setSearchOpen} onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />
@@ -347,6 +392,7 @@ function Workspace() {
         />
       </div>
       </NavSlotContext.Provider>
+      </SurfaceContext.Provider>
     </NavContext.Provider>
   )
 }

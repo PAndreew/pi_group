@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import english from "@/locales/en.json"
 
-type MessageKey = keyof typeof english.messages
+export type MessageKey = keyof typeof english.messages
 type Messages = Partial<Record<MessageKey, string>>
 type Catalog = { name: string; messages: Messages }
 type Translate = (key: MessageKey, values?: Record<string, string | number>) => string

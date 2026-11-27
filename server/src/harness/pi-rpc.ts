@@ -86,7 +86,7 @@ class RpcProcess {
 
 	constructor(args: string[], cwd: string, readonly sessionKey?: string, readonly authProfile?: string) {
 		const extension = (name: string) => ["--extension", path.resolve(import.meta.dirname, "..", "..", "extensions", name)];
-		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs")];
+		if (sessionKey) args = [...args, ...extension("request-user-input.mjs"), ...extension("file-links.mjs"), ...extension("rich-blocks.mjs"), ...extension("app-guide.mjs"), ...extension("scheduled-jobs.mjs"), ...extension("process-watch.mjs"), ...extension("applets.mjs"), ...extension("vault.mjs"), ...extension("browser.mjs"), ...extension("context-policy.mjs"), ...extension("project-memory.mjs")];
 		const { command, argv, shell } = piCommand(args);
 		const base = agentEnvironment();
 		delete base.BEEZY_GATEWAY_TOKEN_FILE;

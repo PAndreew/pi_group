@@ -6,6 +6,7 @@ import path from "node:path";
 import { applyContextPolicy, CONTEXT_DEFAULTS, type ContextPolicy, epochTracker, historyPage, HISTORY_TOOL } from "../../extensions/lib/context-policy.mjs";
 import { MEMORY_TOOL, MEMORY_UPDATE_TOOL } from "../../extensions/lib/project-memory.mjs";
 import { WATCH_TOOL, watchInput } from "../../extensions/lib/process-watch.mjs";
+import { appGuide, DOCS_TOOL, docsAnswer } from "../../extensions/lib/app-guide.mjs";
 import { config } from "../config.js";
 import { save, store } from "../store.js";
 import { LiveSessionBase } from "./live-base.js";
@@ -336,6 +337,7 @@ export class PiDurableAdapter implements HarnessAdapter {
 					sections: [
 						durable.section("preamble", () => PREAMBLE, { tag: false }),
 						durable.section("cwd", (input: Any) => input.agent?.cwd),
+						durable.section("beezy", () => appGuide().trim(), { tag: false }),
 					],
 					hooks: [
 						durable.hook(durable.GenerationTask, {
@@ -344,6 +346,17 @@ export class PiDurableAdapter implements HarnessAdapter {
 						}),
 					],
 					tools: [
+						durable.defineTool({
+							name: DOCS_TOOL.name,
+							label: DOCS_TOOL.label,
+							description: DOCS_TOOL.description,
+							parameters: Type.Object({
+								topic: Type.Optional(Type.String({ maxLength: 60, description: 'A topic name from the list, e.g. "scheduled-jobs", or "api".' })),
+								query: Type.Optional(Type.String({ maxLength: 200, description: "Case-insensitive text to find across all topics." })),
+							}),
+							replay: "safe",
+							execute: async (args: Any) => ({ output: [{ type: "text", text: docsAnswer(args) }] }),
+						}),
 						durable.defineTool({
 							name: HISTORY_TOOL.name,
 							label: HISTORY_TOOL.label,
