@@ -17,4 +17,4 @@ Normal builds omit `VITE_DEMO` and continue to start the real app, including its
 
 ## Publish
 
-Build as above and publish only the contents of `web/dist` (with a `.nojekyll` file) to the `gh-pages` branch. Pages serves the branch root at https://pandreew.github.io/pi_group/. Changes to `main` require a fresh build and publish.
+Every push to `main` publishes the demo: `.github/workflows/demo-pages.yml` builds it and force-pushes the contents of `web/dist` (with a `.nojekyll` file) as the single commit of the `gh-pages` branch. Pages serves the branch root at https://pandreew.github.io/pi_group/. The repository's `github-pages` environment only allows the `gh-pages` branch, which is why the workflow pushes there instead of deploying a Pages artifact from `main`. To publish by hand, build as above and push the same contents to `gh-pages`.
