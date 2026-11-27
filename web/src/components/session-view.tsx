@@ -87,7 +87,7 @@ function UserBubble({ message, text, memory, onRemoveMemory, folder, own }: { me
         {(body) => (
           <div className="min-w-0">
             <div className={cn("human-bubble rounded-3xl bg-blue-50 px-4 py-2.5 text-sm text-black", own && "own-bubble")}>
-              {memory !== undefined && <ProjectMemoryPill memory={memory} onRemove={onRemoveMemory} />}
+              {memory !== undefined && <ProjectMemoryPill memory={memory} onRemove={onRemoveMemory} folder={folder} />}
               {isWatchResult(body) ? <WatchResultPill text={body} /> : <MessageBody text={body} folder={folder} />}
               <ImageGallery images={images} />
             </div>

@@ -81,7 +81,9 @@ function memoryProject(meta: SessionMeta, user: User) {
 export function projectMemory(meta: SessionMeta, user: User) {
  const project = memoryProject(meta, user);
  if (!project) return "";
- return renderIndex(readTopics(topicsDir(project.cwd)), readOverview(project.cwd)) || legacyMaster(project.cwd) || "";
+ // Topic links are relative to the session's folder, so they open from the message in beezy.
+ const linkBase = path.relative(path.resolve(meta.cwd), path.resolve(project.cwd));
+ return renderIndex(readTopics(topicsDir(project.cwd)), readOverview(project.cwd), linkBase) || legacyMaster(project.cwd) || "";
 }
 const sessionProject = (meta: SessionMeta | undefined) => {
  const owner = meta && !meta.deleted ? store.userById(meta.ownerId ?? "") : undefined;

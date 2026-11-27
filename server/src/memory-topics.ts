@@ -45,8 +45,14 @@ export function readTopics(dir: string): Topic[] {
 		.map((f) => parseTopic(f.slice(0, -3), readFileSync(path.join(dir, f), "utf8"), statSync(path.join(dir, f)).mtime.toISOString()));
 }
 
-/** The master agents get in front of their first prompt: the overview and the topic list. Empty without either. */
-export function renderIndex(topics: Topic[], overview = "") {
+/**
+ * The master agents get in front of their first prompt: the overview and the topic list. Empty without either.
+ * Each topic links to its file, relative to `linkBase` (the project folder as seen from where the text is read:
+ * "" for MEMORY.md itself, the path from a session's folder for the injected copy), so people can open it.
+ * Only the list is sent; topic bodies stay behind the project_memory tool.
+ */
+export function renderIndex(topics: Topic[], overview = "", linkBase = "") {
+	const link = (slug: string) => encodeURI(path.posix.join(linkBase.replace(/\\/g, "/"), "memory", "topics", `${slug}.md`));
 	if (!topics.length && !overview) return "";
 	return [
 		GENERATED,
@@ -55,7 +61,7 @@ export function renderIndex(topics: Topic[], overview = "") {
 		...(overview ? [overview, ""] : []),
 		topics.length ? "Topics of this project's memory. Read the ones relevant to your current task with the project_memory tool (and only those); skip it when none are." : "No topics yet.",
 		"",
-		...topics.map((t) => `- \`${t.slug}\` — ${t.title}: ${t.description} (updated ${t.updatedAt.slice(0, 10)})`),
+		...topics.map((t) => `- [\`${t.slug}\`](${link(t.slug)}) — ${t.title}: ${t.description} (updated ${t.updatedAt.slice(0, 10)})`),
 		"",
 	].join("\n");
 }

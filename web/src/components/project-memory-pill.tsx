@@ -1,8 +1,10 @@
+import { Markdown } from "@/components/markdown"
 import { useLocale } from "@/lib/i18n"
 import { Brain, Trash2 } from "lucide-react"
 import { useId, useState } from "react"
 
-export function ProjectMemoryPill({ memory, onRemove }: { memory: string; onRemove?: () => void }) {
+/** `folder`: the session's folder, so the topic links in the memory open in the file preview. */
+export function ProjectMemoryPill({ memory, onRemove, folder }: { memory: string; onRemove?: () => void; folder?: string }) {
   const { t: tr } = useLocale()
   const [expanded, setExpanded] = useState(false)
   const detailsId = useId()
@@ -16,7 +18,9 @@ export function ProjectMemoryPill({ memory, onRemove }: { memory: string; onRemo
           <Trash2 className="size-3.5" />
         </button>
       </span>
-      <pre id={detailsId} hidden={!expanded} className="mt-1 max-h-48 max-w-full overflow-auto rounded-lg border border-slate-300 bg-white/70 p-2 text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-xs whitespace-pre-wrap wrap-anywhere">{expanded ? memory : null}</pre>
+      <div id={detailsId} hidden={!expanded} className="mt-1 max-h-64 max-w-full overflow-auto rounded-lg border border-slate-300 bg-white/70 p-2 text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-xs wrap-anywhere">
+        {expanded ? <Markdown text={memory.replace(/^<!--[\s\S]*?-->\n?/, "")} base={folder ?? ""} className="text-xs" /> : null}
+      </div>
     </div>
   )
 }

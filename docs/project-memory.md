@@ -21,7 +21,7 @@ Memory is a short **overview** plus a set of **topics**, one Markdown file each,
 
 - `memory/overview.md`: a few sentences that orient someone new: what the project is, its current focus, where to look.
 - `memory/topics/<slug>.md`: one topic. It starts with a header giving a `title` and a one-line `description`, which agents use to decide whether to read it.
-- `MEMORY.md`: the master the server **generates** from the overview and the topic headers. Never edit it by hand.
+- `MEMORY.md`: the master the server **generates** from the overview and the topic headers. Never edit it by hand. Each topic in its list is a link to its file (in the copy put in front of a session's first prompt, relative to the session's folder), so people can open a topic from the memory pill on that message. Only the list is sent; agents still read topic bodies with `project_memory`.
 - `memory/archives/<id>.json.gz`: losslessly compressed session metadata and messages. Harness originals are retained as well; archiving is not deletion.
 
 **What agents get.** Only the master is put in front of a prompt, at most once per rolling 24 hours per session (sync sessions never get it; their prompt holds the topics). Changes made meanwhile reach the agent at the next injection or through `project_memory`. This also works for sessions started in linked repositories. The master tells the agent to read only the topics relevant to its task, with the `project_memory` tool, which pi and pi durable sessions both have:

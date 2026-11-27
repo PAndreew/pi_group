@@ -13,7 +13,10 @@ test("memory topics: indexed with the overview, read by the tool; a master from 
 	writeFileSync(path.join(live, "budget.md"), formatTopic({ title: "Budget", description: "Costs and limits", body: "Hotel: 120 EUR/night." }));
 	writeIndex(project);
 	assert.equal(legacyMaster(project), "# Old master\nUse Postgres.", "the old master is not overwritten by the index");
-	assert.match(readFileSync(path.join(project, "MEMORY.md"), "utf8"), /`budget` — Budget: Costs and limits/);
+	assert.match(readFileSync(path.join(project, "MEMORY.md"), "utf8"), /\[`budget`\]\(memory\/topics\/budget\.md\) — Budget: Costs and limits/);
+	const fromSub = renderIndex(readTopics(live), "", "..");
+	assert.match(fromSub, /\]\(\.\.\/memory\/topics\/budget\.md\)/, "links are relative to the reader's folder");
+	assert.doesNotMatch(fromSub, /Hotel/, "topic bodies are not sent with the index");
 	assert.equal(renderIndex([]), "");
 
 	writeAtomic(overviewFile(project), "A family trip to Austria in May.\n");

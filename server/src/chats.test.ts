@@ -266,7 +266,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(status.overview, "Beezy API server; deploys go through the deploy topic.");
 		assert.deepEqual(status.topics.map((t: any) => [t.slug, t.title, t.description]), [["deploy", "Deploy", "Deploy decisions"]]);
 		const master = readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8");
-		assert.match(master, /Beezy API server[\s\S]*`deploy` — Deploy: Deploy decisions/, "MEMORY.md is the generated master: overview, then topics");
+		assert.match(master, /Beezy API server[\s\S]*\[`deploy`\]\(memory\/topics\/deploy\.md\) — Deploy: Deploy decisions/, "MEMORY.md is the generated master: overview, then topics");
 		await memoryControls.archiveNow();
 		const { archiveEligible } = await import("./memory.js");
 		assert.equal(archiveEligible({ ...soloMeta, keepLive: true }), false);
@@ -286,7 +286,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal(store.session(soloMeta.key)!.archivedAt, undefined);
 		assert.equal(store.session(soloMeta.key)!.keepLive, true);
 		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "read public context" });
-		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>") && p.text.includes("`deploy` — Deploy") && p.text.includes("Beezy API server")), "sessions get the master");
+		assert.ok(prompts.some(p => p.id === privateSession.id && p.text.includes("<project-memory>") && p.text.includes("`deploy`](") && p.text.includes("memory/topics/deploy.md) — Deploy") && p.text.includes("Beezy API server")), "sessions get the master");
 		await until(() => !adapter.live(privateSession.id)!.state.running, "private session idle");
 		await call("anna", "POST", `/sessions/${privateSession.key}/prompt`, { text: "again" });
 		assert.ok(!prompts.some(p => p.id === privateSession.id && p.text.endsWith("again") && p.text.includes("<project-memory>")), "memory is put in front of a prompt at most once a day");
@@ -307,7 +307,7 @@ test("chats: people talk, @pi joins with context and replies, pi-only chats are 
 		assert.equal((await call("anna", "PUT", `${endpoint}/topics/Bad%20Name`, { title: "x", description: "y", body: "z" })).status, 400);
 		assert.equal((await call("anna", "PUT", `${endpoint}/topics/marketing`, { title: "Marketing", description: "Launch plans", body: "Launch in spring." })).status, 200);
 		assert.equal((await call("anna", "GET", `${endpoint}/topics/marketing`)).body.body, "Launch in spring.");
-		assert.match(readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8"), /`marketing` — Marketing: Launch plans/);
+		assert.match(readFileSync(path.join(config.chatFolder, "MEMORY.md"), "utf8"), /`marketing`\]\(memory\/topics\/marketing\.md\) — Marketing: Launch plans/);
 		for (let i = 0; i < 8; i++) assert.equal((await call("anna", "PUT", `${endpoint}/topics/t${i}`, { title: "T", description: "d", body: "b" })).status, 200);
 		assert.equal((await call("anna", "PUT", `${endpoint}/topics/eleventh`, { title: "T", description: "d", body: "b" })).status, 409);
 		for (let i = 0; i < 8; i++) await call("anna", "DELETE", `${endpoint}/topics/t${i}`);
