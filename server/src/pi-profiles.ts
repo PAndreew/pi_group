@@ -11,14 +11,21 @@ async function managedProfile(id: string) {
 	try { await stat(authFile(id)); return profileDir(id); }
 	catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 }
+const pendingWrites = new Map<string, Promise<void>>();
 export async function savePiKey(id: string, provider: string, key: string) {
+	const next = (pendingWrites.get(id) ?? Promise.resolve()).catch(() => {}).then(() => writePiKey(id, provider, key));
+	pendingWrites.set(id, next);
+	try { await next; } finally { if (pendingWrites.get(id) === next) pendingWrites.delete(id); }
+}
+
+async function writePiKey(id: string, provider: string, key: string) {
 	const external = await piProfile(id);
 	if (external && external !== profileDir(id)) throw new HttpError(409, "This profile is managed by the server administrator");
 	const file = authFile(id);
 	await mkdir(profileDir(id), { recursive: true, mode: 0o700 });
-	// One API-key connection per managed profile. Do not overwrite externally managed OAuth.
+	const existing = external ? JSON.parse(await readFile(file, "utf8")) : {};
 	const temp = `${file}.${randomUUID()}.tmp`;
-	await writeFile(temp, JSON.stringify({ [provider]: { type: "api_key", key } }), { mode: 0o600, flag: "wx" });
+	await writeFile(temp, JSON.stringify({ ...existing, [provider]: { type: "api_key", key } }), { mode: 0o600, flag: "wx" });
 	await rename(temp, file);
 }
 

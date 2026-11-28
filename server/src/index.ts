@@ -13,6 +13,8 @@ import { activeMemory } from "./memory.js";
 import { fileRoutes, HttpError } from "./files.js";
 import { linkPreviewRoutes } from "./link-preview.js";
 import { lipreadRoutes } from "./lipread.js";
+import { claudeBinary } from "./claude-login.js";
+import { ClaudeCodeAdapter } from "./harness/claude-code.js";
 import { PiDurableAdapter } from "./harness/pi-durable.js";
 import { PiRpcAdapter } from "./harness/pi-rpc.js";
 import type { HarnessAdapter } from "./harness/types.js";
@@ -36,6 +38,8 @@ expireInteractions();
 ensureAdmin();
 
 const adapters: HarnessAdapter[] = [new PiRpcAdapter(), new PiDurableAdapter((key) => contextPolicyOf(store.session(key)), (key, args) => projectMemoryTool(store.session(key), args), watchTool, (key, args) => { try { return projectMemoryUpdate(store.session(key), memoryUpdateSchema.parse(args)); } catch (error) { return `Not changed: ${(error as Error).message}`; } })];
+
+if (claudeBinary) adapters.push(new ClaudeCodeAdapter());
 
 const app = express();
 app.disable("x-powered-by");

@@ -26,6 +26,7 @@ import { pushToUser } from "./push.js";
 import { attributeMessages, dropAuthor, registerPrompt, rekeyAuthors } from "./authorship.js";
 import { config } from "./config.js";
 import { HttpError, resolveSafe, toRel } from "./files.js";
+import { CLAUDE_CODE } from "./harness/claude-code.js";
 import { contentText, replaceText } from "./harness/live-base.js";
 import type { AgentMessage, HarnessAdapter, LiveSession, PromptInput, SessionEvent, SessionListing, SessionState } from "./harness/types.js";
 import { type Access, type PendingDelete, type SessionMeta, save, saveNow, store, type User } from "./store.js";
@@ -38,6 +39,7 @@ export type EffectiveAccess = "admin" | "owner" | Access;
 export function accessOf(user: User, meta: SessionMeta): EffectiveAccess | undefined {
 	if (!tenantAccess(user, meta)) return undefined;
 	if (meta.ownerId === user.id) return "owner";
+	if (meta.harness === CLAUDE_CODE) return undefined;
 	if (user.role === "admin") return "admin";
 	if (meta.visibility === "shared") return meta.shares.find((s) => s.userId === user.id)?.access;
 	return undefined;
@@ -323,13 +325,17 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (!isTenantMember(user.id)) throw new HttpError(403, "Tenant unavailable");
 		resolveSafe(toRel(input.cwd));
 		const adapter = adapterOf(input.harness);
+		if (adapter.id === CLAUDE_CODE && (input.visibility === "shared" || input.shares?.length)) {
+			throw new HttpError(403, "Claude Code is available only in the subscription owner's private sessions");
+		}
 		const explicit = adapter.id === "pi" ? input.model : undefined;
 		const usesLithos = explicit?.provider === "lithosai";
-		const profile = usesLithos ? await lithosVaultProfile(user.id) : await piProfile(user.id);
+		const profile = adapter.id === CLAUDE_CODE ? undefined : usesLithos ? await lithosVaultProfile(user.id) : await piProfile(user.id);
 		if (usesLithos && !profile) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
 		if (profile && adapter.id !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
 		if (explicit && !availablePreferredModel(await adapter.listModels(profile), explicit)) throw new HttpError(400, "This model is not available to your account");
 		const live = await withNewSessionOwner(user.id, tenantId(), () => adapter.create(input.cwd, {
+			ownerId: user.id,
 			...(profile && !explicit ? {} : creationOptions(input, user.sessionDefaults)), name: input.name, authProfile: profile,
 		}));
 		const meta = store.upsertSession({
@@ -393,7 +399,8 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const wantsLithos = meta.harness === "pi" && (picked ?? (user.sessionDefaults?.harness === "pi" ? user.sessionDefaults.model : undefined))?.provider === "lithosai";
 		const lithos = wantsLithos ? await lithosVaultProfile(user.id) : undefined;
 		if (wantsLithos && !lithos) throw new HttpError(400, "Add LITHOS_Key to your Personal vault to use LithosAI");
-		const profile = lithos ?? await piProfile(user.id);
+		if (meta.harness === CLAUDE_CODE && (meta.ownerId !== user.id || options.background)) throw new HttpError(403, "Claude Code requires a private manual session");
+		const profile = meta.harness === CLAUDE_CODE ? undefined : lithos ?? await piProfile(user.id);
 		if (profile && meta.harness !== "pi") throw new HttpError(400, "Personal Pi profiles require the Pi RPC runtime");
 		const active = adapter.live(meta.id);
 		if (active?.state.running && (active.authProfile !== profile || profile)) throw new HttpError(409, "Wait for the active Pi run to finish");
@@ -403,7 +410,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		if (picked && body.mode !== "steer") {
 			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
 			selectedModel = picked;
-		} else if ((profile || defaults?.useModelPerMessage) && defaults?.harness === meta.harness && body.mode !== "steer") {
+		} else if (meta.harness !== CLAUDE_CODE && (profile || defaults?.useModelPerMessage) && defaults?.harness === meta.harness && body.mode !== "steer") {
 			if (active?.state.running) throw new HttpError(409, "Wait for the active Pi run to finish");
 			const available = await adapter.listModels(profile);
 			selectedModel = availablePreferredModel(available, defaults.model, defaults.fallbackModel);
@@ -422,11 +429,11 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 		const lastInjected = Math.max(lastMemoryAt(live.state.messages) || 0, loadedMemory.get(live) ?? 0);
 		const injectMemory = Boolean(memory && Date.now() - lastInjected > MEMORY_REPEAT_MS);
 		// #name mentions of remote machines get a note on how to reach them, hidden in the web like memory.
-		const machines = options.background ? "" : remoteMachinesNote(body.text);
+		const machines = options.background || meta.harness === CLAUDE_CODE ? "" : remoteMachinesNote(body.text);
 		const input = { ...body, text: (injectMemory ? wrapProjectMemory(memory) : "") + body.text + machines, mode: body.mode ?? (live.state.running ? ("followUp" as const) : undefined) };
 		const current = store.session(meta.key)!;
 		const ledger = current.authorship ??= { authors: {}, pending: [] };
-		const autoTitle = !options.background && user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
+		const autoTitle = meta.harness !== CLAUDE_CODE && !options.background && user.sessionDefaults?.autoTitle === true && !current.firstMessage && !current.name;
 		const promptId = registerPrompt(ledger, live.state.messages, input, { id: user.id, username: user.username }, fromBrowser);
 		saveNow();
 		try {
@@ -684,7 +691,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const folderSessions = async (cwd: string, user: User) => {
 		const results = await Promise.all(
 			adapters.map(async (adapter) => {
-				if (!(await adapter.available()).ok) return [];
+				if (adapter.id !== CLAUDE_CODE && !(await adapter.available()).ok) return [];
 				const listings = await adapter.listSessions(cwd).catch(() => []);
 				return listings.map((listing) => {
 					// Sessions started outside the app get metadata without an owner: only admins see them until claimed.
@@ -837,7 +844,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 			})
 			.parse(req.body);
 		const meta = await createSession(req.user!, { ...body, cwd: resolveSafe(body.path), projectId: checkProject(body.projectId, req.user!) });
-		store.upsertSession({ ...meta, memoryPrivate: body.memoryPrivate });
+		store.upsertSession({ ...meta, memoryPrivate: meta.harness === CLAUDE_CODE || body.memoryPrivate });
 		res.json({ session: summary(store.session(meta.key)!, req.user!) });
 	});
 
@@ -904,7 +911,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** MCP servers available to a session's agent. */
 	router.get("/sessions/:key/mcp", async (req, res) => {
 		const { meta, adapter } = load(req);
-		if (adapter.id !== "pi") return void res.json({ servers: [], live: false, note: "pi durable has no MCP support; open a pi session to use MCP servers." });
+		if (adapter.id !== "pi") return void res.json({ servers: [], live: false, note: "This harness does not expose Beezy MCP servers." });
 		res.json(await mcpReport(meta.cwd, req.user!.role === "admin"));
 	});
 
@@ -1076,6 +1083,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 
 	router.put("/sessions/:key/acl", async (req, res) => {
 		const { meta, access } = load(req);
+		if (meta.harness === CLAUDE_CODE) throw new HttpError(403, "Claude Code sessions cannot be shared");
 		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can change sharing");
 		const body = z.object({ visibility: z.enum(["private", "shared"]), shares: shareSchema }).parse(req.body);
 		if (body.shares.some(s => !isTenantMember(s.userId, meta.tenantId ?? "work"))) throw new HttpError(400, "Cannot share across tenants");
@@ -1087,6 +1095,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** Add participants from the composer without replacing existing shares. */
 	router.post("/sessions/:key/participants", (req, res) => {
 		const { meta, access } = load(req);
+		if (meta.harness === CLAUDE_CODE) throw new HttpError(403, "Claude Code sessions cannot be shared");
 		if (!canManage(access)) throw new HttpError(403, "Only the owner or an admin can add participants");
 		const { userIds } = z.object({ userIds: z.array(z.string()).min(1).max(100) }).parse(req.body);
 		if (userIds.some(id => !store.userById(id) || !isTenantMember(id, meta.tenantId ?? "work"))) throw new HttpError(400, "Participants must belong to this tenant");
@@ -1102,6 +1111,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	/** Admins adopt sessions that were started outside the app, or reassign ownership. */
 	router.post("/sessions/:key/owner", async (req, res) => {
 		const { meta } = load(req);
+		if (meta.harness === CLAUDE_CODE) throw new HttpError(403, "Claude Code sessions cannot be transferred");
 		if (req.user!.role !== "admin") throw new HttpError(403, "Admins only");
 		const body = z.object({ userId: z.string() }).parse(req.body);
 		if (!store.userById(body.userId) || !isTenantMember(body.userId, meta.tenantId ?? "work")) throw new HttpError(400, "No such tenant member");
@@ -1112,7 +1122,7 @@ export function sessionRoutes(adapters: HarnessAdapter[]): Router {
 	const harnessFor = async (user: User) => {
 		const preferred = user.sessionDefaults?.harness;
 		for (const adapter of [...(preferred && byId.has(preferred) ? [byId.get(preferred)!] : []), ...adapters]) {
-			if ((await adapter.available()).ok) return adapter.id;
+			if (adapter.id !== CLAUDE_CODE && (await adapter.available()).ok) return adapter.id;
 		}
 		throw new HttpError(503, "No agent harness is available");
 	};

@@ -1,3 +1,4 @@
+import { HarnessLoginDialog } from "@/components/harness-login-dialog"
 import { Activity, ArrowLeft, Check, ChevronDown, X, Bell, BellOff, Languages, KeyRound, LogOut, Monitor, Moon, PanelLeft, Search, Sun, Users } from "lucide-react"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
@@ -196,6 +197,7 @@ function Workspace() {
   const [usersOpen, setUsersOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [harnessLoginOpen, setHarnessLoginOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [surface, setSurface] = useState<OpenSurface>()
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -335,6 +337,7 @@ function Workspace() {
                 {notifications.enabled ? <Bell /> : <BellOff />}
                 {t(notifications.supported ? (notifications.enabled ? "profile.notificationsOn" : "profile.notificationsOff") : notificationsUnavailable())}
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setHarnessLoginOpen(true)}><KeyRound /> Harness login</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
                 <Users /> {t("profile.picture")}
               </DropdownMenuItem>
@@ -400,6 +403,7 @@ function Workspace() {
         <UsersDialog open={usersOpen} onOpenChange={setUsersOpen} />
         <SurfaceDialogs current={surface} onClose={() => setSurface(undefined)} sessionKey={route.session} folder={folder} />
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={paletteCommands} />
+        <HarnessLoginDialog open={harnessLoginOpen} onOpenChange={setHarnessLoginOpen} />
         <ProfilePictureDialog open={profileOpen} onOpenChange={setProfileOpen} />
         <PasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
         <ChatSearchOverlay open={searchOpen} onOpenChange={setSearchOpen} onSearch={() => inside && (innerWidth < 768 || (innerWidth >= 1024 && innerWidth < 1536)) && nav.home()} />

@@ -439,6 +439,7 @@ export function mountMemory(router: Router, deps: MemoryDeps) {
   const s = store.session(String(req.params.key));
   if (!s || s.deleted || !["owner", "admin"].includes(accessOf(req.user!, s) ?? "")) throw new HttpError(404, "Session not found");
   const body = z.object({ memoryPrivate: z.boolean().optional(), keepLive: z.boolean().optional(), archived: z.literal(false).optional() }).strict().parse(req.body);
+  if (s.harness === "claude-code" && body.memoryPrivate === false) throw new HttpError(403, "Claude Code sessions stay out of shared project memory");
   if (body.memoryPrivate !== undefined && body.memoryPrivate !== Boolean(s.memoryPrivate) && s.consolidatedAt) throw new HttpError(409, "Already added to memory: prior contributions cannot be made private retroactively");
   if (body.archived === false && s.archivedAt) { delete s.archivedAt; store.upsertSession({ ...s, keepLive: body.keepLive ?? true, ...(body.memoryPrivate !== undefined ? { memoryPrivate: body.memoryPrivate } : {}) }); }
   else store.upsertSession({ ...s, ...(body.memoryPrivate !== undefined ? { memoryPrivate: body.memoryPrivate } : {}), ...(body.keepLive !== undefined ? { keepLive: body.keepLive } : {}) });

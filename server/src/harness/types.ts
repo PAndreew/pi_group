@@ -145,6 +145,7 @@ export interface UsageRecord {
 }
 
 export interface CreateOptions {
+	ownerId?: string;
 	authProfile?: string;
 	model?: { provider: string; id: string };
 	thinkingLevel?: string;
