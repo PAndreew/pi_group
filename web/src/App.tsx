@@ -310,8 +310,6 @@ function Workspace() {
           </div>
           <div className="absolute left-1/2 flex max-w-[50%] -translate-x-1/2 justify-center"><ProjectSwitcher className="min-w-0" onSelect={nav.home} onSearch={() => setSearchOpen(true)} /></div>
           <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={() => setPaletteOpen(true)} aria-label={t("palette.title")} title={`${t("palette.title")} (${/Mac|iP(hone|ad)/.test(navigator.platform) ? "⌘" : "Ctrl"}+K)`}><Search /></Button>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="max-w-32 shrink-0 px-1.5" aria-label={t("profile.settings")}>

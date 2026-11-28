@@ -214,53 +214,56 @@ export function ProjectSwitcher({ className, onSelect, onSearch }: { className?:
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          align="start"
-          className="max-h-[70dvh] w-60 overflow-y-auto"
+          align="center"
+          collisionPadding={8}
+          className="flex h-96 w-[min(18rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl [&_[role=menuitem]]:gap-3 [&_[role=menuitem]]:rounded-md"
           onCloseAutoFocus={(e) => {
             if (!searching.current) return
             searching.current = false
             e.preventDefault()
           }}
         >
-          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{tr("ui.projects-53e890")}</DropdownMenuLabel>
-          {projects.map((project) => (
-            <DropdownMenuItem key={project.id} onSelect={() => select(project)} title={`/${project.folder}`}>
-              {project.id === active?.id ? <Check /> : <Folder />}
-              <span className="truncate">{project.name}</span>
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuItem onSelect={() => setCreating(true)}>
-            <Plus /> {tr("ui.new-project-e5bcbe")}
-          </DropdownMenuItem>
-          {active && (onSearch || active.canManage) && (
-            <>
-              <DropdownMenuSeparator />
+          <div className="shrink-0">
+            {active && (onSearch || active.canManage) && (
               <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{active.name} · /{active.folder}</DropdownMenuLabel>
-            </>
-          )}
-          {onSearch && (
-            <DropdownMenuItem
-              onSelect={() => {
-                searching.current = true
-                onSearch()
-              }}
-            >
-              <Search /> {tr("ui.search-chats-9ad51d")}
+            )}
+            {onSearch && (
+              <DropdownMenuItem
+                onSelect={() => {
+                  searching.current = true
+                  onSearch()
+                }}
+              >
+                <Search /> {tr("ui.search-chats-9ad51d")}
+              </DropdownMenuItem>
+            )}
+            {active?.canManage && (
+              <>
+                <DropdownMenuItem onSelect={() => setSharing(active)}>
+                  <Users /> {tr("ui.share-project-with-ca3c69")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setEditing(active)}>
+                  <Pencil /> {tr("ui.rename-or-link-folders-f732b9")}
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(active)}>
+                  <Trash2 /> {tr("ui.delete-project-af1456")}
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuItem onSelect={() => setCreating(true)}>
+              <Plus /> {tr("ui.new-project-e5bcbe")}
             </DropdownMenuItem>
-          )}
-          {active?.canManage && (
-            <>
-              <DropdownMenuItem onSelect={() => setSharing(active)}>
-                <Users /> {tr("ui.share-project-with-ca3c69")}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{tr("ui.projects-53e890")}</DropdownMenuLabel>
+          </div>
+          <div role="group" aria-label={tr("ui.projects-53e890")} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {projects.map((project) => (
+              <DropdownMenuItem key={project.id} onSelect={() => select(project)} title={`/${project.folder}`}>
+                {project.id === active?.id ? <Check /> : <Folder />}
+                <span className="truncate">{project.name}</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setEditing(active)}>
-                <Pencil /> {tr("ui.rename-or-link-folders-f732b9")}
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(active)}>
-                <Trash2 /> {tr("ui.delete-project-af1456")}
-              </DropdownMenuItem>
-            </>
-          )}
+            ))}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
       {sharing && <ShareProjectDialog project={sharing} onClose={() => setSharing(undefined)} />}
