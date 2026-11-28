@@ -6,6 +6,7 @@ const MEDIA = new RegExp(`${IMAGE.source}|${VIDEO.source}`, "i")
 const ATTACHED = "Attached files (relative to the working directory):"
 
 export const isVideo = (path: string) => VIDEO.test(path)
+export const fileMediaKind = (path: string) => isVideo(path) ? "video" : IMAGE.test(path) ? "image" : undefined
 
 /** Where uploads of a chat or session go: an `uploads` folder inside the folder it works in. */
 export const uploadDir = (folder: string) => (folder ? `${folder}/uploads` : "uploads")
@@ -50,7 +51,20 @@ export function withoutAttachmentList(text: string) {
 }
 
 /** A `path` token that names a file (has a folder and an extension), not inline code like `npm i`. */
-const PATH_TOKEN = /`([^`\s][^`\n]*\/[^`\n/]+\.[A-Za-z0-9]{1,10})`/g
+const FILE_PATH = /[^`\s][^`\n]*\/[^`\n/]+\.[A-Za-z0-9]{1,10}/
+const PATH_TOKEN = new RegExp(`\`(${FILE_PATH.source})\``, "g")
+const EXACT_FILE_PATH = new RegExp(`^${FILE_PATH.source}$`)
+
+/** Composer-inserted file tokens are root-relative. */
+export const inlineFilePath = (text: string) => EXACT_FILE_PATH.test(text) ? fileLinkPath(text, "") : undefined
+
+/** Keep uploads in their own Markdown paragraph instead of appending to a table row or list. */
+export function appendFileReferences(text: string, paths: string[]) {
+  if (!paths.length) return text
+  const refs = paths.map((path) => `\`${path}\``).join(" ")
+  const separator = !text || text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n"
+  return text + separator + refs + " "
+}
 
 /**
  * The text split around the files it refers to, so they can show as links: `path` tokens

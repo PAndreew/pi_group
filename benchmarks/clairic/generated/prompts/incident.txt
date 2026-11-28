@@ -1,0 +1,29 @@
+Work only in the current task folder; do not inspect parent folders, benchmark scripts, answer keys or other sessions. Do not modify files. This is a search-result reasoning task, not a coding task.
+
+First execute this exact command once with bash:
+rg -n 'service=checkout' data/events.log
+
+Diagnose the checkout incident: identify the first customer-facing failure, root cause, missing column, mitigation and recovery time. Do not confuse the deployment or migration time with the first customer-facing failure.
+
+Reason from the returned search result. Further targeted rg queries are allowed if needed. Do not bypass the search-result task with read, cat, sed, a custom parser or a new script. Use beezy_open_result if it is available and excerpts omit something necessary. No external tools or network are needed.
+
+Return only JSON in this shape (replace type placeholders with actual values):
+{
+  "task": "incident",
+  "answer": {
+    "first_failure": "<str>",
+    "root_cause_code": "<str>",
+    "missing_column": "<str>",
+    "mitigation": "<str>",
+    "recovered_at": "<str>"
+  },
+  "evidence": [
+    {
+      "file": "data/events.log",
+      "line": "<integer>",
+      "quote": "<verbatim source text>"
+    }
+  ]
+}
+
+Cite every material source line supporting the conclusion, including relevant conflicting rules or duplicate/failed/pending payment events. Line numbers refer to the original source file; quote exact text without the rg line-number prefix.

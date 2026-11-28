@@ -1,0 +1,92 @@
+[
+  {
+    "task": "incident",
+    "repeat": 1,
+    "condition": "baseline"
+  },
+  {
+    "task": "incident",
+    "repeat": 1,
+    "condition": "clairic"
+  },
+  {
+    "task": "policy",
+    "repeat": 1,
+    "condition": "clairic"
+  },
+  {
+    "task": "policy",
+    "repeat": 1,
+    "condition": "baseline"
+  },
+  {
+    "task": "payments",
+    "repeat": 1,
+    "condition": "baseline"
+  },
+  {
+    "task": "payments",
+    "repeat": 1,
+    "condition": "clairic"
+  },
+  {
+    "task": "incident",
+    "repeat": 2,
+    "condition": "clairic"
+  },
+  {
+    "task": "incident",
+    "repeat": 2,
+    "condition": "baseline"
+  },
+  {
+    "task": "policy",
+    "repeat": 2,
+    "condition": "baseline"
+  },
+  {
+    "task": "policy",
+    "repeat": 2,
+    "condition": "clairic"
+  },
+  {
+    "task": "payments",
+    "repeat": 2,
+    "condition": "clairic"
+  },
+  {
+    "task": "payments",
+    "repeat": 2,
+    "condition": "baseline"
+  },
+  {
+    "task": "incident",
+    "repeat": 3,
+    "condition": "baseline"
+  },
+  {
+    "task": "incident",
+    "repeat": 3,
+    "condition": "clairic"
+  },
+  {
+    "task": "policy",
+    "repeat": 3,
+    "condition": "clairic"
+  },
+  {
+    "task": "policy",
+    "repeat": 3,
+    "condition": "baseline"
+  },
+  {
+    "task": "payments",
+    "repeat": 3,
+    "condition": "baseline"
+  },
+  {
+    "task": "payments",
+    "repeat": 3,
+    "condition": "clairic"
+  }
+]

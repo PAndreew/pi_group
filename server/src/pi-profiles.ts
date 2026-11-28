@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import path from "node:path";
 import { z } from "zod";
 import { HttpError } from "./files.js";
+import type { OAuthCredentials } from "@earendil-works/pi-ai/oauth";
 
 const profileDir = (id: string) => path.join(config.dataDir, "pi-profiles", Buffer.from(id).toString("hex"));
 const authFile = (id: string) => path.join(profileDir(id), "auth.json");
@@ -12,20 +13,33 @@ async function managedProfile(id: string) {
 	catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 }
 const pendingWrites = new Map<string, Promise<void>>();
-export async function savePiKey(id: string, provider: string, key: string) {
-	const next = (pendingWrites.get(id) ?? Promise.resolve()).catch(() => {}).then(() => writePiKey(id, provider, key));
+export const savePiKey = (id: string, provider: string, key: string) => savePiCredential(id, provider, { type: "api_key", key });
+export const savePiCodex = (id: string, oauth: OAuthCredentials) => savePiCredential(id, "openai-codex", { ...oauth, type: "oauth" });
+export async function hasPiCodex(id: string) {
+	const profile = await piProfile(id);
+	if (!profile) return false;
+	try { return JSON.parse(await readFile(path.join(profile, "auth.json"), "utf8"))["openai-codex"]?.type === "oauth"; }
+	catch { return false; }
+}
+export async function canManagePiProfile(id: string) {
+	const profile = await piProfile(id);
+	return !profile || profile === profileDir(id);
+}
+
+async function savePiCredential(id: string, provider: string, credential: object) {
+	const next = (pendingWrites.get(id) ?? Promise.resolve()).catch(() => {}).then(() => writePiCredential(id, provider, credential));
 	pendingWrites.set(id, next);
 	try { await next; } finally { if (pendingWrites.get(id) === next) pendingWrites.delete(id); }
 }
 
-async function writePiKey(id: string, provider: string, key: string) {
+async function writePiCredential(id: string, provider: string, credential: object) {
 	const external = await piProfile(id);
 	if (external && external !== profileDir(id)) throw new HttpError(409, "This profile is managed by the server administrator");
 	const file = authFile(id);
 	await mkdir(profileDir(id), { recursive: true, mode: 0o700 });
 	const existing = external ? JSON.parse(await readFile(file, "utf8")) : {};
 	const temp = `${file}.${randomUUID()}.tmp`;
-	await writeFile(temp, JSON.stringify({ ...existing, [provider]: { type: "api_key", key } }), { mode: 0o600, flag: "wx" });
+	await writeFile(temp, JSON.stringify({ ...existing, [provider]: credential }), { mode: 0o600, flag: "wx" });
 	await rename(temp, file);
 }
 

@@ -2,7 +2,7 @@
 
 Open **Avatar → Harness login** to connect provider accounts. You don't need access to the server terminal.
 
-- **Pi Coding Agent:** Select a provider and save its API key. Keys are stored per Beezy user and provider in Pi's native profile. Choose a Pi model in **Model settings**. An admin-configured shared Pi fallback is separate from personal credentials.
+- **Pi Coding Agent:** To use your ChatGPT subscription, select **Sign in with ChatGPT** and enter Beezy's one-time code on OpenAI's device sign-in page. If prompted, enable device code authorization in ChatGPT security settings. For API billing instead, select a provider and save its API key. Keys are stored per Beezy user and provider in Pi's native profile. Choose a Pi model in **Model settings**. An admin-configured shared Pi fallback is separate from personal credentials.
 - **Claude Code:** Select **Sign in to Claude Code**, follow the link to Claude, then paste the one-time code into Beezy. Create a private **Claude Code** session once connected. Each Beezy account has its own CLI profile and subscription login. Claude chat resumes in the original owner's profile and cannot be shared or transferred.
 
 ## Server setup

@@ -8,7 +8,7 @@ import { ComposerTools } from "@/components/composer-tools"
 import { MentionComposer } from "@/components/mention-composer"
 import { useAuth } from "@/hooks/use-auth"
 import { useOverlayOpen } from "@/hooks/use-overlay-open"
-import { uploadDir } from "@/lib/attachments"
+import { appendFileReferences, uploadDir } from "@/lib/attachments"
 import { api } from "@/lib/api"
 import { useLocale } from "@/lib/i18n"
 import { useNav } from "@/lib/nav"
@@ -25,6 +25,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
   const nav = useNav()
   const { active: project } = useProjects()
   const [text, setText] = useState("")
+  const [attachments, setAttachments] = useState<string[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string>()
   const [busy, setBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -33,7 +34,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
     setBusy(true)
     try {
       const { files: uploaded } = await api.upload(uploadDir(project && !project.general ? project.folder : folder), files)
-      setText((current) => `${current}${current ? " " : ""}${uploaded.map((file) => `\`${file.path}\``).join(" ")} `)
+      setAttachments((current) => [...new Set([...current, ...uploaded.map((file) => file.path)])])
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -90,7 +91,6 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
           </div>
         )}
         <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void attach(files) }} />
-        <UploadedPreviews text={text} />
         <MentionComposer
           folder={folder}
           folderSelection={{ value: selectedFolder, onChange: setSelectedFolder }}
@@ -98,6 +98,7 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
           onChange={setText}
           busy={busy}
           selfId={user?.id}
+          attachmentsReady={attachments.length > 0}
           controls={
             <ComposerControls draft={composerConfig} onDraftChange={setComposerConfig} disabled={busy || creatingSession} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()}
               browser={{ live: false, shown: false, toggle: () => nav.newSession(folder, { ...composerConfig, browser: true }) }} />
@@ -105,11 +106,13 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
           onFiles={(files) => void attach(files)}
           onSubmit={async (message) => {
             const pi = message.pi || message.people.length === 0
-            if (!message.text) return void toast.info(t("composer.empty"))
+            const body = appendFileReferences(message.text, attachments).trimEnd()
+            if (!body) return void toast.info(t("composer.empty"))
             setBusy(true)
             try {
-              const started = await api.startChat({ text: message.text, pi, userIds: message.people.map((p) => p.id), folder: selectedFolder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(pi ? composerConfig : {}) })
+              const started = await api.startChat({ text: body, pi, userIds: message.people.map((p) => p.id), folder: selectedFolder ?? (base !== chatFolder ? base : undefined), projectId: project?.id, ...(pi ? composerConfig : {}) })
               setText("")
+              setAttachments([])
               setSelectedFolder(undefined)
               if (started.chat) nav.openChat(started.chat)
               else if (started.session) nav.openSession(started.session, folder)
@@ -119,7 +122,11 @@ export function Home({ selectSessions, creatingSession }: { selectSessions?: boo
               setBusy(false)
             }
           }}
-        />
+        >
+          {attachments.length > 0 && <div className="px-3 pt-2">
+            <UploadedPreviews paths={attachments} onRemove={(path) => setAttachments((current) => current.filter((item) => item !== path))} />
+          </div>}
+        </MentionComposer>
         <ComposerTools folder={folder} onInsert={(command) => setText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}${command}`)} />
         </div>
       </div>

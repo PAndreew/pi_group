@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { fileParts, imageRefs, uploadDir, withoutAttachmentList } from '../src/lib/attachments.ts'
+import { appendFileReferences, fileParts, imageRefs, uploadDir, withoutAttachmentList } from '../src/lib/attachments.ts'
 
 test('uploads go into the folder the conversation works in', () => {
   assert.equal(uploadDir('projects/site'), 'projects/site/uploads')
   assert.equal(uploadDir(''), 'uploads')
+})
+
+test('uploading a spreadsheet does not modify the last row of a Markdown table', () => {
+  const table = '| Quarter |\n| --- |\n| Q4 |'
+  assert.equal(appendFileReferences(table, ['my project/uploads/Q4 report.xlsx']), `${table}\n\n\`my project/uploads/Q4 report.xlsx\` `)
 })
 
 test('images are found in path tokens and in the agent attachment list', () => {

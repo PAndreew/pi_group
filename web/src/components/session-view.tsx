@@ -524,7 +524,7 @@ export function SessionView({ sessionKey, initialBrowserShown = false, header, o
 
   const send = async (message: ParsedMessage) => {
     if (editing) return saveEdit(editing)
-    const body = [paths.map((p) => `\`${p}\``).join(" "), message.raw].filter(Boolean).join(" ")
+    const body = [message.raw, paths.map((p) => `\`${p}\``).join(" ")].filter(Boolean).join("\n\n")
     if ((!body && files.length === 0 && refs.length === 0) || !summary) return
     const invited = canInvite ? message.people.filter((person) => !isParticipant(person)) : []
     if (invited.length && !window.confirm(`Share this session with ${invited.map((p) => `@${p.username}`).join(", ")}? They’ll be able to read the entire session and send prompts.`)) return

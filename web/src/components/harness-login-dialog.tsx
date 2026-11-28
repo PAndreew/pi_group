@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { PiCodexLogin } from "@/components/pi-codex-login"
 import { PiProfileSettings } from "@/components/pi-profile-settings"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -34,7 +35,7 @@ export function HarnessLoginDialog({ open, onOpenChange }: { open: boolean; onOp
       </DialogHeader>
       <section className="grid gap-3">
         <h3 className="flex items-center gap-2 font-medium"><img src={`${import.meta.env.BASE_URL}pi-logo.svg`} alt="" className="size-6 object-contain" />Pi Coding Agent</h3>
-        {open && <PiProfileSettings loginOnly />}
+        {open && <><PiCodexLogin /><PiProfileSettings loginOnly /></>}
       </section>
       <section className="grid gap-2 border-t pt-3">
         <h3 className="flex items-center gap-2 font-medium"><img src={`${import.meta.env.BASE_URL}claude-logo.svg`} alt="" className="size-6 object-contain" />Claude Code</h3>

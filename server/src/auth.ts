@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response, Router } from "express";
 import express from "express";
 import { z } from "zod";
 import { claudeLoginRoutes } from "./claude-login.js";
+import { piCodexLoginRoutes } from "./pi-codex-login.js";
 import { piProfile, savePiKey } from "./pi-profiles.js";
 import { sessionDefaultsSchema } from "./preferences.js";
 import { config } from "./config.js";
@@ -130,7 +131,7 @@ const failures = new Map<string, { count: number; until: number }>();
 
 export function authRoutes(): Router {
 	const router = express.Router();
-	router.use(claudeLoginRoutes(requireAuth));
+	router.use(claudeLoginRoutes(requireAuth), piCodexLoginRoutes(requireAuth));
 	router.get("/auth/pi-profile", requireAuth, async (req, res) => {
 		res.json({ connected: Boolean(await piProfile(req.user!.id)) });
 	});

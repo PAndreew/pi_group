@@ -208,11 +208,43 @@ export function VaultDialog({ open, onOpenChange, prefill }: { open: boolean; on
   )
 }
 
+/** The composer uses the same vault form, but never sends the draft or lists secret values. */
+export function DraftVaultDialog({ candidate, onClose, onSaved }: { candidate: { key: string; value: string }; onClose: () => void; onSaved: (key: string) => void }) {
+  const { t } = useLocale()
+  const [keys, setKeys] = useState<string[]>()
+  const [unavailable, setUnavailable] = useState(false)
+  useEffect(() => {
+    let active = true
+    api.vaultSecrets().then(({ secrets }) => {
+      if (active) setKeys(secrets.map(({ key }) => key))
+    }, () => { if (active) setUnavailable(true) })
+    return () => { active = false }
+  }, [])
+  let key = candidate.key
+  for (let n = 2; keys?.includes(key); n++) {
+    const suffix = `_${n}`
+    key = candidate.key.slice(0, 64 - suffix.length) + suffix
+  }
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{t("ui.secret-vault-9ab269")}</DialogTitle>
+          <DialogDescription>{t("composer.secretDetected")}</DialogDescription>
+        </DialogHeader>
+        {unavailable ? <p role="alert" className="text-sm text-destructive">{t("composer.secretVaultUnavailable")}</p>
+          : keys ? <SecretForm initial={{ key }} capturedValue={candidate.value} taken={keys} onDone={onSaved} onCancel={onClose} />
+          : <Loader2 className="mx-auto animate-spin text-muted-foreground" />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /** Add a secret, or change one's description and (optionally) value. */
-function SecretForm({ secret, initial, project, taken = [], onDone, onCancel }: { secret?: VaultSecret; initial?: { key: string; description?: string }; project?: string; taken?: string[]; onDone: () => void; onCancel: () => void }) {
+function SecretForm({ secret, initial, project, taken = [], capturedValue, onDone, onCancel }: { secret?: VaultSecret; initial?: { key: string; description?: string }; project?: string; taken?: string[]; capturedValue?: string; onDone: (key: string) => void; onCancel: () => void }) {
   const { t: tr } = useLocale()
   const [key, setKey] = useState(secret?.key ?? initial?.key.replace(/[^A-Za-z0-9_]/g, "_") ?? "")
-  const [value, setValue] = useState("")
+  const [value, setValue] = useState(capturedValue ?? "")
   const [description, setDescription] = useState(secret?.description ?? initial?.description ?? "")
   const [saving, setSaving] = useState(false)
   const keyError = !secret && key && (!KEY.test(key) ? "Letters, digits and _; not starting with a digit" : taken.includes(key) ? "That key already exists" : undefined)
@@ -223,9 +255,9 @@ function SecretForm({ secret, initial, project, taken = [], onDone, onCancel }: 
     try {
       await api.saveVaultSecret(key, { description: description.trim(), ...(value ? { value } : {}) }, project)
       toast.success(secret ? "Secret updated" : "Secret saved")
-      onDone()
+      onDone(key)
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error(capturedValue === undefined ? (error as Error).message : tr("composer.secretSaveFailed"))
     } finally {
       setSaving(false)
     }
@@ -246,7 +278,7 @@ function SecretForm({ secret, initial, project, taken = [], onDone, onCancel }: 
       </div>
       <div className="grid gap-1">
         <Label htmlFor="vault-value">{secret ? "New value (leave empty to keep)" : "Value"}</Label>
-        <Input id="vault-value" type="password" value={value} onChange={(e) => setValue(e.target.value)} autoComplete="new-password" spellCheck={false} />
+        <Input id="vault-value" type="password" value={capturedValue === undefined ? value : "••••••••"} readOnly={capturedValue !== undefined} onChange={(e) => setValue(e.target.value)} autoComplete="new-password" spellCheck={false} />
       </div>
       <div className="grid gap-1">
         <Label htmlFor="vault-description">{tr("ui.description-for-the-agent-09cec3")}</Label>

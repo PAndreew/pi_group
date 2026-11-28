@@ -1,5 +1,5 @@
 import { FileIcon } from "@react-symbols/icons/utils"
-import type { Element, ElementContent } from "hast"
+import type { Element, ElementContent, Root } from "hast"
 import { memo, useContext, useEffect, useState, type ComponentProps } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
@@ -8,11 +8,13 @@ import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math-extended"
 import "katex/dist/katex.min.css"
 import { CopyCode, InPre } from "@/components/copy-code"
+import { FileReference, FileReferenceLabel } from "@/components/file-reference"
 import { ImageGallery } from "@/components/image-gallery"
 import { WebLink } from "@/components/web-link"
 import { Chart, LinkPreviewCard } from "@/components/rich-blocks"
 import { SurfaceActionBlock } from "@/components/surface-actions"
 import { api } from "@/lib/api"
+import { inlineFilePath } from "@/lib/attachments"
 import { fileLinkPath } from "@/lib/file-link"
 import { NavContext } from "@/lib/nav"
 import { parseChart, previewUrls } from "@/lib/rich-blocks"
@@ -45,8 +47,13 @@ function fence(node?: Element) {
 }
 
 /** Inline values get a copy button; code in fenced blocks stays plain. */
-function Code({ node: _node, ...props }: ComponentProps<"code"> & { node?: Element }) {
-  return useContext(InPre) ? <code {...props} /> : <CopyCode {...props} />
+function MessageCode({ node, mode, ...props }: ComponentProps<"code"> & { node?: Element; mode: MarkdownMode }) {
+  const block = useContext(InPre)
+  const path = !block && mode !== "agent" && node ? inlineFilePath(textOf(node)) : undefined
+  if (path) return mode === "draft"
+    ? <span className="underline underline-offset-2"><FileReferenceLabel name={path.split("/").pop()!} /></span>
+    : <FileReference path={path} />
+  return block || mode === "draft" ? <code {...props} /> : <CopyCode {...props} />
 }
 
 function ChartBlock({ source }: { source: string }) {
@@ -64,21 +71,33 @@ function tableColumns(node: unknown): number {
   return elements(row).length
 }
 
-export const Markdown = memo(function Markdown({ text, className, base }: { text: string; className?: string; base?: string }) {
+/** Plain paragraphs already appear in the editor; only show the draft render when there is formatting. */
+function rehypeOmitPlainDraft() {
+  return (root: Root) => {
+    const plain = root.children.every((node) => node.type === "text" || (
+      node.type === "element" && node.tagName === "p" && node.children.every((part) => part.type === "text")
+    ))
+    if (plain) root.children = []
+  }
+}
+
+type MarkdownMode = "agent" | "message" | "draft"
+
+export const Markdown = memo(function Markdown({ text, className, base, mode = "agent" }: { text: string; className?: string; base?: string; mode?: MarkdownMode }) {
   const nav = useContext(NavContext)
-  const files = base !== undefined && nav !== null
+  const files = mode !== "draft" && base !== undefined && nav !== null
   const root = useFsRoot(files)
   return (
     <div className={cn("prose-pi", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[[rehypeKatex, { trust: false, maxExpand: 1000, maxSize: 20 }], [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
+        rehypePlugins={[[rehypeKatex, { trust: false, maxExpand: 1000, maxSize: 20 }], [rehypeHighlight, { detect: false, ignoreMissing: true }], ...(mode === "draft" ? [rehypeOmitPlainDraft] : [])]}
         components={{
           // A scroll box around the table so wide tables scroll sideways instead of stretching the bubble.
           // At least ~8rem per column, so many columns scroll rather than squeeze into tall, narrow cells.
           table: ({ node, style, ...props }) => <div className="md-table"><table {...props} style={{ ...style, minWidth: `${Math.min(tableColumns(node), 8) * 8}rem` }} /></div>,
           pre: ({ node, children, ...props }) => {
-            const block = fence(node)
+            const block = mode === "agent" ? fence(node) : undefined
             if (block?.language === "chart") return <ChartBlock source={block.source} />
             if (block?.language === "beezy-action") return <SurfaceActionBlock source={block.source} />
             if (block?.language === "preview") {
@@ -87,11 +106,11 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
             }
             return <pre {...props}><InPre.Provider value={true}>{children}</InPre.Provider></pre>
           },
-          code: Code,
+          code: (props) => <MessageCode {...props} mode={mode} />,
           // A paragraph of only images becomes a gallery that opens full screen.
           p: ({ node, children, ...props }) => {
             const parts = node?.children.filter((child) => !blank(child)) ?? []
-            if (!parts.length || !parts.every(isImage)) return <p {...props}>{children}</p>
+            if (mode !== "agent" || !parts.length || !parts.every(isImage)) return <p {...props} className={mode === "agent" ? undefined : "whitespace-pre-wrap wrap-anywhere"}>{children}</p>
             const images = (parts as Element[]).map((img) => {
               const src = String(img.properties.src ?? "")
               const file = files ? fileLinkPath(src, base, root) : undefined
@@ -100,10 +119,12 @@ export const Markdown = memo(function Markdown({ text, className, base }: { text
             return <ImageGallery images={images} className="my-2" />
           },
           img: ({ node: _node, src, alt, ...props }) => {
+            if (mode !== "agent") return <span>{alt}</span>
             const file = files && typeof src === "string" ? fileLinkPath(src, base, root) : undefined
             return <img {...props} src={file ? api.rawUrl(file) : src} alt={alt ?? ""} loading="lazy" className="inline-block max-h-60 rounded align-middle" />
           },
           a: ({ node: _node, href, children, ...props }) => {
+            if (mode === "draft") return <span className="underline underline-offset-2">{children}</span>
             const file = files ? fileLinkPath(href, base, root) : undefined
             // "#…" links are routes in this app (a shared message's source); they open in place.
             if (href?.startsWith("#")) return <a {...props} href={href}>{children}</a>

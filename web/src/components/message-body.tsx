@@ -1,16 +1,13 @@
 import { useLocale } from "@/lib/i18n"
-import { FileIcon } from "@react-symbols/icons/utils"
 import { Share } from "lucide-react"
-import { useContext } from "react"
 import { BrowserReferenceCards } from "@/components/browser-reference-cards"
+import { FileReference } from "@/components/file-reference"
 import { ImageGallery } from "@/components/image-gallery"
 import { Markdown } from "@/components/markdown"
 import { WebLink } from "@/components/web-link"
 import { api } from "@/lib/api"
 import { fileParts, isVideo, mediaRefs, withoutAttachmentList } from "@/lib/attachments"
 import { splitBrowserRefs } from "@/lib/element-refs"
-import { useMissingFiles } from "@/lib/missing-files"
-import { NavContext } from "@/lib/nav"
 import { linkify, parseShared } from "@/lib/shared"
 import { cn } from "@/lib/utils"
 
@@ -33,27 +30,12 @@ export function Linkified({ text }: { text: string }) {
 
 /** Plain text with web addresses and referenced files (uploads) made clickable; files open in the preview. */
 function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
-  const nav = useContext(NavContext)
   const parts = fileParts(text, folder)
-  const missing = useMissingFiles(nav ? parts.flatMap((part) => ("path" in part ? [part.path] : [])) : [])
-  if (!nav) return <Linkified text={text} />
   return (
     <>
       {parts.map((part, i) =>
         "path" in part ? (
-          <a
-            key={i}
-            href={`#${new URLSearchParams({ file: part.path })}`}
-            title={missing.has(part.path) ? `/${part.path} was moved or deleted` : `Open /${part.path}`}
-            className={cn("break-all underline underline-offset-2", missing.has(part.path) && "line-through opacity-60")}
-            onClick={(e) => {
-              e.preventDefault()
-              nav.openFile(part.path)
-            }}
-          >
-            <FileIcon fileName={part.path.split("/").pop() ?? part.path} autoAssign width={16} height={16} className="mr-1 inline-block align-text-bottom file-icon" aria-hidden="true" />
-            <span>{part.path.split("/").pop()}</span>
-          </a>
+          <FileReference key={i} path={part.path} />
         ) : (
           <Linkified key={i} text={part.text} />
         ),
@@ -63,7 +45,7 @@ function TextWithLinks({ text, folder }: { text: string; folder?: string }) {
 }
 
 /**
- * The text of a person's message: plain with clickable links, or, for a message shared from another
+ * The text of a person's message: Markdown with clickable file links, or, for a message shared from another
  * session or chat, a link to its source and the shared content as markdown. `tinted` is for
  * primary-colored bubbles, so code blocks and quotes take their color from the text.
  * Images and videos the message refers to (uploads) are shown under it: images open full screen,
@@ -75,6 +57,9 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
   if (!shared) {
     const { text: message, pages } = splitBrowserRefs(text)
     const body = withoutAttachmentList(message)
+    const list = body.indexOf("\n\nAttached files:\n")
+    const markdown = list < 0 ? body : body.slice(0, list)
+    const attachments = list < 0 ? "" : body.slice(list).trimStart()
     const names = new Set(pages.flatMap((page) => page.picks.map((pick) => pick.screenshot)))
     const screenshots = new Map<string, string>()
     const images = mediaRefs(message, folder).flatMap((path) => {
@@ -87,9 +72,8 @@ export function MessageBody({ text, folder, tinted }: { text: string; folder?: s
     })
     return (
       <>
-        {body && <div className="whitespace-pre-wrap wrap-anywhere">
-          <TextWithLinks text={body} folder={folder} />
-        </div>}
+        {markdown && <Markdown text={markdown} base={folder} mode="message" className={tinted ? "agent-bubble" : undefined} />}
+        {attachments && <div className="mt-2 whitespace-pre-wrap wrap-anywhere"><TextWithLinks text={attachments} folder={folder} /></div>}
         <BrowserReferenceCards pages={pages} screenshots={screenshots} />
         <ImageGallery images={images} />
       </>

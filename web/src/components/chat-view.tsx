@@ -23,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useAuth } from "@/hooks/use-auth"
 import { api, type Chat, type ChatMessage } from "@/lib/api"
 import { ConversationHeader } from "@/lib/nav-slot"
-import { uploadDir } from "@/lib/attachments"
+import { appendFileReferences, uploadDir } from "@/lib/attachments"
 import { useLocale } from "@/lib/i18n"
 import { useNav } from "@/lib/nav"
 import { buildRuns, messageText } from "@/lib/steps"
@@ -131,6 +131,7 @@ export function ChatView({ chatId }: { chatId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>()
   const stick = useRef(true)
   const [text, setText] = useState("")
+  const [attachments, setAttachments] = useState<string[]>([])
   const [reply, setReply] = useState<ReplyTarget>()
   /** The message whose text the composer holds for editing; `text` is its full text, reply quote included. */
   const [editing, setEditing] = useState<{ id: number; text: string; assistant: boolean }>()
@@ -217,9 +218,11 @@ export function ChatView({ chatId }: { chatId: string }) {
   const send = async ({ raw, pi }: ParsedMessage) => {
     setSending(true)
     try {
-      const { message } = await api.sendChat(chatId, replyPrompt(raw, reply, true), pi || reply?.assistant ? composerConfig : undefined)
+      const body = appendFileReferences(raw, attachments).trimEnd()
+      const { message } = await api.sendChat(chatId, replyPrompt(body, reply, true), pi || reply?.assistant ? composerConfig : undefined)
       setMessages((current) => mergeMessages(current, [message]))
       setText("")
+      setAttachments([])
       setReply(undefined)
       stick.current = true
     } catch (error) {
@@ -239,12 +242,14 @@ export function ChatView({ chatId }: { chatId: string }) {
   const cancelEdit = () => {
     setEditing(undefined)
     setText("")
+    setAttachments([])
   }
   const saveEdit = async (raw: string) => {
     if (!editing) return
     setSending(true)
     try {
-      const { message } = await api.editChat(chatId, editing.id, editing.assistant ? raw : replaceReplyBody(editing.text, raw))
+      const body = appendFileReferences(raw, attachments).trimEnd()
+      const { message } = await api.editChat(chatId, editing.id, editing.assistant ? body : replaceReplyBody(editing.text, body))
       setMessages((current) => mergeMessages(current, [message]))
       cancelEdit()
     } catch (error) {
@@ -276,7 +281,7 @@ export function ChatView({ chatId }: { chatId: string }) {
     setUploading(true)
     try {
       const { files: done } = await api.upload(uploadDir(uploadFolder(chat.projectId) ?? chat.folder), files)
-      setText((t) => `${t}${t ? " " : ""}${done.map((f) => `\`${f.path}\``).join(" ")} `)
+      setAttachments((current) => [...new Set([...current, ...done.map((file) => file.path)])])
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -379,7 +384,6 @@ export function ChatView({ chatId }: { chatId: string }) {
             e.target.value = ""
           }}
         />
-        <UploadedPreviews text={text} />
         <MentionComposer
           folder={chat?.folder ?? ""}
           sessionKey={chat?.sessionKey}
@@ -390,10 +394,15 @@ export function ChatView({ chatId }: { chatId: string }) {
           selfId={user?.id}
           hash="paths"
           editing={Boolean(editing)}
+          attachmentsReady={attachments.length > 0}
           controls={<ComposerControls browser={chat?.sessionKey ? { live: false, shown: browserShown, toggle: () => setBrowserShown((shown) => !shown) } : undefined} draft={composerConfig} onDraftChange={setComposerConfig} sessionKey={chat?.sessionKey} onCamera={(files) => void attach(files)} onAttach={() => fileInput.current?.click()} disabled={sending || uploading} agentEnabled={parseMessage(text, []).pi || reply?.assistant === true} />}
           onFiles={(files) => void attach(files)}
           onSubmit={(message) => (editing ? saveEdit(message.raw) : send(message))}
-        />
+        >
+          {attachments.length > 0 && <div className="px-3 pt-2">
+            <UploadedPreviews paths={attachments} onRemove={(path) => setAttachments((current) => current.filter((item) => item !== path))} />
+          </div>}
+        </MentionComposer>
         {chat && (
           <ComposerTools
             sessionKey={chat.sessionKey}

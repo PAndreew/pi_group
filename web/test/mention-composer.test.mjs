@@ -21,6 +21,13 @@ test('only recognized people and agent mentions are removed from message text', 
   assert.equal(parsed.people[0].id, 'alex')
 })
 
+test('participant routing preserves Markdown spacing and indentation', () => {
+  const markdown = '- first  item\n  - nested item\n\n| Name | Value |\n| --- | --- |\n| one | two |'
+  const parsed = context.parseMessage(`@pi\n${markdown}`, [])
+  assert.equal(parsed.pi, true)
+  assert.equal(parsed.text, markdown)
+})
+
 test('suggestion surface uses opaque composer background and foreground', () => {
   assert.match(source, /bg-\[var\(--composer-background\)\] text-\[var\(--composer-foreground\)\]/)
   assert.match(source, /token.query.startsWith\("skill:"\)/)

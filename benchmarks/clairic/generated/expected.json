@@ -1,0 +1,124 @@
+{
+  "incident": {
+    "answer": {
+      "first_failure": "2026-10-14T14:07:13Z",
+      "root_cause_code": "MIGRATION_PERMISSION_DENIED",
+      "missing_column": "receipt_hash",
+      "mitigation": "rollback",
+      "recovered_at": "2026-10-14T14:12:48Z"
+    },
+    "required_evidence": [
+      {
+        "file": "data/events.log",
+        "line": 18
+      },
+      {
+        "file": "data/events.log",
+        "line": 47
+      },
+      {
+        "file": "data/events.log",
+        "line": 88
+      },
+      {
+        "file": "data/events.log",
+        "line": 133
+      },
+      {
+        "file": "data/events.log",
+        "line": 171
+      }
+    ],
+    "files": {
+      "data/events.log": "75a47fc48c95d9374f18cea50aff3f5780a4faf16c7b89ffc4f61bc78bc0479f"
+    },
+    "fixture_hash": "75a47fc48c95d9374f18cea50aff3f5780a4faf16c7b89ffc4f61bc78bc0479f",
+    "prompt_hash": "e73280562b34ac306183f9ca2c06776892708d119a15e992491e779da32ddf57",
+    "initial_command": "rg -n 'service=checkout' data/events.log",
+    "initial_result_bytes": 34710,
+    "initial_result_lines": 190
+  },
+  "policy": {
+    "answer": {
+      "eligible": true,
+      "refund_window_days": 21,
+      "refund_eur": 240,
+      "fee_eur": 0,
+      "settlement_business_days": 7,
+      "settlement_method": "original_payment_method"
+    },
+    "required_evidence": [
+      {
+        "file": "data/policy.txt",
+        "line": 13
+      },
+      {
+        "file": "data/policy.txt",
+        "line": 56
+      },
+      {
+        "file": "data/policy.txt",
+        "line": 93
+      },
+      {
+        "file": "data/policy.txt",
+        "line": 142
+      },
+      {
+        "file": "data/policy.txt",
+        "line": 175
+      }
+    ],
+    "files": {
+      "data/policy.txt": "027e457e599d3b03549751fdba2691035d888572e39e87b05cf2242a81e5b768"
+    },
+    "fixture_hash": "027e457e599d3b03549751fdba2691035d888572e39e87b05cf2242a81e5b768",
+    "prompt_hash": "1602af75427d55d926a1289600103818a0ce543be703d2fb249e7d344b161af0",
+    "initial_command": "rg -n 'POLICY-R17' data/policy.txt",
+    "initial_result_bytes": 37276,
+    "initial_result_lines": 190
+  },
+  "payments": {
+    "answer": {
+      "currency": "USD",
+      "unique_successful_captures": 1,
+      "captured_minor": 12900,
+      "settled_refunded_minor": 2900,
+      "settled_net_minor": 10000
+    },
+    "required_evidence": [
+      {
+        "file": "data/payments.log",
+        "line": 22
+      },
+      {
+        "file": "data/payments.log",
+        "line": 53
+      },
+      {
+        "file": "data/payments.log",
+        "line": 97
+      },
+      {
+        "file": "data/payments.log",
+        "line": 124
+      },
+      {
+        "file": "data/payments.log",
+        "line": 151
+      },
+      {
+        "file": "data/payments.log",
+        "line": 178
+      }
+    ],
+    "files": {
+      "data/payments.log": "3a23b43eb664391f0fe7489b3536036d2632e85cb57e7743e886bc57864f8324"
+    },
+    "fixture_hash": "3a23b43eb664391f0fe7489b3536036d2632e85cb57e7743e886bc57864f8324",
+    "prompt_hash": "48e71219a3a2bb6148e352fc8272482a0d5ec937478fc58a375cfeb27d285ae7",
+    "initial_command": "rg -n 'order=ORD-8421' data/payments.log",
+    "initial_result_bytes": 35275,
+    "initial_result_lines": 190
+  }
+}

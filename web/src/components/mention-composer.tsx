@@ -1,14 +1,18 @@
 import { useLocale } from "@/lib/i18n"
 import { File, Folder, Trash2 } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { AuthorAvatar } from "@/components/author-avatar"
 import { MachineOption } from "@/components/machine-dropup"
 import { ComposerBox } from "@/components/composer-box"
+import { Markdown } from "@/components/markdown"
 import { SuggestionHeader } from "@/components/suggestion-header"
-import { useSilentDictation } from "@/hooks/use-silent-dictation"
 import { Textarea } from "@/components/ui/textarea"
+import { DraftVaultDialog } from "@/components/vault-dialog"
+import { useDraftSecretGuard } from "@/hooks/use-draft-secret-guard"
+import { useSilentDictation } from "@/hooks/use-silent-dictation"
 import { api, type RemoteMachine } from "@/lib/api"
+import { redactDraftSecrets } from "@/lib/draft-secrets"
 import { matchMachines, remoteMachines } from "@/lib/remote-machines"
 import { cn, relativePath } from "@/lib/utils"
 
@@ -37,10 +41,8 @@ export function parseMessage(raw: string, everyone: Person[]): ParsedMessage {
   const names = [...raw.matchAll(MENTION)].map((m) => m[2].toLowerCase())
   const mentioned = everyone.filter((p) => names.includes(p.username.toLowerCase()))
   const known = new Set(["pi", ...mentioned.map((p) => p.username.toLowerCase())])
-  const text = raw
-    .replace(MENTION, (all, lead, name) => (known.has(String(name).toLowerCase()) ? lead : all))
-    .replace(/[ \t]+/g, " ")
-    .trim()
+  // Do not flatten Markdown indentation or intentional spacing while removing mentions.
+  const text = raw.replace(/(?<!\S)@([\w.-]+)[ \t]*/g, (all, name) => known.has(String(name).toLowerCase()) ? "" : all).replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd()
   return { raw: raw.trim(), text, pi: names.includes("pi"), people: mentioned }
 }
 
@@ -107,6 +109,8 @@ export function MentionComposer({
   const selectedFolder = folderSelection?.value
   const input = useRef<HTMLTextAreaElement>(null)
   const submitting = useRef(false)
+  const renderedDraft = useDeferredValue(value)
+  const guard = useDraftSecretGuard(value, onChange)
   // The folder pill sits over the start of the first line; only that line is indented, so text flows under it.
   const pill = useRef<HTMLDivElement>(null)
   const [indent, setIndent] = useState(0)
@@ -243,8 +247,12 @@ export function MentionComposer({
   const canSend = Boolean(value.trim()) || Boolean(attachmentsReady)
   const submit = async () => {
     if (busy || !canSend || submitting.current) return
-    submitting.current = true
     setToken(undefined)
+    if (guard.blockSubmit()) {
+      dictation.cancel()
+      return
+    }
+    submitting.current = true
     try {
       const directory = value.includes("@") ? await people() : []
       await onSubmit(parseMessage(value, directory.filter((person) => person.id !== selfId)))
@@ -257,6 +265,7 @@ export function MentionComposer({
   const open = Boolean(token) && suggestions.length > 0
 
   return (
+    <>
     <ComposerBox
       onMention={addMention}
       controls={controls}
@@ -331,6 +340,8 @@ export function MentionComposer({
         value={value}
         placeholder={selectedFolder ? "" : tr("composer.placeholder")}
         rows={1}
+        spellCheck={false}
+        autoComplete="off"
         style={indent ? { textIndent: indent } : undefined}
         className="max-h-48 min-h-12 w-full min-w-0 resize-none border-0 px-0 shadow-none focus-visible:ring-0 py-3"
         onChange={(e) => sync(e.target.value, e.target.selectionStart)}
@@ -375,8 +386,13 @@ export function MentionComposer({
           }
         }}
       />
+      {value.trim() && renderedDraft.trim() && (
+        <Markdown mode="draft" text={redactDraftSecrets(renderedDraft)} className="max-h-[min(9rem,25dvh)] overflow-auto rounded-md border bg-background px-3 py-2 text-sm empty:hidden" />
+      )}
       </div>
     </ComposerBox>
+    {guard.candidate && <DraftVaultDialog candidate={guard.candidate} onClose={guard.close} onSaved={guard.saved} />}
+    </>
   )
 }
 

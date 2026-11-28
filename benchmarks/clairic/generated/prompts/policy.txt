@@ -1,0 +1,30 @@
+Work only in the current task folder; do not inspect parent folders, benchmark scripts, answer keys or other sessions. Do not modify files. This is a search-result reasoning task, not a coding task.
+
+First execute this exact command once with bash:
+rg -n 'POLICY-R17' data/policy.txt
+
+Decide whether AC-701 is eligible for a renewal refund under POLICY-R17. Return the applicable window, refund, fee, settlement time and method. Resolve the plan-specific exception instead of applying the general policy.
+
+Reason from the returned search result. Further targeted rg queries are allowed if needed. Do not bypass the search-result task with read, cat, sed, a custom parser or a new script. Use beezy_open_result if it is available and excerpts omit something necessary. No external tools or network are needed.
+
+Return only JSON in this shape (replace type placeholders with actual values):
+{
+  "task": "policy",
+  "answer": {
+    "eligible": "<bool>",
+    "refund_window_days": "<int>",
+    "refund_eur": "<int>",
+    "fee_eur": "<int>",
+    "settlement_business_days": "<int>",
+    "settlement_method": "<str>"
+  },
+  "evidence": [
+    {
+      "file": "data/policy.txt",
+      "line": "<integer>",
+      "quote": "<verbatim source text>"
+    }
+  ]
+}
+
+Cite every material source line supporting the conclusion, including relevant conflicting rules or duplicate/failed/pending payment events. Line numbers refer to the original source file; quote exact text without the rg line-number prefix.
